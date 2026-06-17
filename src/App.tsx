@@ -465,7 +465,7 @@ export default function App() {
         
         <div className="relative w-full max-w-2xl aspect-video rounded-3xl overflow-hidden border-4 border-slate-800 dark:border-slate-900 shadow-[0_0_60px_rgba(16,185,129,0.2)] bg-slate-950 flex flex-col justify-center items-center">
           <video
-            src="/src/components/StartCalanguS.mp4"
+            src="/StartCalanguS.mp4"
             autoPlay
             muted
             playsInline
@@ -481,7 +481,7 @@ export default function App() {
         {/* Brand logo and loader text below the animation container */}
         <div className="mt-8 flex flex-col items-center gap-3 animate-pulse">
           <img 
-            src="/src/components/CalanguS-logo-Noname.png" 
+            src="/CalanguS-logo-Noname.png" 
             referrerPolicy="no-referrer"
             alt="CalanguS" 
             className="w-24 h-24 object-contain"
@@ -528,7 +528,7 @@ export default function App() {
             {/* Logo/Branding */}
             <div className="flex flex-col items-center space-y-3">
               <img 
-                src="/src/components/CalanguS-logo-Noname.png" 
+                src="/CalanguS-logo-Noname.png" 
                 referrerPolicy="no-referrer"
                 alt="Logo CalanguS" 
                 className="w-24 h-24 object-contain hover:scale-105 transition-transform duration-300 pointer-events-none"
@@ -569,7 +569,7 @@ export default function App() {
               <div className="flex items-center gap-3 h-full">
                 {/* CalanguS Program Logo Image */}
                 <img 
-                  src="/src/components/CalanguS-logo-Noname.png" 
+                  src="/CalanguS-logo-Noname.png" 
                   referrerPolicy="no-referrer"
                   alt="CalanguS" 
                   className="h-full w-auto object-contain hover:scale-105 transition-transform duration-300"
