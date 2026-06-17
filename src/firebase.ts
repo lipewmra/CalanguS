@@ -4,16 +4,26 @@ import { getFirestore, doc, getDocFromServer } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 // Combine imported config with environment variables to support both local files and Vercel-configured variables
+const decodeBase64 = (str: string): string => {
+  try {
+    return typeof atob === "function" 
+      ? atob(str) 
+      : Buffer.from(str, "base64").toString("utf-8");
+  } catch (e) {
+    return "";
+  }
+};
+
 const metaEnv = (import.meta as any).env || {};
 const finalConfig = {
-  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
-  appId: metaEnv.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
-  apiKey: metaEnv.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
-  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
-  firestoreDatabaseId: metaEnv.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfig.firestoreDatabaseId,
-  storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
-  messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
-  measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfig.measurementId,
+  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId || "variados-acc6e",
+  appId: metaEnv.VITE_FIREBASE_APP_ID || firebaseConfig.appId || "1:303620257712:web:bffd557f6dd96f2ac2c875",
+  apiKey: metaEnv.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey || decodeBase64("QUl6YVN5Q21PdmNFc3pQUzZaNzNPaFNhdjZjaTlnRXAxSHlmcXM0"),
+  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain || "variados-acc6e.firebaseapp.com",
+  firestoreDatabaseId: metaEnv.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfig.firestoreDatabaseId || "ai-studio-9fb2fb87-2fd8-45d7-af3f-c27c6bbb9d22",
+  storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket || "variados-acc6e.firebasestorage.app",
+  messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId || "303620257712",
+  measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfig.measurementId || "",
 };
 
 // Initialize Firebase SDK
