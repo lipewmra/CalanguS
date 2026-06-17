@@ -1,0 +1,132 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "User Account",
+      "description": "User profile with role-based access",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["SuperAdmin", "CLA", "ALA", "Colaborador"] },
+        "assignedBuildingId": { "type": "string" },
+        "claId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "name", "role"]
+    },
+    "EventConfig": {
+      "title": "Event Configuration",
+      "description": "Global event configuration defined by the SuperAdmin",
+      "type": "object",
+      "properties": {
+        "year": { "type": "integer" },
+        "examDates": { "type": "array" },
+        "trainingDates": { "type": "array" },
+        "instructions": { "type": "string" },
+        "prefilledTasks": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["year", "examDates"]
+    },
+    "Building": {
+      "title": "Building application site",
+      "description": "Physical test site configured by the CLA",
+      "type": "object",
+      "properties": {
+        "claId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "roomsCount": { "type": "integer" },
+        "virtualCapacity": { "type": "integer" },
+        "realCapacity": { "type": "integer" },
+        "coordRoom": { "type": "string" },
+        "specialRoomsCount": { "type": "integer" },
+        "specialDetails": { "type": "string" },
+        "extraRoomsCount": { "type": "integer" },
+        "mapsUrl": { "type": "string" }
+      },
+      "required": ["claId", "name", "address", "roomsCount"]
+    },
+    "Collaborator": {
+      "title": "Collaborator info",
+      "description": "Member of the examination execution team",
+      "type": "object",
+      "properties": {
+        "claId": { "type": "string" },
+        "name": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "cpf": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "education": { "type": "string" },
+        "disabilities": { "type": "array" },
+        "hasWorkedEnem": { "type": "boolean" },
+        "pastEditions": { "type": "array" },
+        "pixKey": { "type": "string" },
+        "specialRole": { "type": "string" },
+        "languages": { "type": "array" },
+        "certificateName": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pendente", "Confirmado", "Recusado", "Incompleto"] },
+        "orionStatus": { "type": "string", "enum": ["Ok", "Erro_Cadastro", "Erro_CPF", "Pendente"] },
+        "orionErrorMessage": { "type": "string" },
+        "isReserve": { "type": "boolean" },
+        "assignedRoom": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["claId", "name", "email", "cpf", "isReserve"]
+    },
+    "Catering": {
+      "title": "Catering and Snacks module",
+      "description": "Quotes, arrival, and delivery tracking of food services",
+      "type": "object",
+      "properties": {
+        "claId": { "type": "string" },
+        "quotes": { "type": "array" },
+        "day1": { "type": "object" },
+        "day2": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["claId"]
+    },
+    "PhotoLog": {
+      "title": "Photo documentation",
+      "description": "Visual record of school layout, rooms, and board updates",
+      "type": "object",
+      "properties": {
+        "claId": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "description": { "type": "string" },
+        "day": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["claId", "imageUrl"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserAccount",
+      "description": "All registered user accounts"
+    },
+    "/eventConfigs/{configId}": {
+      "schema": "EventConfig",
+      "description": "Global event coordination rules"
+    },
+    "/buildings/{buildingId}": {
+      "schema": "Building",
+      "description": "Schools and properties for examination"
+    },
+    "/collaborators/{collaboratorId}": {
+      "schema": "Collaborator",
+      "description": "Team collaborators recruited by CLA"
+    },
+    "/catering/{cateringId}": {
+      "schema": "Catering",
+      "description": "Catering, menu choice, prices, and confirmations"
+    },
+    "/photos/{photoId}": {
+      "schema": "PhotoLog",
+      "description": "Coordinator photographic reports"
+    }
+  }
+}

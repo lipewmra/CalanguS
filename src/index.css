@@ -1,0 +1,206 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-primary: #059669; /* Geometric Balance Emerald-600 */
+  --color-primary-dark: #047857; /* Emerald-700 */
+  --color-accent: #10b981; /* Emerald-500 */
+}
+
+/* Custom 3D Tactile Design utilities */
+
+/* Lifted cards with rigid 3D shadow style */
+.card-3d {
+  position: relative;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease;
+  border-width: 2px;
+}
+
+.card-3d-emerald {
+  border-color: #10b981;
+  box-shadow: 4px 4px 0px 0px #047857;
+}
+.card-3d-emerald:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #047857;
+}
+
+.card-3d-indigo {
+  border-color: #6366f1;
+  box-shadow: 4px 4px 0px 0px #4f46e5;
+}
+.card-3d-indigo:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #4f46e5;
+}
+
+.card-3d-violet {
+  border-color: #8b5cf6;
+  box-shadow: 4px 4px 0px 0px #7c3aed;
+}
+.card-3d-violet:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #7c3aed;
+}
+
+.card-3d-amber {
+  border-color: #f59e0b;
+  box-shadow: 4px 4px 0px 0px #d97706;
+}
+.card-3d-amber:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #d97706;
+}
+
+.card-3d-rose {
+  border-color: #f43f5e;
+  box-shadow: 4px 4px 0px 0px #e11d48;
+}
+.card-3d-rose:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #e11d48;
+}
+
+.card-3d-slate {
+  border-color: #475569;
+  box-shadow: 4px 4px 0px 0px #334155;
+}
+.card-3d-slate:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #334155;
+}
+
+.card-3d-dark {
+  border-color: #1e293b;
+  box-shadow: 4px 4px 0px 0px #0f172a;
+}
+.card-3d-dark:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #0f172a;
+}
+
+.card-3d-light {
+  border-color: #e2e8f0;
+  box-shadow: 4px 4px 0px 0px #cbd5e1;
+}
+.card-3d-light:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #cbd5e1;
+}
+
+/* Tactile Clicky buttons with actual physical depression */
+.btn-3d {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  font-weight: 700;
+  border-width: 2px;
+  cursor: pointer;
+}
+
+.btn-3d-primary {
+  background-color: #10b981;
+  color: #ffffff;
+  border-color: #047857;
+  border-bottom-width: 4px;
+}
+.btn-3d-primary:hover {
+  background-color: #34d399;
+}
+.btn-3d-primary:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+.btn-3d-secondary {
+  background-color: #6366f1;
+  color: #ffffff;
+  border-color: #4f46e5;
+  border-bottom-width: 4px;
+}
+.btn-3d-secondary:hover {
+  background-color: #818cf8;
+}
+.btn-3d-secondary:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+.btn-3d-danger {
+  background-color: #f43f5e;
+  color: #ffffff;
+  border-color: #e11d48;
+  border-bottom-width: 4px;
+}
+.btn-3d-danger:hover {
+  background-color: #fb7185;
+}
+.btn-3d-danger:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+.btn-3d-neutral {
+  background-color: #1e293b;
+  color: #f8fafc;
+  border-color: #0f172a;
+  border-bottom-width: 4px;
+}
+.btn-3d-neutral:hover {
+  background-color: #334155;
+}
+.btn-3d-neutral:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+.btn-3d-light {
+  background-color: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+  border-bottom-width: 4px;
+}
+.btn-3d-light:hover {
+  background-color: #f1f5f9;
+}
+.btn-3d-light:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+/* Cute glow effects for glass */
+.glow-emerald {
+  box-shadow: 0 0 15px -3px rgba(16, 185, 129, 0.4);
+}
+.glow-indigo {
+  box-shadow: 0 0 15px -3px rgba(99, 102, 241, 0.4);
+}
+
+/* Elegant scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Custom print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "CalanguS",
+  "description": "Sistema integrado de coordenação de equipes, dimensionamento de prédios ENEM, controle de acessibilidades, lanches, fotos e placas de sinalização.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
