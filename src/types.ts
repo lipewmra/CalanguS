@@ -34,6 +34,7 @@ export interface BuildingInfo {
   rooms?: RoomDetails[];
   specialRooms?: RoomDetails[];
   extraRooms?: RoomDetails[];
+  rolesTargetQuantities?: Record<string, number>;
 }
 
 export interface PastEdition {

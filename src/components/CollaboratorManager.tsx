@@ -14,7 +14,11 @@ export const ENEM_ROLES = [
   { name: "Fiscal Volante", desc: "Monitora os corredores, acompanha candidatos aos sanitários e dá suporte logístico." },
   { name: "Interprete de Libras", desc: "Suporte especializado a candidatos surdos, traduzindo instruções para a Língua de Sinais." },
   { name: "Ledor/Transcritor", desc: "Auxílio especializado para leitura de provas ou transcrição de respostas para candidatos PCD." },
-  { name: "Tecnico Informática", desc: "Suporte aos computadores, coletores de biometria e conectividade lógica do prédio." }
+  { name: "Tecnico Informática", desc: "Suporte aos computadores, coletores de biometria e conectividade lógica do prédio." },
+  { name: "Auxiliar de Limpeza", desc: "Responsável pela higienização periódica dos banheiros, salas e corredores do local." },
+  { name: "Porteiro", desc: "Responsável pelo controle de abertura e fechamento de portões e filtragem de acessos." },
+  { name: "Representante da Local", desc: "Responsável oficial de ligação operacional e suporte de infraestrutura predial do local de aplicação." },
+  { name: "OUTROS", desc: "Compreende fiscais reservas ativados de última hora ou outras tarefas gerais não mapeadas." }
 ];
 
 interface CollaboratorManagerProps {
@@ -800,42 +804,50 @@ function activeTabSubList(
   return (
     <div className="space-y-4">
       {/* 3D Glass Recruitment Link Info Card */}
-      <div className="bg-gradient-to-r from-teal-500/10 to-indigo-500/10 border-2 border-teal-500/20 dark:border-indigo-500/20 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-[#10b981]/5 shadow-lg animate-fade-in">
+      <div className="bg-gradient-to-r from-emerald-500/10 to-indigo-500/10 border-2 border-emerald-500/20 dark:border-indigo-500/20 rounded-2xl p-5 space-y-4 shadow-[#10b981]/5 shadow-lg animate-fade-in">
         <div className="space-y-1">
-          <h4 className="text-sm font-display font-black text-slate-800 dark:text-teal-400 uppercase tracking-wider flex items-center gap-1.5">
-            <span className="animate-bounce">🔗</span> Link p/ Recrutamento de Novos Fiscais (Sem Acesso)
+          <h4 className="text-sm font-display font-black text-slate-800 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span>🔗</span> Link de Recrutamento para Novos Fiscais
           </h4>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-            Deseja coletar inscrições de novos colaboradores sem criar contas no sistema? Compartilhe este link público. Os inscritos serão listados abaixo com status <strong className="text-amber-500 font-black">Pendente</strong> para avaliação e confirmação de presença.
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed font-sans">
+            Deseja coletar pré-inscrições de novos colaboradores/fiscais diretamente para seu local de aplicação? Compartilhe o link oficial abaixo. Quando um colaborador finaliza a inscrição, todos os seus dados pessoais e de participação são sincronizados e listados automaticamente com status <span className="text-amber-500 font-bold">Pendente</span> para avaliação.
           </p>
-          <div className="font-mono text-[10px] text-indigo-500 dark:text-indigo-400 font-extrabold flex items-center mt-2 p-1.5 px-3 bg-indigo-500/5 dark:bg-slate-950/40 rounded-lg max-w-max border border-indigo-500/10 select-all">
-            https://calangus.cebraspe.gov.br/concursos/enem2026/recrutamento/{claId}
-          </div>
         </div>
-        
-        <div className="flex flex-wrap gap-2 shrink-0 self-start md:self-center">
-          <button
-            onClick={() => {
-              const url = `https://calangus.cebraspe.gov.br/concursos/enem2026/recrutamento/${claId}`;
-              if (navigator.clipboard) {
-                navigator.clipboard.writeText(url);
-                alert("Simulação: Link copiado com sucesso! Compartilhe com colaboradores voluntários.");
-              } else {
-                alert(`Simulação: Copie o seguinte link:\n${url}`);
-              }
-            }}
-            className="btn-3d py-2.5 px-4 bg-teal-500 text-white hover:bg-teal-600 border-teal-700 font-black rounded-xl text-[10px] cursor-pointer"
-          >
-            📋 COPIAR LINK
-          </button>
-          {onSimulatePublicRecruit && (
+
+        <div className="p-4 bg-white dark:bg-[#070b13]/60 rounded-xl border border-slate-200 dark:border-slate-850 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-450 font-black uppercase tracking-widest px-2.5 py-0.5 rounded font-mono border border-emerald-550/10">LINK OFICIAL VERÍDICO (VERCEL)</span>
+            </div>
+            <div className="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-bold p-3 bg-emerald-500/5 rounded-xl border border-emerald-550/10 select-all break-all shadow-inner">
+              {`https://calangos.vercel.app/#/cadastro?cla=${claId}`}
+            </div>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-2 shrink-0 justify-end">
             <button
-              onClick={onSimulatePublicRecruit}
-              className="btn-3d btn-3d-secondary py-2.5 px-4 font-black rounded-xl text-[10px] text-white flex items-center gap-1 shadow-md cursor-pointer uppercase shrink-0"
+              onClick={() => {
+                const url = `https://calangos.vercel.app/#/cadastro?cla=${claId}`;
+                if (navigator.clipboard) {
+                  navigator.clipboard.writeText(url);
+                  alert("Link oficial do Vercel copiado com sucesso! Compartilhe com os colaboradores voluntários.");
+                } else {
+                  alert(`Copie o seguinte link oficial:\n${url}`);
+                }
+              }}
+              className="btn-3d py-3 px-5 bg-emerald-600 text-white hover:bg-emerald-500 border-emerald-800 font-extrabold rounded-xl text-xs cursor-pointer flex items-center justify-center gap-1.5"
             >
-              🚀 Simular Inscrição Pública
+              📋 COPIAR LINK OFICIAL
             </button>
-          )}
+            {onSimulatePublicRecruit && (
+              <button
+                onClick={onSimulatePublicRecruit}
+                className="btn-3d py-3 px-5 bg-teal-600 text-white hover:bg-teal-500 border-teal-800 font-extrabold rounded-xl text-xs cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                🚀 SIMULAR INSCRIÇÃO
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

@@ -1,8 +1,9 @@
-import React, { useState } from "react";
-import { CollaboratorInfo } from "../types";
+import React, { useState, useEffect } from "react";
+import { CollaboratorInfo, BuildingInfo } from "../types";
 import { 
   Users, UserCheck, Search, Filter, Sparkles, CheckCircle, 
-  HelpCircle, ShieldAlert, ArrowRight, RotateCcw, AlertCircle
+  HelpCircle, ShieldAlert, ArrowRight, RotateCcw, AlertCircle,
+  Save, ChevronDown, ChevronUp, Plus, Minus
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
 
@@ -10,13 +11,65 @@ interface AssociationViewProps {
   collaborators: CollaboratorInfo[];
   onUpdate: (id: string, updates: Partial<CollaboratorInfo>) => Promise<void>;
   readOnly?: boolean;
+  building?: BuildingInfo | null;
+  onSaveBuilding?: (building: BuildingInfo) => Promise<void>;
 }
 
-export default function AssociationView({ collaborators, onUpdate, readOnly = false }: AssociationViewProps) {
+export default function AssociationView({ 
+  collaborators, 
+  onUpdate, 
+  readOnly = false,
+  building = null,
+  onSaveBuilding
+}: AssociationViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState<string>("all"); // "all" | "associated" | "unassociated" | specific role
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
+
+  // Collapse state for target quantities
+  const [showTargetQuantitiesForm, setShowTargetQuantitiesForm] = useState(false);
+
+  // Target quantities for each role
+  const [targetQuantities, setTargetQuantities] = useState<Record<string, number>>({});
+  const [savingTargets, setSavingTargets] = useState(false);
+
+  // Initialize target quantities from building data
+  useEffect(() => {
+    const initial: Record<string, number> = {};
+    ENEM_ROLES.forEach(r => {
+      initial[r.name] = building?.rolesTargetQuantities?.[r.name] || 0;
+    });
+    setTargetQuantities(initial);
+  }, [building]);
+
+  // Handle safe input changes
+  const handleQuantityChange = (roleName: string, value: number) => {
+    const val = Math.max(0, value);
+    setTargetQuantities(prev => ({
+      ...prev,
+      [roleName]: val
+    }));
+  };
+
+  const handleSaveTargets = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!building || !onSaveBuilding) return;
+    setSavingTargets(true);
+    try {
+      await onSaveBuilding({
+        ...building,
+        rolesTargetQuantities: targetQuantities
+      });
+      setSuccessMsg("Quantitativo necessário de funções salvo com sucesso!");
+      setTimeout(() => setSuccessMsg(null), 3000);
+      setShowTargetQuantitiesForm(false);
+    } catch (err) {
+      console.error("Error saving target quantities:", err);
+    } finally {
+      setSavingTargets(false);
+    }
+  };
 
   // Compute metrics
   const totalCollabs = collaborators.length;
@@ -133,29 +186,173 @@ export default function AssociationView({ collaborators, onUpdate, readOnly = fa
         </div>
       </div>
 
+      {/* Planning of Target Quantities Card */}
+      <div className="bg-white dark:bg-[#101726]/80 rounded-2xl border-2 border-slate-150 dark:border-slate-800 p-5 shadow-xs relative overflow-hidden">
+        <div className="flex items-center justify-between cursor-pointer select-none" onClick={() => setShowTargetQuantitiesForm(!showTargetQuantitiesForm)}>
+          <div className="flex items-center gap-3">
+            <span className="p-2.5 bg-indigo-500/10 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
+              <Users className="w-5 h-5" />
+            </span>
+            <div>
+              <h3 className="text-sm font-black text-slate-800 dark:text-white">
+                📋 Planejamento de Metas de Contratação por Função
+              </h3>
+              <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                Defina a quantidade de colaboradores necessária para cada função no local de aplicação
+              </p>
+            </div>
+          </div>
+          <button 
+            type="button"
+            className="p-1 px-3 rounded-lg text-xs font-black transition flex items-center gap-1 shadow-sm hover:brightness-105"
+            style={{ backgroundColor: "#fcff05", color: "#0062fe" }}
+          >
+            {showTargetQuantitiesForm ? (
+              <>Ocultar <ChevronUp className="w-3.5 h-3.5" /></>
+            ) : (
+              <>Configurar Metas <ChevronDown className="w-3.5 h-3.5" /></>
+            )}
+          </button>
+        </div>
+
+        {showTargetQuantitiesForm && (
+          <form onSubmit={handleSaveTargets} className="mt-5 pt-4 border-t border-slate-150 dark:border-slate-850 space-y-4 animate-fade-in">
+            {!building && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-700 dark:text-amber-400 font-bold">
+                ⚠️ Nenhum Prédio/Local de Aplicação associado ao seu perfil ou no banco de dados ativo. Cadastre e ative um prédio no Menu 1 primeiro para persistir as metas.
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              {ENEM_ROLES.map((role) => {
+                const currentQty = targetQuantities[role.name] || 0;
+                return (
+                  <div 
+                    key={role.name} 
+                    className="p-3 bg-slate-50 dark:bg-[#070b13]/40 border border-slate-150 dark:border-slate-850 rounded-xl space-y-2 flex flex-col justify-between"
+                  >
+                    <div>
+                      <span className="text-[10px] font-mono uppercase font-black text-slate-500 dark:text-slate-400 block tracking-wider truncate" title={role.name}>
+                        {role.name}
+                      </span>
+                      <p className="text-[9px] text-slate-450 dark:text-slate-500 font-semibold leading-tight line-clamp-2" title={role.desc}>
+                        {role.desc}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1 mt-1">
+                      <button
+                        type="button"
+                        disabled={readOnly || !building}
+                        onClick={() => handleQuantityChange(role.name, currentQty - 1)}
+                        className="bg-slate-150 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 p-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={readOnly || !building}
+                        value={currentQty}
+                        onChange={(e) => handleQuantityChange(role.name, parseInt(e.target.value) || 0)}
+                        className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-lg p-1.5 text-center text-xs font-black text-slate-850 dark:text-slate-200 focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        disabled={readOnly || !building}
+                        onClick={() => handleQuantityChange(role.name, currentQty + 1)}
+                        className="bg-slate-150 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 p-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={readOnly || !building || savingTargets}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition cursor-pointer flex items-center gap-1.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="w-4 h-4" />
+                <span>{savingTargets ? "Salvando..." : "Salvar Metas / Quantitativos"}</span>
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
       {/* Role breakdown grid */}
-      <details className="bg-slate-50 dark:bg-[#070b13]/40 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 cursor-pointer group">
+      <details open className="bg-slate-50 dark:bg-[#070b13]/40 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 cursor-pointer group">
         <summary className="font-extrabold text-xs text-indigo-700 dark:text-indigo-400 select-none flex items-center justify-between focus:outline-hidden hover:text-indigo-600">
           <div className="flex items-center gap-2">
             <span>📊</span>
             <span>Ver Gráfico de Cobertura de Cargos do Prédio</span>
           </div>
           <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full group-open:hidden">Abrir Resumo</span>
-          <span className="text-[10px] font-black uppercase text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full hidden group-open:inline-block">Fechar Resumo</span>
+          <span className="text-[10px] font-black uppercase text-indigo-500 bg-indigo-505/10 px-2 py-0.5 rounded-full hidden group-open:inline-block">Fechar Resumo</span>
         </summary>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 cursor-default">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3 mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 cursor-default">
           {ENEM_ROLES.map(role => {
             const count = roleCounts[role.name] || 0;
+            const target = targetQuantities[role.name] || 0;
+            const pct = target > 0 ? Math.min(Math.round((count / target) * 105), 100) : 0;
+            const isComplete = target > 0 && count >= target;
+            const hasUnder = target > 0 && count < target;
+
             return (
-              <div key={role.name} className={`p-3 rounded-xl border-2 text-center transition ${count > 0 ? "bg-emerald-500/5 border-emerald-500/20" : "bg-white dark:bg-[#101726]/40 border-slate-200 dark:border-slate-800"}`}>
-                <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-300 truncate" title={role.name}>
-                  {role.name}
-                </h4>
-                <div className="text-xl font-black mt-1 font-mono text-slate-900 dark:text-white">
-                  {count}
+              <div 
+                key={role.name} 
+                className={`p-3 rounded-xl border-2 text-center transition flex flex-col justify-between ${
+                  isComplete 
+                    ? "bg-emerald-500/5 border-emerald-500/30" 
+                    : hasUnder 
+                      ? "bg-amber-500/[0.02] border-amber-500/25"
+                      : count > 0 
+                        ? "bg-indigo-500/5 border-indigo-500/15" 
+                        : "bg-white dark:bg-[#101726]/40 border-slate-200 dark:border-slate-800"
+                }`}
+              >
+                <div>
+                  <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-300 truncate" title={role.name}>
+                    {role.name}
+                  </h4>
+                  <div className="text-xl font-black mt-1 font-mono text-slate-900 dark:text-white">
+                    {count}
+                    {target > 0 && (
+                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                        /{target}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <p className="text-[8px] text-slate-400 font-bold mt-0.5 truncate" title={role.desc}>{role.desc}</p>
+
+                {target > 0 ? (
+                  <div className="space-y-1 mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-900">
+                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-300 ${
+                          isComplete ? "bg-emerald-500" : pct > 50 ? "bg-amber-500" : "bg-indigo-500"
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[7.5px] font-black">
+                      <span className={isComplete ? "text-emerald-500" : hasUnder ? "text-amber-505" : "text-slate-400"}>
+                        {pct}%
+                      </span>
+                      <span className="text-[7.5px] font-semibold text-slate-450">
+                        {isComplete ? "Completo" : `${target - count} faltam`}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[8px] text-slate-400 font-bold mt-1.5 truncate" title={role.desc}>{role.desc}</p>
+                )}
               </div>
             );
           })}

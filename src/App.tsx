@@ -45,6 +45,7 @@ import AccessManagementView from "./components/AccessManagementView";
 import ClaActivitiesView from "./components/ClaActivitiesView";
 import ExportAllocationsView from "./components/ExportAllocationsView";
 import CombinedPrintExportView from "./components/CombinedPrintExportView";
+import PublicRegisterForm from "./components/PublicRegisterForm";
 
 import { 
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
@@ -121,6 +122,23 @@ export default function App() {
 
   // CLA and SuperAdmin UI Active Section
   const [activeTab, setActiveTab] = useState<string>("building");
+
+  // Public recruitment form bypass state (supports route query parameters of Vercel production)
+  const [isPublicForm, setIsPublicForm] = useState<boolean>(() => {
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+    return (
+      path === "/cadastro" ||
+      path === "/fiscais" ||
+      path === "/recrutamento" ||
+      hash.startsWith("#/cadastro") ||
+      hash.startsWith("#/fiscais") ||
+      hash.startsWith("#/recrutamento") ||
+      path.includes("/cadastro") ||
+      path.includes("/fiscais") ||
+      path.includes("/recrutamento")
+    );
+  });
 
   // Colaborador simulation states
   const [individualConfirmationStatus, setIndividualConfirmationStatus] = useState<"Pendente" | "Confirmado" | "Recusado">("Pendente");
@@ -535,6 +553,29 @@ export default function App() {
           <span>Pular Animação</span>
           <span className="bg-slate-800 px-1.5 py-0.5 rounded text-[10px] text-slate-400">ESC</span>
         </button>
+      </div>
+    );
+  }
+
+  if (isPublicForm) {
+    const isDarkModeActive = theme === "dark";
+    return (
+      <div className={`min-h-screen ${isDarkModeActive ? "bg-[#070b13] text-slate-100" : "bg-slate-50 text-slate-800"} font-sans transition duration-200 pb-16 relative overflow-x-hidden`}>
+        {isDarkModeActive && (
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[350px] bg-radial from-emerald-500/10 via-indigo-500/5 to-transparent blur-3xl pointer-events-none -z-10" />
+        )}
+        <div className="no-print pt-6 pb-2 max-w-3xl mx-auto px-4 flex justify-end">
+          <button
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-yellow-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"}`}
+            title="Alternar Tema Claro/Escuro"
+          >
+            {isDarkModeActive ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+        </div>
+        <div className="max-w-4xl mx-auto">
+          <PublicRegisterForm onBackToApp={currentUser ? () => setIsPublicForm(false) : undefined} />
+        </div>
       </div>
     );
   }
@@ -1152,6 +1193,7 @@ export default function App() {
                     onAdd={addCollaborator} 
                     onUpdate={updateCollaborator} 
                     onDelete={deleteCollaborator} 
+                    onSimulatePublicRecruit={() => setIsPublicForm(true)}
                   />
                 </div>
               )}
@@ -1162,6 +1204,8 @@ export default function App() {
                     collaborators={collaborators} 
                     onUpdate={updateCollaborator}
                     readOnly={false}
+                    building={building}
+                    onSaveBuilding={saveBuilding}
                   />
                 </div>
               )}

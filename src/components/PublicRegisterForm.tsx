@@ -3,6 +3,7 @@ import { collection, getDocs, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { CollaboratorInfo, BuildingInfo, PastEdition } from "../types";
 import { auditCollaborator } from "../lib/data-validator";
+import { getCurrentUserProfile } from "../lib/db-services";
 import { 
   Building2, Users, FileText, CheckCircle, AlertTriangle, 
   ChevronRight, Sparkles, Mail, Phone, ShieldCheck, Heart, RotateCcw
@@ -46,6 +47,41 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
   const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
   const [bypassWarning, setBypassWarning] = useState(false);
 
+  // States for storing CLA Coordinator's Profile parsed from the URL
+  const [claProfile, setClaProfile] = useState<{ name: string; email: string } | null>(null);
+  const [loadingClaProfile, setLoadingClaProfile] = useState(false);
+
+  // Parse incoming CLA or Building ID from URL
+  const getClaParamFromUrl = (): string | null => {
+    try {
+      // 1. Try standard query params (e.g. ?cla=xxx)
+      const queryParams = new URLSearchParams(window.location.search);
+      if (queryParams.get("cla")) return queryParams.get("cla");
+      if (queryParams.get("building")) return queryParams.get("building");
+
+      // 2. Try hash query params (e.g. #/cadastro?cla=xxx)
+      const hash = window.location.hash;
+      if (hash.includes("?")) {
+        const hashQueryParams = new URLSearchParams(hash.split("?")[1]);
+        if (hashQueryParams.get("cla")) return hashQueryParams.get("cla");
+        if (hashQueryParams.get("building")) return hashQueryParams.get("building");
+      }
+
+      // 3. Try to extract last path segment or segment after /recrutamento/
+      const pathname = window.location.pathname;
+      const parts = pathname.split("/");
+      if (parts.length > 1) {
+        const last = parts[parts.length - 1];
+        if (last && last.length > 5 && last !== "cadastro" && last !== "fiscais") {
+          return last;
+        }
+      }
+    } catch (e) {
+      console.error("Error parsing CLA parameter", e);
+    }
+    return null;
+  };
+
   // Load buildings from Firestore to link public form registration
   useEffect(() => {
     let active = true;
@@ -58,8 +94,18 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
         });
         if (active) {
           setBuildings(list);
-          // Auto select first building if exists
-          if (list.length > 0) {
+          
+          // Try to auto-select matching building
+          const claParam = getClaParamFromUrl();
+          if (claParam) {
+            // Find a building where building.id or building.claId matches the parameter
+            const matched = list.find(b => b.claId === claParam || b.id === claParam);
+            if (matched) {
+              setSelectedBuildingId(matched.id || "");
+            } else if (list.length > 0) {
+              setSelectedBuildingId(list[0].id || "");
+            }
+          } else if (list.length > 0) {
             setSelectedBuildingId(list[0].id || "");
           }
         }
@@ -71,6 +117,26 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
     };
     fetchBuildings();
     return () => { active = false; };
+  }, []);
+
+  // Load CLA user profile if available in URL parameters
+  useEffect(() => {
+    const claParam = getClaParamFromUrl();
+    if (!claParam) return;
+    
+    setLoadingClaProfile(true);
+    getCurrentUserProfile(claParam)
+      .then((profile) => {
+        if (profile) {
+          setClaProfile({ name: profile.name, email: profile.email });
+        }
+      })
+      .catch((err) => {
+        console.error("Error fetching CLA profile", err);
+      })
+      .finally(() => {
+        setLoadingClaProfile(false);
+      });
   }, []);
 
   const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,7 +181,8 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
     setSubmitError("");
     setValidationWarnings([]);
 
-    if (!selectedBuildingId) {
+    const claParam = getClaParamFromUrl();
+    if (!selectedBuildingId && !claParam) {
       setSubmitError("Por favor, selecione qual é o Prédio / Local de Aplicação para sua pré-inscrição.");
       return;
     }
@@ -142,7 +209,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
     try {
       // Find building to retrieve claId
       const targetBuilding = buildings.find(b => b.id === selectedBuildingId);
-      const claId = targetBuilding ? targetBuilding.claId : "mock-cla-user-id";
+      const claId = targetBuilding ? (targetBuilding.claId || claParam || "mock-cla-user-id") : (claParam || "mock-cla-user-id");
 
       // Build past edition list
       const finalPastEditions: PastEdition[] = [];
@@ -160,6 +227,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
 
       const collabData = {
         claId,
+        buildingId: selectedBuildingId || "",
         name: name.trim(),
         birthDate,
         cpf,
@@ -295,6 +363,20 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
               </div>
             </div>
 
+            {selectedBuildingId && !getClaParamFromUrl() && (
+              (() => {
+                const b = buildings.find(item => item.id === selectedBuildingId);
+                if (!b) return null;
+                return (
+                  <div className="bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 p-4 rounded-2xl border-2 border-emerald-500/20 text-xs font-bold space-y-1 animate-fade-in shadow-xs">
+                    <span className="uppercase text-[9px] tracking-widest font-black text-emerald-500 block">🏫 Unidade de Aplicação Selecionada</span>
+                    <p className="text-sm font-extrabold">{b.name}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Endereço: {b.address}</p>
+                  </div>
+                );
+              })()
+            )}
+
             {submitError && (
               <div className="p-4 bg-rose-500/10 border-2 border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-2xl space-y-2 font-bold leading-relaxed">
                 <div className="flex items-center gap-2">
@@ -330,36 +412,92 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
             )}
 
             {/* FIELDSET Group 1: General destination / building */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-150 dark:border-slate-850 space-y-4">
-              <h3 className="text-xs uppercase tracking-wider font-extrabold text-indigo-505 dark:text-indigo-400 flex items-center gap-1.5">
-                <Building2 className="w-4 h-4 shrink-0" />
-                <span>1. Escolha o Local de Aplicação (Escola / Prédio)</span>
-              </h3>
-              
-              {loadingBuildings ? (
-                <div className="text-[11px] text-slate-450 font-medium py-2">Consultando prédios parceiros cadastrados...</div>
-              ) : buildings.length === 0 ? (
-                <div className="text-[11px] text-amber-500 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
-                  Nenhum prédio configurado em rede ainda. Por padrão, sua inscrição será vinculada à Escola Estadual Governador Calango Sábio.
+            {getClaParamFromUrl() ? (
+              <div className="p-5 bg-gradient-to-br from-emerald-505/10 to-indigo-505/5 dark:from-emerald-500/10 dark:to-slate-900/40 rounded-2xl border-2 border-emerald-500/20 space-y-4">
+                <h3 className="text-xs uppercase tracking-wider font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4 shrink-0" />
+                  <span>1. Coordenador Geral (CLA) responsável e Local de Atuação</span>
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* CLA Info */}
+                  <div className="p-3 bg-white dark:bg-slate-950/80 rounded-xl border border-emerald-500/10 space-y-1.5 shadow-xs">
+                    <span className="text-[9px] uppercase font-black tracking-widest text-emerald-600 dark:text-emerald-400 block font-mono">👤 COORDENADOR RESPONSÁVEL</span>
+                    {loadingClaProfile ? (
+                      <p className="text-xs text-slate-400 animate-pulse">Buscando informações do CLA...</p>
+                    ) : claProfile ? (
+                      <div>
+                        <p className="text-sm font-extrabold text-slate-800 dark:text-white uppercase">{claProfile.name}</p>
+                        <p className="text-[10px] text-slate-450 dark:text-slate-500 font-mono italic">{claProfile.email}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-extrabold text-slate-800 dark:text-white">Coordenador do Local de Aplicação</p>
+                        <p className="text-[10px] text-slate-450 dark:text-slate-500 font-mono italic">ID Ref: {getClaParamFromUrl()}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Designated Building Info */}
+                  <div className="p-3 bg-white dark:bg-slate-950/80 rounded-xl border border-emerald-500/10 space-y-1.5 shadow-xs">
+                    <span className="text-[9px] uppercase font-black tracking-widest text-emerald-600 dark:text-emerald-400 block font-mono">🏫 LOCAL DE INSCRIÇÃO DIRETA</span>
+                    {selectedBuildingId ? (
+                      (() => {
+                        const b = buildings.find(item => item.id === selectedBuildingId);
+                        if (!b) return <p className="text-xs text-slate-400 animate-pulse">Buscando dados do prédio...</p>;
+                        return (
+                          <div>
+                            <p className="text-sm font-extrabold text-slate-800 dark:text-white">{b.name}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold leading-tight">{b.address}</p>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <div>
+                        <p className="text-sm font-extrabold text-amber-600 dark:text-amber-400">Prédio em Configuração</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">Os cadastros serão vinculados exclusivamente por este Coordenador.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Selecione o Prédio ao qual você deseja se candidatar:</label>
-                  <select
-                    value={selectedBuildingId}
-                    onChange={(e) => setSelectedBuildingId(e.target.value)}
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2 py-3 bg-white dark:bg-slate-950 text-slate-850 dark:text-slate-200 text-sm font-bold shadow-inner"
-                    required
-                  >
-                    {buildings.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        🏫 {b.name} ({b.address})
-                      </option>
-                    ))}
-                  </select>
+
+                <div className="text-[10px] text-slate-450 dark:text-slate-400 font-semibold leading-normal flex items-center gap-1.5 bg-emerald-500/5 p-2 px-3 rounded-lg border border-emerald-500/10 animate-fade-in">
+                  <span className="text-emerald-500 text-xs">✓</span>
+                  <span>Link verificado. Seu cadastro aparecerá <strong className="text-emerald-600 dark:text-emerald-400">exclusivamente</strong> na lista de aprovação do CLA indicado acima.</span>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-150 dark:border-slate-850 space-y-4">
+                <h3 className="text-xs uppercase tracking-wider font-extrabold text-indigo-505 dark:text-indigo-400 flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4 shrink-0" />
+                  <span>1. Escolha o Local de Aplicação (Escola / Prédio)</span>
+                </h3>
+                
+                {loadingBuildings ? (
+                  <div className="text-[11px] text-slate-450 font-medium py-2">Consultando prédios parceiros cadastrados...</div>
+                ) : buildings.length === 0 ? (
+                  <div className="text-[11px] text-amber-500 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
+                    Nenhum prédio configurado em rede ainda. Por padrão, sua inscrição será vinculada à Escola Estadual Governador Calango Sábio.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="block text-[10px] uppercase font-black text-slate-400 mb-1">Selecione o Prédio ao qual você deseja se candidatar:</label>
+                    <select
+                      value={selectedBuildingId}
+                      onChange={(e) => setSelectedBuildingId(e.target.value)}
+                      className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2 py-3 bg-white dark:bg-slate-950 text-slate-850 dark:text-slate-200 text-sm font-bold shadow-inner"
+                      required
+                    >
+                      {buildings.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          🏫 {b.name} ({b.address})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* FIELDSET Group 2: Cadastral Info */}
             <div className="space-y-4">
