@@ -140,13 +140,25 @@ export async function claimProfileByEmail(email: string, newUid: string): Promis
     if (!snap.empty) {
       const firstDoc = snap.docs[0];
       const data = firstDoc.data() as UserProfile;
+      const oldUid = firstDoc.id;
       
       // If the preregistered user doc has a different id from newUid, clean up the old one
-      if (firstDoc.id !== newUid) {
-        await deleteDoc(doc(db, "users", firstDoc.id));
+      if (oldUid !== newUid) {
+        await deleteDoc(doc(db, "users", oldUid));
+        
+        // Update any building linked to the old pre-registered UID to the new authenticated Google UID
+        try {
+          const bQuery = query(collection(db, "buildings"), where("claId", "==", oldUid));
+          const bSnap = await getDocs(bQuery);
+          for (const bDoc of bSnap.docs) {
+            await updateDoc(doc(db, "buildings", bDoc.id), { claId: newUid });
+          }
+        } catch (bErr) {
+          console.error("Error migrating pre-registered building of claimed CLA:", bErr);
+        }
       }
       
-      const mergedProfile = { ...data, uid: newUid };
+      const mergedProfile = { ...data, uid: newUid, hasAccessed: true };
       await setDoc(doc(db, "users", newUid), mergedProfile);
       return mergedProfile;
     }

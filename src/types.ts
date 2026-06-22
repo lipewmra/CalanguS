@@ -9,6 +9,7 @@ export interface UserProfile {
   assignedBuildingId?: string;
   coordinationCode?: string;
   claId?: string;
+  hasAccessed?: boolean;
 }
 
 export interface RoomDetails {

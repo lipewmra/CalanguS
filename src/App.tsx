@@ -50,7 +50,8 @@ import {
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
   Printer, Sun, Moon, Sparkles, HelpCircle, MapPin,
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
-  ChevronLeft, ChevronRight, FileSpreadsheet
+  ChevronLeft, ChevronRight, FileSpreadsheet,
+  Activity, Calendar, PlusCircle, Trash2
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
@@ -118,8 +119,8 @@ export default function App() {
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
   const [claActivities, setClaActivities] = useState<ClaActivities | null>(null);
 
-  // CLA UI Active Section (including team management tab)
-  const [activeTab, setActiveTab] = useState<"building" | "staff" | "association" | "alloc" | "catering" | "plates" | "photos" | "team" | "activities" | "export">("building");
+  // CLA and SuperAdmin UI Active Section
+  const [activeTab, setActiveTab] = useState<string>("building");
 
   // Colaborador simulation states
   const [individualConfirmationStatus, setIndividualConfirmationStatus] = useState<"Pendente" | "Confirmado" | "Recusado">("Pendente");
@@ -141,6 +142,15 @@ export default function App() {
       setRegError("");
     }
   }, [currentUser]);
+
+  // Adjust active tab when switching roles or entering as SuperAdmin
+  useEffect(() => {
+    if (effectiveRole === "SuperAdmin") {
+      setActiveTab((prev) => prev.startsWith("admin-") || prev === "building" ? prev : "admin-dashboard");
+    } else {
+      setActiveTab((prev) => prev !== "building" && (prev.startsWith("admin-") || prev === "dashboard") ? "building" : prev);
+    }
+  }, [effectiveRole]);
 
   const handleClaRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,11 +236,22 @@ export default function App() {
           email: email,
           name: user.displayName || "Coordenador/Fiscal",
           role: isSuperAdminEmail ? "SuperAdmin" : "Colaborador",
+          hasAccessed: true,
         };
         await saveUserProfile(profile);
       } else {
-        if (isSuperAdminEmail && profile.role !== "SuperAdmin") {
-          profile = { ...profile, role: "SuperAdmin" };
+        let changed = false;
+        let nextProfile = { ...profile };
+        if (isSuperAdminEmail && nextProfile.role !== "SuperAdmin") {
+          nextProfile.role = "SuperAdmin";
+          changed = true;
+        }
+        if (!nextProfile.hasAccessed) {
+          nextProfile.hasAccessed = true;
+          changed = true;
+        }
+        if (changed) {
+          profile = nextProfile;
           await saveUserProfile(profile);
         }
       }
@@ -286,14 +307,26 @@ export default function App() {
             email: email,
             name: user.displayName || "Usuário CalanguS",
             role: isSuperAdminEmail ? "SuperAdmin" : "Colaborador",
-            roles: isSuperAdminEmail ? ["SuperAdmin"] : ["Colaborador"]
+            roles: isSuperAdminEmail ? ["SuperAdmin"] : ["Colaborador"],
+            hasAccessed: true
           };
           await saveUserProfile(profile);
         } else {
           // Verify if isSuperAdminEmail and lacks SuperAdmin role/roles
-          const roles = profile.roles || [profile.role];
+          let changed = false;
+          let nextProfile = { ...profile };
+          const roles = nextProfile.roles || [nextProfile.role];
           if (isSuperAdminEmail && !roles.includes("SuperAdmin")) {
-            profile = { ...profile, role: "SuperAdmin", roles: [...roles, "SuperAdmin"] };
+            nextProfile.role = "SuperAdmin";
+            nextProfile.roles = [...roles, "SuperAdmin"];
+            changed = true;
+          }
+          if (!nextProfile.hasAccessed) {
+            nextProfile.hasAccessed = true;
+            changed = true;
+          }
+          if (changed) {
+            profile = nextProfile;
             await saveUserProfile(profile);
           }
         }
@@ -667,21 +700,9 @@ export default function App() {
         )}
 
         {/* ========================================================= */}
-        {/* CASE 1: SUPERADMIN SCREEN                                  */}
+        {/* CASE 1: UNIFIED SCREEN WITH SIDEBAR (SUPERADMIN / CLA / ALA) */}
         {/* ========================================================= */}
-        {effectiveRole === "SuperAdmin" && (
-          <div className="animate-fade-in bg-slate-900/40 p-1 rounded-2xl">
-            <SuperAdminDash 
-              initialConfig={eventConfig} 
-              onSaveConfig={saveEventConfig} 
-            />
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* CASE 2: COORDINATOR (CLA / ALA) SCREEN                     */}
-        {/* ========================================================= */}
-        {(effectiveRole === "CLA" || effectiveRole === "ALA") && (
+        {(effectiveRole === "CLA" || effectiveRole === "ALA" || effectiveRole === "SuperAdmin") && (
           (effectiveRole === "CLA" && (!effectiveUser?.coordinationCode || isEditingProfile)) ? (
             /* CLA REGISTRATION / EDIT PROFILE PORTAL */
             <div className="max-w-xl mx-auto w-full animate-fade-in py-6">
@@ -795,7 +816,7 @@ export default function App() {
                       localStorage.setItem("enem_sidebar_collapsed", String(next));
                     }}
                     title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
-                    className={`p-1.5 rounded-lg bg-slate-100 dark:bg-[#101726]/90 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-emerald-550 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-center ${isSidebarCollapsed ? "mx-auto" : ""}`}
+                    className={`p-1.5 rounded-lg bg-slate-100 dark:bg-[#101726]/90 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-emerald-555 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-center ${isSidebarCollapsed ? "mx-auto" : ""}`}
                   >
                     {isSidebarCollapsed ? (
                       <ChevronRight className="w-3.5 h-3.5" />
@@ -804,136 +825,226 @@ export default function App() {
                     )}
                   </button>
                 </div>
-                
-                <button
-                  onClick={() => setActiveTab("building")}
-                  title="1. Meu Prédio"
-                  className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "building" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                >
-                  <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                    <Landmark className={`w-4 h-4 shrink-0 ${activeTab === "building" ? "text-white" : "text-emerald-400"}`} />
-                    {!isSidebarCollapsed && <span>1. Meu Prédio</span>}
-                  </div>
-                  {!isSidebarCollapsed && (
-                    <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">INFO</span>
-                  )}
-                </button>
 
-                <button
-                  onClick={() => setActiveTab("staff")}
-                  title="2. Fiscais e Inscrições"
-                  className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "staff" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                >
-                  <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                    <Users className={`w-4 h-4 shrink-0 ${activeTab === "staff" ? "text-white" : "text-sky-400"}`} />
-                    {!isSidebarCollapsed && <span>2. Fiscais e Inscrições</span>}
-                  </div>
-                  {!isSidebarCollapsed && (
-                    <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">RECRU</span>
-                  )}
-                </button>
+                {effectiveRole === "SuperAdmin" ? (
+                  <>
+                    <button
+                      onClick={() => setActiveTab("admin-dashboard")}
+                      title="Painel Geral"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "admin-dashboard" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Activity className={`w-4 h-4 shrink-0 ${activeTab === "admin-dashboard" ? "text-white" : "text-emerald-450"}`} />
+                        {!isSidebarCollapsed && <span>0. Painel Operacional</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">STAT</span>
+                      )}
+                    </button>
 
-                {(effectiveRole === "CLA" || effectiveRole === "ALA") && (
-                  <button
-                    onClick={() => setActiveTab("association")}
-                    title="3. Associação de Função"
-                    className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "association" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                  >
-                    <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                      <UserCheck className={`w-4 h-4 shrink-0 ${activeTab === "association" ? "text-white" : "text-emerald-450"}`} />
-                      {!isSidebarCollapsed && <span>3. Associação de Função</span>}
-                    </div>
-                    {!isSidebarCollapsed && (
-                      <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">ROLE</span>
+                    <button
+                      onClick={() => setActiveTab("building")}
+                      title="Controle de Prédios"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "building" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Landmark className={`w-4 h-4 shrink-0 ${activeTab === "building" ? "text-white" : "text-emerald-400"}`} />
+                        {!isSidebarCollapsed && <span>1. Meu Prédio</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">INFO</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("admin-directives")}
+                      title="Diretivas do Evento"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "admin-directives" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Calendar className={`w-4 h-4 shrink-0 ${activeTab === "admin-directives" ? "text-white" : "text-sky-400"}`} />
+                        {!isSidebarCollapsed && <span>2. Diretivas Gerais</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">PROP</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("admin-profiles")}
+                      title="Gestão de Usuários"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "admin-profiles" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Users className={`w-4 h-4 shrink-0 ${activeTab === "admin-profiles" ? "text-white" : "text-indigo-400"}`} />
+                        {!isSidebarCollapsed && <span>3. Gestão de Perfis</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">ROLE</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("admin-register")}
+                      title="Pré-cadastro"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "admin-register" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <PlusCircle className={`w-4 h-4 shrink-0 ${activeTab === "admin-register" ? "text-white" : "text-amber-400"}`} />
+                        {!isSidebarCollapsed && <span>4. Cadastrar CLA/Admin</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">NEW</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("admin-reset")}
+                      title="Restauração de Sistema"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${activeTab === "admin-reset" ? "bg-rose-600 text-white border-rose-805 shadow-[3px_3px_0px_0px_#9f1239] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-rose-400 hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-rose-50 hover:text-rose-600"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Trash2 className={`w-4 h-4 shrink-0 ${activeTab === "admin-reset" ? "text-white" : "text-rose-500 font-bold"}`} />
+                        {!isSidebarCollapsed && <span>5. Master Reset</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">KILL</span>
+                      )}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setActiveTab("building")}
+                      title="1. Meu Prédio"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "building" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Landmark className={`w-4 h-4 shrink-0 ${activeTab === "building" ? "text-white" : "text-emerald-400"}`} />
+                        {!isSidebarCollapsed && <span>1. Meu Prédio</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">INFO</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("staff")}
+                      title="2. Fiscais e Inscrições"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "staff" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Users className={`w-4 h-4 shrink-0 ${activeTab === "staff" ? "text-white" : "text-sky-400"}`} />
+                        {!isSidebarCollapsed && <span>2. Fiscais e Inscrições</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">RECRU</span>
+                      )}
+                    </button>
+
+                    {(effectiveRole === "CLA" || effectiveRole === "ALA") && (
+                      <button
+                        onClick={() => setActiveTab("association")}
+                        title="3. Associação de Função"
+                        className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "association" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                      >
+                        <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                          <UserCheck className={`w-4 h-4 shrink-0 ${activeTab === "association" ? "text-white" : "text-emerald-450"}`} />
+                          {!isSidebarCollapsed && <span>3. Associação de Função</span>}
+                        </div>
+                        {!isSidebarCollapsed && (
+                          <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">ROLE</span>
+                        )}
+                      </button>
                     )}
-                  </button>
-                )}
-                
-                {(effectiveRole === "CLA" || effectiveRole === "ALA") && (
-                  <button
-                    onClick={() => setActiveTab("alloc")}
-                    title="4. Alocação e Reservas"
-                    className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "alloc" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                  >
-                    <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                      <Layers className={`w-4 h-4 shrink-0 ${activeTab === "alloc" ? "text-white" : "text-indigo-400"}`} />
-                      {!isSidebarCollapsed && <span>4. Alocação e Reservas</span>}
-                    </div>
-                    {!isSidebarCollapsed && (
-                      <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">DRAG</span>
+                    
+                    {(effectiveRole === "CLA" || effectiveRole === "ALA") && (
+                      <button
+                        onClick={() => setActiveTab("alloc")}
+                        title="4. Alocação e Reservas"
+                        className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "alloc" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                      >
+                        <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                          <Layers className={`w-4 h-4 shrink-0 ${activeTab === "alloc" ? "text-white" : "text-indigo-400"}`} />
+                          {!isSidebarCollapsed && <span>4. Alocação e Reservas</span>}
+                        </div>
+                        {!isSidebarCollapsed && (
+                          <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">DRAG</span>
+                        )}
+                      </button>
                     )}
-                  </button>
+
+                    <button
+                      onClick={() => setActiveTab("team")}
+                      title="5. Gestão de Equipe"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "team" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Users className={`w-4 h-4 shrink-0 ${activeTab === "team" ? "text-white" : "text-emerald-450"}`} />
+                        {!isSidebarCollapsed && <span>5. Gestão de Equipe</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">TEAM</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("catering")}
+                      title="6. Alimentação"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "catering" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Coffee className={`w-4 h-4 shrink-0 ${activeTab === "catering" ? "text-white" : "text-amber-400"}`} />
+                        {!isSidebarCollapsed && <span>6. Alimentação</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">CATER</span>
+                      )}
+                    </button>
+                    
+                    <button
+                      onClick={() => setActiveTab("plates")}
+                      title="7. Impressão"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "plates" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Printer className={`w-4 h-4 shrink-0 ${activeTab === "plates" ? "text-white" : "text-pink-400"}`} />
+                        {!isSidebarCollapsed && <span>7. Impressão</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">PRINT</span>
+                      )}
+                    </button>
+                    
+                    <button
+                      onClick={() => setActiveTab("photos")}
+                      title="8. Fotos"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "photos" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <Camera className={`w-4 h-4 shrink-0 ${activeTab === "photos" ? "text-white" : "text-violet-400"}`} />
+                        {!isSidebarCollapsed && <span>8. Fotos</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">CAM</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("activities")}
+                      title="9. Atividades do CLA"
+                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "activities" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
+                    >
+                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                        <CheckSquare className={`w-4 h-4 shrink-0 ${activeTab === "activities" ? "text-white" : "text-emerald-450"}`} />
+                        {!isSidebarCollapsed && <span>9. Atividades do CLA</span>}
+                      </div>
+                      {!isSidebarCollapsed && (
+                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">TASK</span>
+                      )}
+                    </button>
+                  </>
                 )}
-
-                <button
-                  onClick={() => setActiveTab("team")}
-                  title="5. Gestão de Equipe"
-                  className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "team" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                >
-                  <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                    <Users className={`w-4 h-4 shrink-0 ${activeTab === "team" ? "text-white" : "text-emerald-450"}`} />
-                    {!isSidebarCollapsed && <span>5. Gestão de Equipe</span>}
-                  </div>
-                  {!isSidebarCollapsed && (
-                    <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">TEAM</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("catering")}
-                  title="6. Alimentação"
-                  className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "catering" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                >
-                  <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                    <Coffee className={`w-4 h-4 shrink-0 ${activeTab === "catering" ? "text-white" : "text-amber-400"}`} />
-                    {!isSidebarCollapsed && <span>6. Alimentação</span>}
-                  </div>
-                  {!isSidebarCollapsed && (
-                    <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">CATER</span>
-                  )}
-                </button>
-                
-                <button
-                  onClick={() => setActiveTab("plates")}
-                  title="7. Impressão"
-                  className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "plates" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                >
-                  <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                    <Printer className={`w-4 h-4 shrink-0 ${activeTab === "plates" ? "text-white" : "text-pink-400"}`} />
-                    {!isSidebarCollapsed && <span>7. Impressão</span>}
-                  </div>
-                  {!isSidebarCollapsed && (
-                    <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">PRINT</span>
-                  )}
-                </button>
-                
-                <button
-                  onClick={() => setActiveTab("photos")}
-                  title="8. Fotos"
-                  className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "photos" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                >
-                  <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                    <Camera className={`w-4 h-4 shrink-0 ${activeTab === "photos" ? "text-white" : "text-violet-400"}`} />
-                    {!isSidebarCollapsed && <span>8. Fotos</span>}
-                  </div>
-                  {!isSidebarCollapsed && (
-                    <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">CAM</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("activities")}
-                  title="9. Atividades do CLA"
-                  className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "activities" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                >
-                  <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                    <CheckSquare className={`w-4 h-4 shrink-0 ${activeTab === "activities" ? "text-white" : "text-emerald-400"}`} />
-                    {!isSidebarCollapsed && <span>9. Atividades do CLA</span>}
-                  </div>
-                  {!isSidebarCollapsed && (
-                    <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">TASK</span>
-                  )}
-                </button>
                 
                 {/* ALA Helper Banner (3D border style) */}
                 {effectiveRole === "ALA" && !isSidebarCollapsed && (
@@ -961,15 +1072,75 @@ export default function App() {
               {/* TAB CONTENT GRID */}
               <div className="flex-1 min-w-0 w-full space-y-6">
               
-              {activeTab === "building" && (
+              {effectiveRole === "SuperAdmin" && activeTab === "admin-dashboard" && (
                 <div className="animate-fade-in">
-                  <BuildingConfigView 
-                    initialBuilding={building} 
-                    claId={effectiveUser?.uid || currentUser.uid} 
-                    onSave={saveBuilding} 
-                    readOnly={effectiveRole === "ALA"}
+                  <SuperAdminDash 
+                    initialConfig={eventConfig} 
+                    onSaveConfig={saveEventConfig} 
+                    activeSubTab="dashboard"
                   />
                 </div>
+              )}
+
+              {effectiveRole === "SuperAdmin" && activeTab === "admin-directives" && (
+                <div className="animate-fade-in">
+                  <SuperAdminDash 
+                    initialConfig={eventConfig} 
+                    onSaveConfig={saveEventConfig} 
+                    activeSubTab="directives"
+                  />
+                </div>
+              )}
+
+              {effectiveRole === "SuperAdmin" && activeTab === "admin-profiles" && (
+                <div className="animate-fade-in">
+                  <SuperAdminDash 
+                    initialConfig={eventConfig} 
+                    onSaveConfig={saveEventConfig} 
+                    activeSubTab="profiles"
+                  />
+                </div>
+              )}
+
+              {effectiveRole === "SuperAdmin" && activeTab === "admin-register" && (
+                <div className="animate-fade-in">
+                  <SuperAdminDash 
+                    initialConfig={eventConfig} 
+                    onSaveConfig={saveEventConfig} 
+                    activeSubTab="register"
+                  />
+                </div>
+              )}
+
+              {effectiveRole === "SuperAdmin" && activeTab === "admin-reset" && (
+                <div className="animate-fade-in">
+                  <SuperAdminDash 
+                    initialConfig={eventConfig} 
+                    onSaveConfig={saveEventConfig} 
+                    activeSubTab="reset"
+                  />
+                </div>
+              )}
+
+              {activeTab === "building" && (
+                effectiveRole === "SuperAdmin" ? (
+                  <div className="animate-fade-in">
+                    <SuperAdminDash 
+                      initialConfig={eventConfig} 
+                      onSaveConfig={saveEventConfig} 
+                      activeSubTab="building"
+                    />
+                  </div>
+                ) : (
+                  <div className="animate-fade-in">
+                    <BuildingConfigView 
+                      initialBuilding={building} 
+                      claId={effectiveUser?.uid || currentUser.uid} 
+                      onSave={saveBuilding} 
+                      readOnly={true}
+                    />
+                  </div>
+                )
               )}
 
               {activeTab === "staff" && (

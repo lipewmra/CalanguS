@@ -286,9 +286,9 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       </div>
 
       {readOnly && (
-        <div className="mb-6 p-4 bg-indigo-500/10 text-indigo-850 dark:text-indigo-400 text-xs font-bold rounded-xl flex items-center gap-2 border-2 border-indigo-500/20">
-          <span className="text-slate-400">ℹ️</span>
-          <span><strong>Modo de Leitura (ALA):</strong> Você tem acesso completo aos dados estruturais do prédio, mas somente o CLA possui permissão para salvar alterações nestas configurações.</span>
+        <div className="mb-6 p-4 bg-amber-500/10 text-amber-850 dark:text-amber-400 text-xs font-bold rounded-xl flex items-center gap-2 border-2 border-amber-500/20">
+          <span className="text-amber-500">⚠️</span>
+          <span><strong>Definição Centralizada:</strong> A configuração física, salas e capacidades deste prédio de aplicação são gerenciadas exclusivamente pelo Super Administrador (Cebraspe Central) para cada CLA. Você possui acesso apenas para consulta em tempo real (Modo de Leitura).</span>
         </div>
       )}
 

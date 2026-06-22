@@ -1,9 +1,10 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore, doc, getDocFromServer } from "firebase/firestore";
-import firebaseConfig from "../firebase-applet-config.json";
+// config is loaded dynamically or through fallback values
 
 // Combine imported config with environment variables to support both local files and Vercel-configured variables
+const firebaseConfig: any = {};
 const decodeBase64 = (str: string): string => {
   try {
     return typeof atob === "function" 
