@@ -24,9 +24,15 @@ interface BuildingProps {
   claId: string;
   onSave: (building: BuildingInfo) => Promise<void>;
   readOnly?: boolean;
+  userRole?: string;
 }
 
-export default function BuildingConfigView({ initialBuilding, claId, onSave, readOnly = false }: BuildingProps) {
+export default function BuildingConfigView({ initialBuilding, claId, onSave, readOnly = false, userRole = "SuperAdmin" }: BuildingProps) {
+  const isSuperAdmin = userRole === "SuperAdmin";
+  const isCla = userRole === "CLA";
+  const isAla = userRole === "ALA";
+  const isReadOnly = readOnly || isAla || userRole === "Colaborador";
+
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [roomsCount, setRoomsCount] = useState(0);
@@ -285,12 +291,17 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
         </div>
       </div>
 
-      {readOnly && (
+      {isReadOnly ? (
         <div className="mb-6 p-4 bg-amber-500/10 text-amber-850 dark:text-amber-400 text-xs font-bold rounded-xl flex items-center gap-2 border-2 border-amber-500/20">
           <span className="text-amber-500">⚠️</span>
-          <span><strong>Definição Centralizada:</strong> A configuração física, salas e capacidades deste prédio de aplicação são gerenciadas exclusivamente pelo Super Administrador (Cebraspe Central) para cada CLA. Você possui acesso apenas para consulta em tempo real (Modo de Leitura).</span>
+          <span><strong>Modo de Leitura (ALA):</strong> Você possui acesso apenas para consulta em tempo real das configurações estruturais, salas e capacidades deste prédio de aplicação. As alterações são gerenciadas pela Cebraspe Central (SuperAdmin) ou pelo Coordenador do Local (CLA).</span>
         </div>
-      )}
+      ) : isCla ? (
+        <div className="mb-6 p-4 bg-indigo-500/10 text-indigo-800 dark:text-indigo-400 text-xs font-bold rounded-xl flex items-center gap-2 border-2 border-indigo-500/20">
+          <span className="text-indigo-500 font-mono font-bold text-base">ℹ️</span>
+          <span><strong>Informações do Local (CLA):</strong> O nome da escola e o endereço são gerenciados exclusivamente pelo Super Administrador da Cebraspe Central. Você (Coordenador) pode alterar e salvar livremente a sala da coordenação, as salas extras, a quantidade total de salas, as capacidades reais e os atendimentos de acessibilidade / salas especiais.</span>
+        </div>
+      ) : null}
 
       {success && (
         <div className="mb-6 p-4 bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2 border-2 border-emerald-500/20 animate-bounce">
@@ -312,7 +323,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                 placeholder="Ex: Escola Estadual Calango Verde"
                 className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden text-sm font-semibold transition disabled:opacity-60"
                 required
-                disabled={readOnly}
+                disabled={isReadOnly || !isSuperAdmin}
               />
             </div>
 
@@ -326,7 +337,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                   placeholder="Rua das Acácias, 100 - Centro, Petrolina - PE"
                   className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden text-sm font-semibold transition disabled:opacity-60"
                   required
-                  disabled={readOnly}
+                  disabled={isReadOnly || !isSuperAdmin}
                 />
                 <MapPin className="w-4 h-4 text-emerald-550 dark:text-emerald-400 absolute left-3.5 top-3.5" />
               </div>
@@ -354,7 +365,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                   onChange={(e) => setCoordRoom(e.target.value)}
                   placeholder="Ex: Sala de Professores Bloco A"
                   className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden text-sm font-semibold transition disabled:opacity-60"
-                  disabled={readOnly}
+                  disabled={isReadOnly}
                 />
               </div>
 
@@ -366,7 +377,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                   value={extraRoomsCount}
                   onChange={(e) => handleExtraRoomsCountChange(Math.max(0, parseInt(e.target.value) || 0))}
                   className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden text-sm font-semibold transition disabled:opacity-60"
-                  disabled={readOnly}
+                  disabled={isReadOnly}
                 />
               </div>
             </div>
@@ -395,7 +406,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                           placeholder="Ex: X-101"
                           className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
                           required
-                          disabled={readOnly}
+                          disabled={isReadOnly}
                         />
                       </div>
                       <div className="col-span-3">
@@ -407,7 +418,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                           className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
                           min="1"
                           required
-                          disabled={readOnly}
+                          disabled={isReadOnly}
                         />
                       </div>
                       <div className="col-span-4">
@@ -417,7 +428,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                           onChange={(e) => handleExtraRoomFieldChange(index, "floor", e.target.value)}
                           className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold text-slate-800 dark:text-white focus:outline-hidden disabled:opacity-60"
                           required
-                          disabled={readOnly}
+                          disabled={isReadOnly}
                         >
                           {FLOOR_OPTIONS.map((floor) => (
                             <option key={floor} value={floor}>{floor}</option>
@@ -450,7 +461,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                     onChange={(e) => handleRoomsCountChange(Math.max(1, parseInt(e.target.value) || 0))}
                     className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden font-mono font-extrabold text-xs disabled:opacity-60"
                     required
-                    disabled={readOnly}
+                    disabled={isReadOnly}
                   />
                 </div>
 
@@ -463,7 +474,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                     onChange={(e) => handleVirtualCapacityChange(Math.max(1, parseInt(e.target.value) || 0))}
                     className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden font-mono font-extrabold text-xs disabled:opacity-60"
                     required
-                    disabled={readOnly}
+                    disabled={isReadOnly}
                   />
                 </div>
               </div>
@@ -514,7 +525,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                             placeholder="Ex: 101-A"
                             className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
                             required
-                            disabled={readOnly}
+                            disabled={isReadOnly}
                           />
                         </div>
                         <div className="col-span-3">
@@ -526,7 +537,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                             className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
                             min="1"
                             required
-                            disabled={readOnly}
+                            disabled={isReadOnly}
                           />
                         </div>
                         <div className="col-span-4">
@@ -536,7 +547,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                             onChange={(e) => handleRoomFieldChange(index, "floor", e.target.value)}
                             className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold text-slate-850 dark:text-white focus:outline-hidden disabled:opacity-60"
                             required
-                            disabled={readOnly}
+                            disabled={isReadOnly}
                           >
                             {FLOOR_OPTIONS.map((floor) => (
                               <option key={floor} value={floor}>{floor}</option>
@@ -565,7 +576,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                     value={specialRoomsCount}
                     onChange={(e) => handleSpecialRoomsCountChange(Math.max(0, parseInt(e.target.value) || 0))}
                     className="w-full max-w-[140px] border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden font-mono font-bold text-xs disabled:opacity-60"
-                    disabled={readOnly}
+                    disabled={isReadOnly}
                   />
                 </div>
               </div>
@@ -594,7 +605,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                             placeholder="Ex: S-101"
                             className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
                             required
-                            disabled={readOnly}
+                            disabled={isReadOnly}
                           />
                         </div>
                         <div className="col-span-2">
@@ -606,7 +617,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                             className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
                             min="1"
                             required
-                            disabled={readOnly}
+                            disabled={isReadOnly}
                           />
                         </div>
                         <div className="col-span-3">
@@ -616,7 +627,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                             onChange={(e) => handleSpecialRoomFieldChange(index, "floor", e.target.value)}
                             className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold text-slate-800 dark:text-white focus:outline-hidden disabled:opacity-60 font-mono"
                             required
-                            disabled={readOnly}
+                            disabled={isReadOnly}
                           >
                             {FLOOR_OPTIONS.map((floor) => (
                               <option key={floor} value={floor}>{floor}</option>
@@ -632,7 +643,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                             placeholder="Ex: Libras, Ledor, Infantil"
                             className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-medium text-slate-850 dark:text-white disabled:opacity-60"
                             required
-                            disabled={readOnly}
+                            disabled={isReadOnly}
                           />
                         </div>
                       </div>
@@ -644,7 +655,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
           </div>
         </div>
 
-        {!readOnly && (
+        {!isReadOnly && (
           <div className="flex justify-end pt-3">
             <button
               type="submit"

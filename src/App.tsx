@@ -146,7 +146,7 @@ export default function App() {
   // Adjust active tab when switching roles or entering as SuperAdmin
   useEffect(() => {
     if (effectiveRole === "SuperAdmin") {
-      setActiveTab((prev) => prev.startsWith("admin-") || prev === "building" ? prev : "admin-dashboard");
+      setActiveTab((prev) => prev.startsWith("admin-") ? prev : "admin-dashboard");
     } else {
       setActiveTab((prev) => prev !== "building" && (prev.startsWith("admin-") || prev === "dashboard") ? "building" : prev);
     }
@@ -844,12 +844,12 @@ export default function App() {
 
                     <button
                       onClick={() => setActiveTab("building")}
-                      title="Controle de Prédios"
+                      title="Local de Aplicação"
                       className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "building" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
                     >
                       <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
                         <Landmark className={`w-4 h-4 shrink-0 ${activeTab === "building" ? "text-white" : "text-emerald-400"}`} />
-                        {!isSidebarCollapsed && <span>1. Meu Prédio</span>}
+                        {!isSidebarCollapsed && <span>1. Local de Aplicação</span>}
                       </div>
                       {!isSidebarCollapsed && (
                         <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">INFO</span>
@@ -916,12 +916,12 @@ export default function App() {
                   <>
                     <button
                       onClick={() => setActiveTab("building")}
-                      title="1. Meu Prédio"
+                      title="1. Local de Aplicação"
                       className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "building" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
                     >
                       <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
                         <Landmark className={`w-4 h-4 shrink-0 ${activeTab === "building" ? "text-white" : "text-emerald-400"}`} />
-                        {!isSidebarCollapsed && <span>1. Meu Prédio</span>}
+                        {!isSidebarCollapsed && <span>1. Local de Aplicação</span>}
                       </div>
                       {!isSidebarCollapsed && (
                         <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">INFO</span>
@@ -1137,7 +1137,8 @@ export default function App() {
                       initialBuilding={building} 
                       claId={effectiveUser?.uid || currentUser.uid} 
                       onSave={saveBuilding} 
-                      readOnly={true}
+                      userRole={effectiveRole}
+                      readOnly={effectiveRole === "ALA"}
                     />
                   </div>
                 )
