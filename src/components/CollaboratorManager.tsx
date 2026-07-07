@@ -820,14 +820,14 @@ function activeTabSubList(
               <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-450 font-black uppercase tracking-widest px-2.5 py-0.5 rounded font-mono border border-emerald-550/10">LINK OFICIAL VERÍDICO (VERCEL)</span>
             </div>
             <div className="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-bold p-3 bg-emerald-500/5 rounded-xl border border-emerald-550/10 select-all break-all shadow-inner">
-              {`https://calangos.vercel.app/#/cadastro?cla=${claId}`}
+              {`https://calangus.vercel.app/#/cadastro?cla=${claId}`}
             </div>
           </div>
           
           <div className="flex flex-col sm:flex-row gap-2 shrink-0 justify-end">
             <button
               onClick={() => {
-                const url = `https://calangos.vercel.app/#/cadastro?cla=${claId}`;
+                const url = `https://calangus.vercel.app/#/cadastro?cla=${claId}`;
                 if (navigator.clipboard) {
                   navigator.clipboard.writeText(url);
                   alert("Link oficial do Vercel copiado com sucesso! Compartilhe com os colaboradores voluntários.");
