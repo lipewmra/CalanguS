@@ -84,6 +84,11 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("enem_app_theme", theme);
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
   }, [theme]);
 
   // Authentication & Connection readiness state

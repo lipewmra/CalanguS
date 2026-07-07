@@ -283,23 +283,23 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
     <div className="max-w-3xl mx-auto py-10 px-4 animate-fade-in" id="public-recruitment-form-view">
       
       {/* Simulation Header Indicator */}
-      <div className="no-print mb-6 p-4 bg-[#101726]/80 text-blue-300 rounded-2xl border-2 border-blue-500/20 shadow-lg text-xs font-semibold flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-indigo-400 animate-pulse shrink-0" />
-          <div>
-            <span className="font-extrabold uppercase text-indigo-400 block font-mono">SIMULAÇÃO DE LINK EXTERNO</span>
-            <span>Este formulário representa a visão de um candidato externo que acessou o link de recrutamento do CalanguS.</span>
+      {onBackToApp && (
+        <div className="no-print mb-6 p-4 bg-[#101726]/80 text-blue-300 rounded-2xl border-2 border-blue-500/20 shadow-lg text-xs font-semibold flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-indigo-400 animate-pulse shrink-0" />
+            <div>
+              <span className="font-extrabold uppercase text-indigo-400 block font-mono">SIMULAÇÃO DE LINK EXTERNO</span>
+              <span>Este formulário representa a visão de um candidato externo que acessou o link de recrutamento do CalanguS.</span>
+            </div>
           </div>
-        </div>
-        {onBackToApp && (
           <button
             onClick={onBackToApp}
             className="btn-3d py-1.5 px-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 font-extrabold text-[10px] cursor-pointer"
           >
             ↩ VOLTAR AO MEU PAINEL (CLA)
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-[#0c1220]/95 p-6 md:p-8 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[6px_6px_0px_0px_#cbd5e1] dark:shadow-[6px_6px_0px_0px_#10b981]/20 transition-all">
         
@@ -314,7 +314,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
                 Olá <strong className="text-emerald-500">{name}</strong>, agradecemos por sua pré-inscrição no calendário de aplicação do ENEM 2026.
               </p>
-              <p className="text-xs text-slate-450 dark:text-slate-450 leading-relaxed">
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                 Seus dados cadastrais foram gravados e estão aguardando validação do Coordenador Geral do Local de Aplicação (**CLA**). Caso restem divergências nas informações, o fiscal assistente (**ALA**) falará com você no Whatsapp cadastrado.
               </p>
             </div>
@@ -357,7 +357,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                 <h1 className="text-lg md:text-xl font-display font-black text-slate-800 dark:text-white uppercase tracking-wider">
                   Pré-Inscrição de Fiscais — ENEM 2026
                 </h1>
-                <p className="text-[11px] text-slate-450 dark:text-slate-450 font-medium">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                   Portal Público CalanguS. Preencha seus dados abaixo para se credenciar à equipe de fiscais de sala e pessoal de apoio técnico.
                 </p>
               </div>
@@ -413,7 +413,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
 
             {/* FIELDSET Group 1: General destination / building */}
             {getClaParamFromUrl() ? (
-              <div className="p-5 bg-gradient-to-br from-emerald-505/10 to-indigo-505/5 dark:from-emerald-500/10 dark:to-slate-900/40 rounded-2xl border-2 border-emerald-500/20 space-y-4">
+              <div className="p-5 bg-gradient-to-br from-emerald-500/10 to-indigo-500/5 dark:from-emerald-500/10 dark:to-slate-900/40 rounded-2xl border-2 border-emerald-500/20 space-y-4">
                 <h3 className="text-xs uppercase tracking-wider font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                   <Building2 className="w-4 h-4 shrink-0" />
                   <span>1. Coordenador Geral (CLA) responsável e Local de Atuação</span>
@@ -428,12 +428,12 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                     ) : claProfile ? (
                       <div>
                         <p className="text-sm font-extrabold text-slate-800 dark:text-white uppercase">{claProfile.name}</p>
-                        <p className="text-[10px] text-slate-450 dark:text-slate-500 font-mono italic">{claProfile.email}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono italic">{claProfile.email}</p>
                       </div>
                     ) : (
                       <div>
                         <p className="text-sm font-extrabold text-slate-800 dark:text-white">Coordenador do Local de Aplicação</p>
-                        <p className="text-[10px] text-slate-450 dark:text-slate-500 font-mono italic">ID Ref: {getClaParamFromUrl()}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-450 font-mono italic">ID Ref: {getClaParamFromUrl()}</p>
                       </div>
                     )}
                   </div>
@@ -461,20 +461,20 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                   </div>
                 </div>
 
-                <div className="text-[10px] text-slate-450 dark:text-slate-400 font-semibold leading-normal flex items-center gap-1.5 bg-emerald-500/5 p-2 px-3 rounded-lg border border-emerald-500/10 animate-fade-in">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold leading-normal flex items-center gap-1.5 bg-emerald-500/5 p-2 px-3 rounded-lg border border-emerald-500/10 animate-fade-in">
                   <span className="text-emerald-500 text-xs">✓</span>
                   <span>Link verificado. Seu cadastro aparecerá <strong className="text-emerald-600 dark:text-emerald-400">exclusivamente</strong> na lista de aprovação do CLA indicado acima.</span>
                 </div>
               </div>
             ) : (
               <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-150 dark:border-slate-850 space-y-4">
-                <h3 className="text-xs uppercase tracking-wider font-extrabold text-indigo-505 dark:text-indigo-400 flex items-center gap-1.5">
+                <h3 className="text-xs uppercase tracking-wider font-extrabold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
                   <Building2 className="w-4 h-4 shrink-0" />
                   <span>1. Escolha o Local de Aplicação (Escola / Prédio)</span>
                 </h3>
                 
                 {loadingBuildings ? (
-                  <div className="text-[11px] text-slate-450 font-medium py-2">Consultando prédios parceiros cadastrados...</div>
+                  <div className="text-[11px] text-slate-500 font-medium py-2">Consultando prédios parceiros cadastrados...</div>
                 ) : buildings.length === 0 ? (
                   <div className="text-[11px] text-amber-500 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
                     Nenhum prédio configurado em rede ainda. Por padrão, sua inscrição será vinculada à Escola Estadual Governador Calango Sábio.
@@ -501,7 +501,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
 
             {/* FIELDSET Group 2: Cadastral Info */}
             <div className="space-y-4">
-              <h3 className="text-xs uppercase tracking-wider font-extrabold text-indigo-505 dark:text-indigo-400 border-b pb-1.5 dark:border-slate-800 flex items-center gap-1.5">
+              <h3 className="text-xs uppercase tracking-wider font-extrabold text-indigo-600 dark:text-indigo-400 border-b pb-1.5 dark:border-slate-800 flex items-center gap-1.5">
                 <FileText className="w-4 h-4 shrink-0" />
                 <span>2. Seus Dados Cadastrais</span>
               </h3>
@@ -659,25 +659,25 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                 />
                 <div>
                   <span className="block font-black text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">Deseja registrar histórico em edições anteriores do ENEM? (1998 a 2025)</span>
-                  <span className="block text-[10px] text-slate-400 dark:text-slate-450 mt-0.5 font-semibold">Custa a seu favor para o CLA priorizar o enquadramento de fiscais experientes no prédio.</span>
+                  <span className="block text-[10px] text-slate-400 dark:text-slate-400 mt-0.5 font-semibold">Custa a seu favor para o CLA priorizar o enquadramento de fiscais experientes no prédio.</span>
                 </div>
               </label>
 
               {hasWorkedEnem && (
                 <div className="p-4 bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-850 rounded-xl mt-3 space-y-3 shadow-inner">
                   <div className="flex items-center justify-between border-b pb-2 border-slate-100 dark:border-slate-800">
-                    <span className="text-[10px] font-black text-slate-455 dark:text-slate-400 uppercase tracking-widest">Selecione os anos das edições trabalhadas</span>
+                    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Selecione os anos das edições trabalhadas</span>
                     <button
                       type="button"
                       onClick={() => setShowPastYears(!showPastYears)}
-                      className="text-xs text-indigo-550 dark:text-indigo-400 font-black hover:underline cursor-pointer"
+                      className="text-xs text-indigo-500 dark:text-indigo-400 font-black hover:underline cursor-pointer"
                     >
                       {showPastYears ? "Ocultar Lista Completa" : "Exibir Anos (28 Edições)"}
                     </button>
                   </div>
 
                   <details className="text-xs bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-xl p-3 cursor-pointer group">
-                    <summary className="font-extrabold text-indigo-650 dark:text-indigo-455 select-none flex items-center gap-1.5 focus:outline-hidden hover:text-indigo-505">
+                    <summary className="font-extrabold text-indigo-600 dark:text-indigo-400 select-none flex items-center gap-1.5 focus:outline-hidden hover:text-indigo-500">
                       <span>📚</span> Ver Lista de Funções Oficiais do ENEM (Cheatsheet)
                     </summary>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800 cursor-default">
@@ -719,7 +719,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                                 ...pastEditionsSelected,
                                 [yr]: e.target.checked
                               })}
-                              className="rounded text-emerald-505 w-3.5 h-3.5 shrink-0"
+                              className="rounded text-emerald-500 w-3.5 h-3.5 shrink-0"
                             />
                             <span className="font-mono text-slate-900 dark:text-white font-black">{yr}</span>
                           </label>
@@ -740,7 +740,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                       ))}
                     </div>
                   ) : (
-                    <div className="text-[10px] text-slate-455 font-semibold text-center py-1">
+                    <div className="text-[10px] text-slate-400 font-semibold text-center py-1">
                       Clique em "Exibir Anos" para registrar suas edições passadas.
                     </div>
                   )}
