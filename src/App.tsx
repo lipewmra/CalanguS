@@ -51,7 +51,7 @@ import {
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
   Printer, Sun, Moon, Sparkles, HelpCircle, MapPin,
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
-  ChevronLeft, ChevronRight, FileSpreadsheet,
+  ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet,
   Activity, Calendar, PlusCircle, Trash2
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
@@ -126,7 +126,7 @@ export default function App() {
   const [claActivities, setClaActivities] = useState<ClaActivities | null>(null);
 
   // CLA and SuperAdmin UI Active Section
-  const [activeTab, setActiveTab] = useState<string>("building");
+  const [activeTab, setActiveTab] = useState<string>("");
 
   // Public recruitment form bypass state (supports route query parameters of Vercel production)
   const [isPublicForm, setIsPublicForm] = useState<boolean>(() => {
@@ -169,9 +169,9 @@ export default function App() {
   // Adjust active tab when switching roles or entering as SuperAdmin
   useEffect(() => {
     if (effectiveRole === "SuperAdmin") {
-      setActiveTab((prev) => prev.startsWith("admin-") ? prev : "admin-dashboard");
+      setActiveTab((prev) => (prev && prev.startsWith("admin-")) ? prev : "");
     } else {
-      setActiveTab((prev) => prev !== "building" && (prev.startsWith("admin-") || prev === "dashboard") ? "building" : prev);
+      setActiveTab((prev) => (prev && !prev.startsWith("admin-")) ? prev : "");
     }
   }, [effectiveRole]);
 
@@ -565,7 +565,7 @@ export default function App() {
   if (isPublicForm) {
     const isDarkModeActive = theme === "dark";
     return (
-      <div className={`min-h-screen ${isDarkModeActive ? "bg-[#070b13] text-slate-100" : "bg-slate-50 text-slate-800"} font-sans transition duration-200 pb-16 relative overflow-x-hidden`}>
+      <div className={`min-h-screen ${isDarkModeActive ? "dark bg-[#070b13] text-slate-100" : "bg-slate-50 text-slate-800"} font-sans transition duration-200 pb-16 relative overflow-x-hidden`}>
         {isDarkModeActive && (
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[350px] bg-radial from-emerald-500/10 via-indigo-500/5 to-transparent blur-3xl pointer-events-none -z-10" />
         )}
@@ -586,7 +586,7 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? "bg-[#070b13] text-slate-100" : "bg-slate-50 text-slate-800"} font-sans transition duration-200 pb-16 relative overflow-x-hidden`}>
+    <div className={`min-h-screen ${isDarkMode ? "dark bg-[#070b13] text-slate-100" : "bg-slate-50 text-slate-800"} font-sans transition duration-200 pb-16 relative overflow-x-hidden`}>
       
       {/* 3D Cosmic ambient lighting background nodes */}
       {isDarkMode && (
@@ -845,467 +845,331 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col lg:flex-row gap-6 items-start">
-              
-              {/* SUB NAVBAR VERTICAL SIDEBAR WITH 3D BUTTON CARDS */}
-              <div className={`no-print shrink-0 space-y-3 transition-all duration-300 ${isSidebarCollapsed ? "w-full lg:w-16" : "w-full lg:w-64"}`}>
-                <div className="flex items-center justify-between px-2 mb-2">
-                  {!isSidebarCollapsed && (
-                    <span className="block text-[10px] text-slate-500 dark:text-slate-400 uppercase font-extrabold tracking-widest px-1">
-                      Painel do Local
-                    </span>
-                  )}
-                  <button
-                    onClick={() => {
-                      const next = !isSidebarCollapsed;
-                      setIsSidebarCollapsed(next);
-                      localStorage.setItem("enem_sidebar_collapsed", String(next));
-                    }}
-                    title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
-                    className={`p-1.5 rounded-lg bg-slate-100 dark:bg-[#101726]/90 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-emerald-555 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-center ${isSidebarCollapsed ? "mx-auto" : ""}`}
-                  >
-                    {isSidebarCollapsed ? (
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    ) : (
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
+            (() => {
+              const currentMenuItems = effectiveRole === "SuperAdmin" ? [
+                { id: "admin-dashboard", label: "0. Painel Operacional", badge: "STAT", icon: Activity, iconColor: "text-emerald-450" },
+                { id: "building", label: "1. Local de Aplicação", badge: "INFO", icon: Landmark, iconColor: "text-emerald-400" },
+                { id: "admin-directives", label: "2. Diretivas Gerais", badge: "PROP", icon: Calendar, iconColor: "text-sky-400" },
+                { id: "admin-profiles", label: "3. Gestão de Perfis", badge: "ROLE", icon: Users, iconColor: "text-indigo-400" },
+                { id: "admin-register", label: "4. Cadastrar CLA/Admin", badge: "NEW", icon: PlusCircle, iconColor: "text-amber-400" },
+                { id: "admin-reset", label: "5. Master Reset", badge: "KILL", icon: Trash2, iconColor: "text-rose-500", isDanger: true }
+              ] : [
+                { id: "building", label: "1. Local de Aplicação", badge: "INFO", icon: Landmark, iconColor: "text-emerald-400" },
+                { id: "staff", label: "2. Fiscais e Inscrições", badge: "RECRU", icon: Users, iconColor: "text-sky-400" },
+                ...((effectiveRole === "CLA" || effectiveRole === "ALA") ? [
+                  { id: "association", label: "3. Associação de Função", badge: "ROLE", icon: UserCheck, iconColor: "text-emerald-450" },
+                  { id: "alloc", label: "4. Alocação e Reservas", badge: "DRAG", icon: Layers, iconColor: "text-indigo-400" }
+                ] : []),
+                { id: "team", label: "5. Gestão de Equipe", badge: "TEAM", icon: Users, iconColor: "text-emerald-450" },
+                { id: "catering", label: "6. Alimentação", badge: "CATER", icon: Coffee, iconColor: "text-amber-400" },
+                { id: "plates", label: "7. Impressão", badge: "PRINT", icon: Printer, iconColor: "text-pink-400" },
+                { id: "photos", label: "8. Fotos", badge: "CAM", icon: Camera, iconColor: "text-violet-400" },
+                { id: "activities", label: "9. Atividades do CLA", badge: "TASK", icon: CheckSquare, iconColor: "text-emerald-450" }
+              ];
 
-                {effectiveRole === "SuperAdmin" ? (
-                  <>
-                    <button
-                      onClick={() => setActiveTab("admin-dashboard")}
-                      title="Painel Geral"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "admin-dashboard" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Activity className={`w-4 h-4 shrink-0 ${activeTab === "admin-dashboard" ? "text-white" : "text-emerald-450"}`} />
-                        {!isSidebarCollapsed && <span>0. Painel Operacional</span>}
+              const renderTabContent = (tabId: string) => {
+                switch (tabId) {
+                  case "admin-dashboard":
+                    return effectiveRole === "SuperAdmin" ? (
+                      <div className="animate-fade-in">
+                        <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="dashboard" />
                       </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">STAT</span>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab("building")}
-                      title="Local de Aplicação"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "building" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Landmark className={`w-4 h-4 shrink-0 ${activeTab === "building" ? "text-white" : "text-emerald-400"}`} />
-                        {!isSidebarCollapsed && <span>1. Local de Aplicação</span>}
+                    ) : null;
+                  case "admin-directives":
+                    return effectiveRole === "SuperAdmin" ? (
+                      <div className="animate-fade-in">
+                        <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="directives" />
                       </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">INFO</span>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab("admin-directives")}
-                      title="Diretivas do Evento"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "admin-directives" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Calendar className={`w-4 h-4 shrink-0 ${activeTab === "admin-directives" ? "text-white" : "text-sky-400"}`} />
-                        {!isSidebarCollapsed && <span>2. Diretivas Gerais</span>}
+                    ) : null;
+                  case "admin-profiles":
+                    return effectiveRole === "SuperAdmin" ? (
+                      <div className="animate-fade-in">
+                        <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="profiles" />
                       </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">PROP</span>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab("admin-profiles")}
-                      title="Gestão de Usuários"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "admin-profiles" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Users className={`w-4 h-4 shrink-0 ${activeTab === "admin-profiles" ? "text-white" : "text-indigo-400"}`} />
-                        {!isSidebarCollapsed && <span>3. Gestão de Perfis</span>}
+                    ) : null;
+                  case "admin-register":
+                    return effectiveRole === "SuperAdmin" ? (
+                      <div className="animate-fade-in">
+                        <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="register" />
                       </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">ROLE</span>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab("admin-register")}
-                      title="Pré-cadastro"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "admin-register" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <PlusCircle className={`w-4 h-4 shrink-0 ${activeTab === "admin-register" ? "text-white" : "text-amber-400"}`} />
-                        {!isSidebarCollapsed && <span>4. Cadastrar CLA/Admin</span>}
+                    ) : null;
+                  case "admin-reset":
+                    return effectiveRole === "SuperAdmin" ? (
+                      <div className="animate-fade-in">
+                        <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="reset" />
                       </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">NEW</span>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab("admin-reset")}
-                      title="Restauração de Sistema"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${activeTab === "admin-reset" ? "bg-rose-600 text-white border-rose-805 shadow-[3px_3px_0px_0px_#9f1239] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-rose-400 hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-rose-50 hover:text-rose-600"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Trash2 className={`w-4 h-4 shrink-0 ${activeTab === "admin-reset" ? "text-white" : "text-rose-500 font-bold"}`} />
-                        {!isSidebarCollapsed && <span>5. Master Reset</span>}
-                      </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">KILL</span>
-                      )}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => setActiveTab("building")}
-                      title="1. Local de Aplicação"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "building" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Landmark className={`w-4 h-4 shrink-0 ${activeTab === "building" ? "text-white" : "text-emerald-400"}`} />
-                        {!isSidebarCollapsed && <span>1. Local de Aplicação</span>}
-                      </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">INFO</span>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab("staff")}
-                      title="2. Fiscais e Inscrições"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "staff" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Users className={`w-4 h-4 shrink-0 ${activeTab === "staff" ? "text-white" : "text-sky-400"}`} />
-                        {!isSidebarCollapsed && <span>2. Fiscais e Inscrições</span>}
-                      </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">RECRU</span>
-                      )}
-                    </button>
-
-                    {(effectiveRole === "CLA" || effectiveRole === "ALA") && (
-                      <button
-                        onClick={() => setActiveTab("association")}
-                        title="3. Associação de Função"
-                        className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "association" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                      >
-                        <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                          <UserCheck className={`w-4 h-4 shrink-0 ${activeTab === "association" ? "text-white" : "text-emerald-450"}`} />
-                          {!isSidebarCollapsed && <span>3. Associação de Função</span>}
-                        </div>
-                        {!isSidebarCollapsed && (
-                          <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">ROLE</span>
+                    ) : null;
+                  case "building":
+                    return (
+                      <div className="animate-fade-in">
+                        {effectiveRole === "SuperAdmin" ? (
+                          <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="building" />
+                        ) : (
+                          <BuildingConfigView 
+                            initialBuilding={building} 
+                            claId={effectiveUser?.uid || currentUser.uid} 
+                            onSave={saveBuilding} 
+                            userRole={effectiveRole}
+                            readOnly={effectiveRole === "ALA"}
+                          />
                         )}
-                      </button>
+                      </div>
+                    );
+                  case "staff":
+                    return (
+                      <div className="animate-fade-in">
+                        <CollaboratorManager 
+                          collaborators={collaborators} 
+                          claId={effectiveUser?.uid || currentUser.uid} 
+                          onAdd={addCollaborator} 
+                          onUpdate={updateCollaborator} 
+                          onDelete={deleteCollaborator} 
+                          onSimulatePublicRecruit={() => setIsPublicForm(true)}
+                        />
+                      </div>
+                    );
+                  case "association":
+                    return (effectiveRole === "CLA" || effectiveRole === "ALA") ? (
+                      <div className="animate-fade-in">
+                        <AssociationView 
+                          collaborators={collaborators} 
+                          onUpdate={updateCollaborator}
+                          readOnly={false}
+                          building={building}
+                          onSaveBuilding={saveBuilding}
+                        />
+                      </div>
+                    ) : null;
+                  case "alloc":
+                    return (effectiveRole === "CLA" || effectiveRole === "ALA") ? (
+                      <div className="animate-fade-in">
+                        <DragAndDropReserves 
+                          collaborators={collaborators} 
+                          rooms={[
+                            ...(building?.rooms && building.rooms.length > 0
+                              ? building.rooms
+                              : Array.from({ length: building?.roomsCount || 0 }, (_, i) => ({
+                                  number: `Sala ${i + 1}`,
+                                  capacity: building?.virtualCapacity || 30,
+                                  floor: "Térreo"
+                                }))),
+                            ...(building?.specialRooms || []),
+                            ...(building?.extraRooms || [])
+                          ]} 
+                          onMove={handleDragAllocationMove} 
+                        />
+                      </div>
+                    ) : null;
+                  case "team":
+                    return (
+                      <div className="animate-fade-in">
+                        <AccessManagementView 
+                          currentUser={effectiveUser || currentUser} 
+                          colegas={colegas} 
+                          activeClaId={(effectiveRole === "ALA" || effectiveRole === "Colaborador") ? (effectiveUser?.claId || effectiveUser?.uid || currentUser.uid) : (effectiveUser?.uid || currentUser.uid)} 
+                          readOnly={effectiveRole === "ALA"}
+                        />
+                      </div>
+                    );
+                  case "catering":
+                    return (
+                      <div className="animate-fade-in">
+                        <CateringView 
+                          initialCatering={catering} 
+                          claId={effectiveUser?.uid || currentUser.uid} 
+                          collaborators={collaborators} 
+                          onSave={saveCatering} 
+                          readOnly={effectiveRole === "ALA"}
+                        />
+                      </div>
+                    );
+                  case "plates":
+                    return (
+                      <div className="animate-fade-in">
+                        <CombinedPrintExportView 
+                          collaborators={collaborators}
+                          rooms={[
+                            ...(building?.rooms && building.rooms.length > 0
+                              ? building.rooms
+                              : Array.from({ length: building?.roomsCount || 0 }, (_, i) => ({
+                                  number: `Sala ${i + 1}`,
+                                  capacity: building?.virtualCapacity || 30,
+                                  floor: "Térreo"
+                                }))),
+                            ...(building?.specialRooms || []),
+                            ...(building?.extraRooms || [])
+                          ]}
+                          building={building}
+                          readOnly={effectiveRole === "ALA"}
+                        />
+                      </div>
+                    );
+                  case "photos":
+                    return (
+                      <div className="animate-fade-in">
+                        <PhotoRecordLogsView 
+                          photos={photos} 
+                          claId={effectiveUser?.uid || currentUser.uid} 
+                          onAdd={addPhoto} 
+                          onDelete={deletePhoto} 
+                          readOnly={effectiveRole === "ALA"}
+                        />
+                      </div>
+                    );
+                  case "activities":
+                    return (
+                      <div className="animate-fade-in">
+                        <ClaActivitiesView 
+                          activeClaId={(effectiveRole === "ALA" || effectiveRole === "Colaborador") ? (effectiveUser?.claId || effectiveUser?.uid || currentUser.uid) : (effectiveUser?.uid || currentUser.uid)} 
+                          activities={claActivities} 
+                          readOnly={effectiveRole === "ALA"}
+                        />
+                      </div>
+                    );
+                  default:
+                    return null;
+                }
+              };
+
+              return (
+                <div className="w-full">
+                  {/* MOBILE NAVIGATION VIEW (ACCORDION STYLE - CONTENT EXPANDS RIGHT BELOW CLICKED MENU) */}
+                  <div className="block lg:hidden w-full space-y-3 no-print">
+                    <div className="flex items-center justify-between px-2 mb-2">
+                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 uppercase font-extrabold tracking-widest px-1">
+                        Painel do Local (Toque no menu para expandir)
+                      </span>
+                    </div>
+
+                    {effectiveRole === "ALA" && (
+                      <div className="p-3 bg-indigo-500/10 border-2 border-indigo-500/30 text-indigo-300 rounded-2xl text-[10px] font-bold leading-relaxed font-sans shadow-sm mb-3">
+                        🚨 OBS (ALA): Você tem acesso para visualizar todos os menus do CLA, mas possui permissão de edição e alteração apenas nos menus: 2 (Fiscais e Inscrições), 3 (Associação de Função) e 4 (Alocação e Reservas).
+                      </div>
                     )}
-                    
-                    {(effectiveRole === "CLA" || effectiveRole === "ALA") && (
-                      <button
-                        onClick={() => setActiveTab("alloc")}
-                        title="4. Alocação e Reservas"
-                        className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "alloc" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                      >
-                        <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                          <Layers className={`w-4 h-4 shrink-0 ${activeTab === "alloc" ? "text-white" : "text-indigo-400"}`} />
-                          {!isSidebarCollapsed && <span>4. Alocação e Reservas</span>}
+
+                    {currentMenuItems.map((item) => {
+                      const IconComp = item.icon;
+                      const isActive = activeTab === item.id;
+                      return (
+                        <div key={item.id} className="w-full space-y-3">
+                          <button
+                            onClick={() => setActiveTab((prev) => (prev === item.id ? "" : item.id))}
+                            className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center justify-between px-4 py-3.5 cursor-pointer border-2 transition-all duration-150 ${
+                              isActive
+                                ? item.isDanger ? "bg-rose-600 text-white border-rose-805 shadow-[3px_3px_0px_0px_#9f1239] scale-[1.01]" : "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.01]"
+                                : isDarkMode
+                                ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]"
+                                : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
+                              <span>{item.label}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">{item.badge}</span>
+                              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isActive ? "rotate-180 text-white" : "text-slate-400"}`} />
+                            </div>
+                          </button>
+
+                          {isActive && (
+                            <div className="animate-fade-in p-3 md:p-5 bg-white dark:bg-[#0c1220]/95 rounded-2xl border-2 border-emerald-500/30 dark:border-emerald-500/20 shadow-lg my-2">
+                              {renderTabContent(item.id)}
+                            </div>
+                          )}
                         </div>
-                        {!isSidebarCollapsed && (
-                          <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">DRAG</span>
-                        )}
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => setActiveTab("team")}
-                      title="5. Gestão de Equipe"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "team" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Users className={`w-4 h-4 shrink-0 ${activeTab === "team" ? "text-white" : "text-emerald-450"}`} />
-                        {!isSidebarCollapsed && <span>5. Gestão de Equipe</span>}
-                      </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">TEAM</span>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab("catering")}
-                      title="6. Alimentação"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "catering" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Coffee className={`w-4 h-4 shrink-0 ${activeTab === "catering" ? "text-white" : "text-amber-400"}`} />
-                        {!isSidebarCollapsed && <span>6. Alimentação</span>}
-                      </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">CATER</span>
-                      )}
-                    </button>
-                    
-                    <button
-                      onClick={() => setActiveTab("plates")}
-                      title="7. Impressão"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "plates" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Printer className={`w-4 h-4 shrink-0 ${activeTab === "plates" ? "text-white" : "text-pink-400"}`} />
-                        {!isSidebarCollapsed && <span>7. Impressão</span>}
-                      </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">PRINT</span>
-                      )}
-                    </button>
-                    
-                    <button
-                      onClick={() => setActiveTab("photos")}
-                      title="8. Fotos"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "photos" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <Camera className={`w-4 h-4 shrink-0 ${activeTab === "photos" ? "text-white" : "text-violet-400"}`} />
-                        {!isSidebarCollapsed && <span>8. Fotos</span>}
-                      </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">CAM</span>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab("activities")}
-                      title="9. Atividades do CLA"
-                      className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${activeTab === "activities" ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]" : isDarkMode ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]" : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"}`}
-                    >
-                      <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                        <CheckSquare className={`w-4 h-4 shrink-0 ${activeTab === "activities" ? "text-white" : "text-emerald-450"}`} />
-                        {!isSidebarCollapsed && <span>9. Atividades do CLA</span>}
-                      </div>
-                      {!isSidebarCollapsed && (
-                        <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">TASK</span>
-                      )}
-                    </button>
-                  </>
-                )}
-                
-                {/* ALA Helper Banner (3D border style) */}
-                {effectiveRole === "ALA" && !isSidebarCollapsed && (
-                  <div className="p-4 bg-indigo-500/10 border-2 border-indigo-500/30 text-indigo-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]">
-                    🚨 OBS (ALA): Você tem acesso para visualizar todos os menus do CLA, mas possui permissão de edição e alteração apenas nos menus: 2 (Fiscais e Inscrições), 3 (Associação de Função) e 4 (Alocação e Reservas).
+                      );
+                    })}
                   </div>
-                )}
 
-                {/* CLA Personal Coordination Card */}
-                {effectiveRole === "CLA" && effectiveUser?.coordinationCode && !isSidebarCollapsed && (
-                  <div className="p-4 bg-emerald-500/10 border-2 border-emerald-500/30 text-emerald-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]">
-                    🏢 <strong className="uppercase">Sua Coordenação</strong>
-                    <div className="mt-1 font-mono">Código: {effectiveUser.coordinationCode}</div>
-                    <div className="text-slate-400 mt-1 font-normal">Coordenador do local de aplicação do ENEM.</div>
-                    <button 
-                      onClick={() => setIsEditingProfile(true)}
-                      className="mt-3 w-full bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/30 font-extrabold py-1.5 rounded-lg text-[9px] cursor-pointer text-white tracking-wider uppercase transition active:scale-95"
-                    >
-                      📝 Editar Cadastro
-                    </button>
-                  </div>
-                )}
-              </div>
+                  {/* DESKTOP NAVIGATION VIEW (SIDEBAR + CONTENT PANEL) */}
+                  {(() => {
+                    const desktopActiveTab = activeTab || currentMenuItems[0]?.id || "building";
+                    return (
+                      <div className="hidden lg:flex lg:flex-row gap-6 items-start w-full">
+                        <div className={`no-print shrink-0 space-y-3 transition-all duration-300 ${isSidebarCollapsed ? "w-16" : "w-64"}`}>
+                          <div className="flex items-center justify-between px-2 mb-2">
+                            {!isSidebarCollapsed && (
+                              <span className="block text-[10px] text-slate-500 dark:text-slate-400 uppercase font-extrabold tracking-widest px-1">
+                                Painel do Local
+                              </span>
+                            )}
+                            <button
+                              onClick={() => {
+                                const next = !isSidebarCollapsed;
+                                setIsSidebarCollapsed(next);
+                                localStorage.setItem("enem_sidebar_collapsed", String(next));
+                              }}
+                              title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
+                              className={`p-1.5 rounded-lg bg-slate-100 dark:bg-[#101726]/90 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-emerald-555 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-center ${isSidebarCollapsed ? "mx-auto" : ""}`}
+                            >
+                              {isSidebarCollapsed ? (
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              ) : (
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
 
-              {/* TAB CONTENT GRID */}
-              <div className="flex-1 min-w-0 w-full space-y-6">
-              
-              {effectiveRole === "SuperAdmin" && activeTab === "admin-dashboard" && (
-                <div className="animate-fade-in">
-                  <SuperAdminDash 
-                    initialConfig={eventConfig} 
-                    onSaveConfig={saveEventConfig} 
-                    activeSubTab="dashboard"
-                  />
+                          {currentMenuItems.map((item) => {
+                            const IconComp = item.icon;
+                            const isActive = desktopActiveTab === item.id;
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => setActiveTab(item.id)}
+                                title={item.label}
+                                className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${
+                                  isActive
+                                    ? item.isDanger ? "bg-rose-600 text-white border-rose-805 shadow-[3px_3px_0px_0px_#9f1239] scale-[1.02]" : "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]"
+                                    : isDarkMode
+                                    ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]"
+                                    : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"
+                                }`}
+                              >
+                                <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+                                  <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
+                                  {!isSidebarCollapsed && <span>{item.label}</span>}
+                                </div>
+                                {!isSidebarCollapsed && (
+                                  <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">{item.badge}</span>
+                                )}
+                              </button>
+                            );
+                          })}
+
+                          {effectiveRole === "ALA" && !isSidebarCollapsed && (
+                            <div className="p-4 bg-indigo-500/10 border-2 border-indigo-500/30 text-indigo-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]">
+                              🚨 OBS (ALA): Você tem acesso para visualizar todos os menus do CLA, mas possui permissão de edição e alteração apenas nos menus: 2 (Fiscais e Inscrições), 3 (Associação de Função) e 4 (Alocação e Reservas).
+                            </div>
+                          )}
+
+                          {effectiveRole === "CLA" && effectiveUser?.coordinationCode && !isSidebarCollapsed && (
+                            <div className="p-4 bg-emerald-500/10 border-2 border-emerald-500/30 text-emerald-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]">
+                              🏢 <strong className="uppercase">Sua Coordenação</strong>
+                              <div className="mt-1 font-mono">Código: {effectiveUser.coordinationCode}</div>
+                              <div className="text-slate-400 mt-1 font-normal">Coordenador do local de aplicação do ENEM.</div>
+                              <button 
+                                onClick={() => setIsEditingProfile(true)}
+                                className="mt-3 w-full bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/30 font-extrabold py-1.5 rounded-lg text-[9px] cursor-pointer text-white tracking-wider uppercase transition active:scale-95"
+                              >
+                                📝 Editar Cadastro
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* DESKTOP TAB CONTENT PANEL */}
+                        <div className="flex-1 min-w-0 w-full space-y-6">
+                          {renderTabContent(desktopActiveTab)}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
-              )}
-
-              {effectiveRole === "SuperAdmin" && activeTab === "admin-directives" && (
-                <div className="animate-fade-in">
-                  <SuperAdminDash 
-                    initialConfig={eventConfig} 
-                    onSaveConfig={saveEventConfig} 
-                    activeSubTab="directives"
-                  />
-                </div>
-              )}
-
-              {effectiveRole === "SuperAdmin" && activeTab === "admin-profiles" && (
-                <div className="animate-fade-in">
-                  <SuperAdminDash 
-                    initialConfig={eventConfig} 
-                    onSaveConfig={saveEventConfig} 
-                    activeSubTab="profiles"
-                  />
-                </div>
-              )}
-
-              {effectiveRole === "SuperAdmin" && activeTab === "admin-register" && (
-                <div className="animate-fade-in">
-                  <SuperAdminDash 
-                    initialConfig={eventConfig} 
-                    onSaveConfig={saveEventConfig} 
-                    activeSubTab="register"
-                  />
-                </div>
-              )}
-
-              {effectiveRole === "SuperAdmin" && activeTab === "admin-reset" && (
-                <div className="animate-fade-in">
-                  <SuperAdminDash 
-                    initialConfig={eventConfig} 
-                    onSaveConfig={saveEventConfig} 
-                    activeSubTab="reset"
-                  />
-                </div>
-              )}
-
-              {activeTab === "building" && (
-                effectiveRole === "SuperAdmin" ? (
-                  <div className="animate-fade-in">
-                    <SuperAdminDash 
-                      initialConfig={eventConfig} 
-                      onSaveConfig={saveEventConfig} 
-                      activeSubTab="building"
-                    />
-                  </div>
-                ) : (
-                  <div className="animate-fade-in">
-                    <BuildingConfigView 
-                      initialBuilding={building} 
-                      claId={effectiveUser?.uid || currentUser.uid} 
-                      onSave={saveBuilding} 
-                      userRole={effectiveRole}
-                      readOnly={effectiveRole === "ALA"}
-                    />
-                  </div>
-                )
-              )}
-
-              {activeTab === "staff" && (
-                <div className="animate-fade-in">
-                  <CollaboratorManager 
-                    collaborators={collaborators} 
-                    claId={effectiveUser?.uid || currentUser.uid} 
-                    onAdd={addCollaborator} 
-                    onUpdate={updateCollaborator} 
-                    onDelete={deleteCollaborator} 
-                    onSimulatePublicRecruit={() => setIsPublicForm(true)}
-                  />
-                </div>
-              )}
-
-              {activeTab === "association" && (effectiveRole === "CLA" || effectiveRole === "ALA") && (
-                <div className="animate-fade-in">
-                  <AssociationView 
-                    collaborators={collaborators} 
-                    onUpdate={updateCollaborator}
-                    readOnly={false}
-                    building={building}
-                    onSaveBuilding={saveBuilding}
-                  />
-                </div>
-              )}
-
-              {activeTab === "alloc" && (effectiveRole === "CLA" || effectiveRole === "ALA") && (
-                <div className="animate-fade-in">
-                  <DragAndDropReserves 
-                    collaborators={collaborators} 
-                    rooms={[
-                      ...(building?.rooms && building.rooms.length > 0
-                        ? building.rooms
-                        : Array.from({ length: building?.roomsCount || 0 }, (_, i) => ({
-                            number: `Sala ${i + 1}`,
-                            capacity: building?.virtualCapacity || 30,
-                            floor: "Térreo"
-                          }))),
-                      ...(building?.specialRooms || []),
-                      ...(building?.extraRooms || [])
-                    ]} 
-                    onMove={handleDragAllocationMove} 
-                  />
-                </div>
-              )}
-
-              {activeTab === "catering" && (
-                <div className="animate-fade-in">
-                  <CateringView 
-                    initialCatering={catering} 
-                    claId={effectiveUser?.uid || currentUser.uid} 
-                    collaborators={collaborators} 
-                    onSave={saveCatering} 
-                    readOnly={effectiveRole === "ALA"}
-                  />
-                </div>
-              )}
-
-              {activeTab === "plates" && (
-                <div className="animate-fade-in">
-                  <CombinedPrintExportView 
-                    collaborators={collaborators}
-                    rooms={[
-                      ...(building?.rooms && building.rooms.length > 0
-                        ? building.rooms
-                        : Array.from({ length: building?.roomsCount || 0 }, (_, i) => ({
-                            number: `Sala ${i + 1}`,
-                            capacity: building?.virtualCapacity || 30,
-                            floor: "Térreo"
-                          }))),
-                      ...(building?.specialRooms || []),
-                      ...(building?.extraRooms || [])
-                    ]}
-                    building={building}
-                    readOnly={effectiveRole === "ALA"}
-                  />
-                </div>
-              )}
-
-              {activeTab === "photos" && (
-                <div className="animate-fade-in">
-                  <PhotoRecordLogsView 
-                    photos={photos} 
-                    claId={effectiveUser?.uid || currentUser.uid} 
-                    onAdd={addPhoto} 
-                    onDelete={deletePhoto} 
-                    readOnly={effectiveRole === "ALA"}
-                  />
-                </div>
-              )}
-
-              {activeTab === "team" && (
-                <div className="animate-fade-in">
-                  <AccessManagementView 
-                    currentUser={effectiveUser || currentUser} 
-                    colegas={colegas} 
-                    activeClaId={(effectiveRole === "ALA" || effectiveRole === "Colaborador") ? (effectiveUser?.claId || effectiveUser?.uid || currentUser.uid) : (effectiveUser?.uid || currentUser.uid)} 
-                    readOnly={effectiveRole === "ALA"}
-                  />
-                </div>
-              )}
-
-              {activeTab === "activities" && (
-                <div className="animate-fade-in">
-                  <ClaActivitiesView 
-                    activeClaId={(effectiveRole === "ALA" || effectiveRole === "Colaborador") ? (effectiveUser?.claId || effectiveUser?.uid || currentUser.uid) : (effectiveUser?.uid || currentUser.uid)} 
-                    activities={claActivities} 
-                    readOnly={effectiveRole === "ALA"}
-                  />
-                </div>
-              )}
-
-
-
-            </div>
-          </div>
-         )
+              );
+            })()
+          )
         )}
 
         {/* ========================================================= */}

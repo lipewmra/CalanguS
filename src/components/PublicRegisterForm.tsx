@@ -282,21 +282,14 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
   return (
     <div className="max-w-3xl mx-auto py-10 px-4 animate-fade-in" id="public-recruitment-form-view">
       
-      {/* Simulation Header Indicator */}
+      {/* Navigation back button for internal previewers */}
       {onBackToApp && (
-        <div className="no-print mb-6 p-4 bg-[#101726]/80 text-blue-300 rounded-2xl border-2 border-blue-500/20 shadow-lg text-xs font-semibold flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-indigo-400 animate-pulse shrink-0" />
-            <div>
-              <span className="font-extrabold uppercase text-indigo-400 block font-mono">SIMULAÇÃO DE LINK EXTERNO</span>
-              <span>Este formulário representa a visão de um candidato externo que acessou o link de recrutamento do CalanguS.</span>
-            </div>
-          </div>
+        <div className="no-print mb-4 flex justify-end">
           <button
             onClick={onBackToApp}
-            className="btn-3d py-1.5 px-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 font-extrabold text-[10px] cursor-pointer"
+            className="btn-3d py-1.5 px-3 bg-[#0c1220] text-white hover:bg-slate-800 font-extrabold text-[10px] cursor-pointer rounded-lg border border-slate-700 shadow-sm flex items-center gap-1.5"
           >
-            ↩ VOLTAR AO MEU PAINEL (CLA)
+            ← Voltar ao Meu Painel (CLA)
           </button>
         </div>
       )}
@@ -508,7 +501,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-400 mb-1.5">Nome Completo</label>
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Nome Completo</label>
                   <input
                     type="text"
                     value={name}
@@ -517,11 +510,11 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                     className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-sm focus:outline-hidden"
                     required
                   />
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500 block mt-1 font-medium">⚠️ Não digite o nome completo inteiramente em MAIÚSCULAS para evitar descompasso com o Orion.</span>
+                  <span className="text-[9px] text-slate-500 dark:text-slate-400 block mt-1 font-medium">⚠️ Não digite o nome completo inteiramente em MAIÚSCULAS para evitar descompasso com o Orion.</span>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-400 mb-1.5">Data Nascimento</label>
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Data Nascimento</label>
                   <input
                     type="text"
                     value={birthDate}
@@ -534,7 +527,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-400 mb-1.5">CPF (Apenas números ou formatado)</label>
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">CPF (Apenas números ou formatado)</label>
                   <input
                     type="text"
                     value={cpf}
@@ -547,7 +540,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-400 mb-1.5 flex items-center gap-1">
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5 flex items-center gap-1">
                     <Phone className="w-3.5 h-3.5 text-[#10b981]" />
                     <span>Telefone WhatsApp</span>
                   </label>
@@ -563,7 +556,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-400 mb-1.5 flex items-center gap-1">
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5 flex items-center gap-1">
                     <Mail className="w-3.5 h-3.5 text-[#10b981]" />
                     <span>E-mail</span>
                   </label>
@@ -578,7 +571,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-400 mb-1.5">Chave PIX (Onde quer receber o repasse)</label>
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Chave PIX (Onde quer receber o repasse)</label>
                   <input
                     type="text"
                     value={pixKey}
@@ -586,15 +579,15 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                     placeholder="Padrão CPF ou digite outra chave"
                     className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-sm focus:outline-hidden"
                   />
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500 block mt-1 font-medium">Caso em branco, utilizaremos o CPF.</span>
+                  <span className="text-[9px] text-slate-500 dark:text-slate-400 block mt-1 font-medium">Caso em branco, utilizaremos o CPF.</span>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-400 mb-1.5">Grau de Escolaridade</label>
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Grau de Escolaridade</label>
                   <select
                     value={education}
                     onChange={(e) => setEducation(e.target.value as any)}
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-3 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-sm font-bold shadow-inner"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm font-bold shadow-inner"
                   >
                     <option value="Ensino Médio">Ensino Médio</option>
                     <option value="Ensino Técnico">Ensino Técnico</option>
@@ -607,7 +600,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-400 mb-1.5">Declaração Física PCD / Deficiência física?</label>
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Declaração Física PCD / Deficiência física?</label>
                   <input
                     type="text"
                     value={disability}
@@ -618,11 +611,11 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-400 mb-1.5">Função de Apoio / Especialização</label>
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Função de Apoio / Especialização</label>
                   <select
                     value={specialRole}
                     onChange={(e) => setSpecialRole(e.target.value as any)}
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-3 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-sm font-bold shadow-inner"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm font-bold shadow-inner"
                   >
                     <option value="Nenhuma">Nenhuma / Fiscal de Sala Padrão</option>
                     <option value="Libras">Libras (Intérprete)</option>

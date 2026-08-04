@@ -18,7 +18,8 @@ import {
   Sparkles, 
   BookOpen,
   ArrowRight,
-  UserCheck
+  UserCheck,
+  ChevronDown
 } from "lucide-react";
 import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo } from "../types";
 
@@ -41,7 +42,7 @@ export default function CollaboratorDashboard({
   onUpdateConfirmationStatus,
   onUpdateProfile
 }: CollaboratorDashboardProps) {
-  const [activeMenuTab, setActiveMenuTab] = useState<"status" | "profile" | "snack" | "materials" | "agenda" | "checklist">("status");
+  const [activeMenuTab, setActiveMenuTab] = useState<string>("");
   
   // Profile edit states
   const [name, setName] = useState("");
@@ -226,6 +227,8 @@ export default function CollaboratorDashboard({
   const checklistPercent = Math.round((checkedCount / totalChecklist) * 105) || 100; // max out properly
   const finalPercent = Math.min(100, checklistPercent);
 
+  const desktopMenuTab = activeMenuTab || "status";
+
   return (
     <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-6 animate-fade-in text-sans">
       
@@ -254,61 +257,91 @@ export default function CollaboratorDashboard({
           </span>
         </div>
 
-        {/* Navigation Buttons */}
+        {/* Navigation Buttons - Toggle on click */}
         <button
-          onClick={() => setActiveMenuTab("status")}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 ${activeMenuTab === "status" ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"}`}
+          onClick={() => setActiveMenuTab((prev) => (prev === "status" ? "" : "status"))}
+          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+            activeMenuTab === "status" || (activeMenuTab === "" && false)
+              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+          }`}
         >
           <MapPin className="w-4 h-4" />
-          <span>Status & Local</span>
+          <span className="flex-1">Status & Local</span>
+          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "status" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
         </button>
 
         <button
-          onClick={() => setActiveMenuTab("profile")}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 ${activeMenuTab === "profile" ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"}`}
+          onClick={() => setActiveMenuTab((prev) => (prev === "profile" ? "" : "profile"))}
+          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+            activeMenuTab === "profile"
+              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+          }`}
         >
           <User className="w-4 h-4" />
-          <span>Editar Perfil</span>
+          <span className="flex-1">Editar Perfil</span>
+          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "profile" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
         </button>
 
         {isSnackMenuReleased && (
           <button
-            onClick={() => setActiveMenuTab("snack")}
-            className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 ${activeMenuTab === "snack" ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850 animate-pulse"}`}
+            onClick={() => setActiveMenuTab((prev) => (prev === "snack" ? "" : "snack"))}
+            className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+              activeMenuTab === "snack"
+                ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850 animate-pulse"
+            }`}
           >
-            <span className="flex items-center gap-2.5">
+            <span className="flex items-center gap-2.5 flex-1">
               <Coffee className="w-4 h-4 text-emerald-500" />
               <span>Cardápio & Lanche</span>
             </span>
-            <span className="text-[8px] bg-emerald-500 text-white font-extrabold px-1.5 py-0.5 rounded-full">LIBERADO</span>
+            <span className="text-[8px] bg-emerald-500 text-white font-extrabold px-1.5 py-0.5 rounded-full mr-1">LIBERADO</span>
+            <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "snack" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
           </button>
         )}
 
         <button
-          onClick={() => setActiveMenuTab("materials")}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 ${activeMenuTab === "materials" ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"}`}
+          onClick={() => setActiveMenuTab((prev) => (prev === "materials" ? "" : "materials"))}
+          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+            activeMenuTab === "materials"
+              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+          }`}
         >
           <FileText className="w-4 h-4" />
-          <span>Materiais de Apoio</span>
+          <span className="flex-1">Materiais de Apoio</span>
+          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "materials" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
         </button>
 
         <button
-          onClick={() => setActiveMenuTab("agenda")}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 ${activeMenuTab === "agenda" ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"}`}
+          onClick={() => setActiveMenuTab((prev) => (prev === "agenda" ? "" : "agenda"))}
+          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+            activeMenuTab === "agenda"
+              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+          }`}
         >
           <Calendar className="w-4 h-4" />
-          <span>Agenda & Itinerário</span>
+          <span className="flex-1">Agenda & Itinerário</span>
+          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "agenda" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
         </button>
 
         <button
-          onClick={() => setActiveMenuTab("checklist")}
-          className={`flex items-center justify-between gap-1 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 ${activeMenuTab === "checklist" ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"}`}
+          onClick={() => setActiveMenuTab((prev) => (prev === "checklist" ? "" : "checklist"))}
+          className={`flex items-center justify-between gap-1 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+            activeMenuTab === "checklist"
+              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+          }`}
         >
-          <span className="flex items-center gap-2.5">
+          <span className="flex items-center gap-2.5 flex-1">
             <CheckSquare className="w-4 h-4" />
             <span>Check-list</span>
           </span>
-          <span className="text-[9px] font-bold font-mono text-slate-400">{finalPercent}%</span>
+          <span className="text-[9px] font-bold font-mono text-slate-400 mr-1">{finalPercent}%</span>
+          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "checklist" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
         </button>
 
         <div className="mt-8 border-t border-slate-100 dark:border-slate-850 pt-4 px-2">
@@ -321,10 +354,10 @@ export default function CollaboratorDashboard({
       </div>
 
       {/* RIGHT SIDE DETAILS AREA */}
-      <div className="grow bg-white dark:bg-[#0c1220]/90 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.05)] dark:shadow-[4px_4px_0px_0px_#10b981]/10">
+      <div className={`grow bg-white dark:bg-[#0c1220]/90 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.05)] dark:shadow-[4px_4px_0px_0px_#10b981]/10 ${activeMenuTab === "" ? "hidden md:block" : "block"}`}>
         
         {/* TAB 1: STATUS & LOCAL_ */}
-        {activeMenuTab === "status" && (
+        {desktopMenuTab === "status" && (
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Status da Inscrição & Confirmação</h3>
@@ -417,7 +450,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 2: EDITAR PERFIL_ */}
-        {activeMenuTab === "profile" && (
+        {desktopMenuTab === "profile" && (
           <form onSubmit={handleSaveProfile} className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Editar Dados Cadastrais & Foto</h3>
@@ -566,7 +599,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 3: LANCHE_ */}
-        {activeMenuTab === "snack" && isSnackMenuReleased && (
+        {desktopMenuTab === "snack" && isSnackMenuReleased && (
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Seleção de Cardápio & Restrições Alimentares</h3>
@@ -691,7 +724,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 4: MATERIAL_ */}
-        {activeMenuTab === "materials" && (
+        {desktopMenuTab === "materials" && (
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Material Didático & Capacitação</h3>
@@ -734,7 +767,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 5: AGENDA_ */}
-        {activeMenuTab === "agenda" && (
+        {desktopMenuTab === "agenda" && (
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Agenda & Itinerário Tático do Fiscal</h3>
@@ -762,7 +795,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 6: CHECK-LIST_ */}
-        {activeMenuTab === "checklist" && (
+        {desktopMenuTab === "checklist" && (
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Check-list de Preparação do Aplicador</h3>
