@@ -6,7 +6,8 @@ import { auditCollaborator } from "../lib/data-validator";
 import { getCurrentUserProfile } from "../lib/db-services";
 import { 
   Building2, Users, FileText, CheckCircle, AlertTriangle, 
-  ChevronRight, Sparkles, Mail, Phone, ShieldCheck, Heart, RotateCcw
+  ChevronRight, Sparkles, Mail, Phone, ShieldCheck, Heart, RotateCcw,
+  History
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
 
@@ -30,6 +31,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
   const [disability, setDisability] = useState("Nenhuma");
   const [hasWorkedEnem, setHasWorkedEnem] = useState(false);
   const [pixKey, setPixKey] = useState("");
+  const [referencePerson, setReferencePerson] = useState("");
   const [specialRole, setSpecialRole] = useState<any>("Nenhuma");
   const [languages, setLanguages] = useState<string>("");
 
@@ -211,19 +213,18 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
       const targetBuilding = buildings.find(b => b.id === selectedBuildingId);
       const claId = targetBuilding ? (targetBuilding.claId || claParam || "mock-cla-user-id") : (claParam || "mock-cla-user-id");
 
-      // Build past edition list
+      // Build past edition list from all selected years
       const finalPastEditions: PastEdition[] = [];
-      if (hasWorkedEnem) {
-        Object.keys(pastEditionsSelected).forEach(yearStr => {
-          const y = Number(yearStr);
-          if (pastEditionsSelected[y]) {
-            finalPastEditions.push({
-              year: y,
-              role: pastEditionsRoles[y] || "Fiscal de Sala"
-            });
-          }
-        });
-      }
+      Object.keys(pastEditionsSelected).forEach(yearStr => {
+        const y = Number(yearStr);
+        if (pastEditionsSelected[y]) {
+          finalPastEditions.push({
+            year: y,
+            role: pastEditionsRoles[y] || "Fiscal de Sala"
+          });
+        }
+      });
+      const hasWorkedEnemComputed = finalPastEditions.length > 0;
 
       const collabData = {
         claId,
@@ -235,9 +236,10 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
         email: email.trim(),
         education,
         disability: disability.trim(),
-        hasWorkedEnem,
+        hasWorkedEnem: hasWorkedEnemComputed,
         pastEditions: finalPastEditions,
         pixKey: pixKey.trim() || cpf,
+        referencePerson: referencePerson.trim(),
         specialRole,
         languages: languages.split(";").map(l => l.trim()).filter(Boolean),
         isReserve: true, // recruited public are automatically reserve status first until CLA promotes
@@ -269,6 +271,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
     setDisability("Nenhuma");
     setHasWorkedEnem(false);
     setPixKey("");
+    setReferencePerson("");
     setSpecialRole("Nenhuma");
     setLanguages("");
     setPastEditionsSelected({});
@@ -316,6 +319,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
               <div className="text-indigo-400 uppercase tracking-widest text-[9px] mb-1 font-black">Resumo das Credenciais:</div>
               <div>Nome: {name}</div>
               <div>CPF: {cpf}</div>
+              {referencePerson && <div>Pessoa de Referência: {referencePerson}</div>}
               <div>Função Especial: {specialRole}</div>
               <div>Alocação Inicial: Equipe Reserva</div>
             </div>
@@ -582,6 +586,20 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                   <span className="text-[9px] text-slate-500 dark:text-slate-400 block mt-1 font-medium">Caso em branco, utilizaremos o CPF.</span>
                 </div>
 
+                <div className="md:col-span-2 lg:col-span-3">
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Pessoa de Referência</label>
+                  <input
+                    type="text"
+                    value={referencePerson}
+                    onChange={(e) => setReferencePerson(e.target.value)}
+                    placeholder="Ex: MARIA"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-sm focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 font-medium leading-relaxed">
+                    Informe aqui o nome da pessoa (amigo, parente ou familiar) que lhe indicou para esse CLA. Exemplo: Minha amiga MARIA conversou com o CLA para me indicar para os trabalhos desse ano, então na referência eu digito MARIA.
+                  </span>
+                </div>
+
                 <div>
                   <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Grau de Escolaridade</label>
                   <select
@@ -643,109 +661,99 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
 
             {/* FIELDSET Group 3: Historical worked ENEMS */}
             <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border-2 border-slate-150 dark:border-slate-850 space-y-4">
-              <label className="flex items-start gap-2.5 cursor-pointer text-xs font-extrabold text-slate-800 dark:text-slate-200 select-none">
-                <input
-                  type="checkbox"
-                  checked={hasWorkedEnem}
-                  onChange={(e) => setHasWorkedEnem(e.target.checked)}
-                  className="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 mt-0.5 border-2 shrink-0"
-                />
-                <div>
-                  <span className="block font-black text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">Deseja registrar histórico em edições anteriores do ENEM? (1998 a 2025)</span>
-                  <span className="block text-[10px] text-slate-400 dark:text-slate-400 mt-0.5 font-semibold">Custa a seu favor para o CLA priorizar o enquadramento de fiscais experientes no prédio.</span>
-                </div>
-              </label>
+              <div>
+                <h3 className="text-xs uppercase tracking-wider font-extrabold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                  <History className="w-4 h-4 shrink-0 text-emerald-500" />
+                  <span>3. Histórico em Edições Anteriores do ENEM (1998 a 2025)</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                  Selecione as edições do ENEM em que você trabalhou e informe a função desempenhada. Isso conta a seu favor para o enquadramento de fiscais experientes no prédio.
+                </p>
+              </div>
 
-              {hasWorkedEnem && (
-                <div className="p-4 bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-850 rounded-xl mt-3 space-y-3 shadow-inner">
-                  <div className="flex items-center justify-between border-b pb-2 border-slate-100 dark:border-slate-800">
-                    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Selecione os anos das edições trabalhadas</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowPastYears(!showPastYears)}
-                      className="text-xs text-indigo-500 dark:text-indigo-400 font-black hover:underline cursor-pointer"
-                    >
-                      {showPastYears ? "Ocultar Lista Completa" : "Exibir Anos (28 Edições)"}
-                    </button>
+              <div className="p-4 bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-850 rounded-xl space-y-3 shadow-inner">
+                <details className="text-xs bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-xl p-3 cursor-pointer group">
+                  <summary className="font-extrabold text-indigo-600 dark:text-indigo-400 select-none flex items-center gap-1.5 focus:outline-hidden hover:text-indigo-500">
+                    <span>📚</span> Ver Lista de Funções Oficiais do ENEM (Cheatsheet)
+                  </summary>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800 cursor-default">
+                    {ENEM_ROLES.map((role) => (
+                      <div key={role.name} className="p-2.5 bg-white dark:bg-[#101726]/40 border border-slate-150 dark:border-slate-800 rounded-lg text-[11px] hover:border-indigo-400 transition animate-fade-in">
+                        <div className="flex items-center justify-between font-bold text-indigo-600 dark:text-indigo-400 gap-1.5 flex-wrap">
+                          <span>{role.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updatedRoles = { ...pastEditionsRoles };
+                              Object.keys(pastEditionsSelected).forEach((yr) => {
+                                if (pastEditionsSelected[parseInt(yr)]) {
+                                  updatedRoles[parseInt(yr)] = role.name;
+                                }
+                              });
+                              setPastEditionsRoles(updatedRoles);
+                            }}
+                            className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 py-0.5 rounded hover:bg-emerald-500/20 cursor-pointer font-bold"
+                          >
+                            Aplicar aos marcados
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">{role.desc}</p>
+                      </div>
+                    ))}
                   </div>
+                </details>
 
-                  <details className="text-xs bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-xl p-3 cursor-pointer group">
-                    <summary className="font-extrabold text-indigo-600 dark:text-indigo-400 select-none flex items-center gap-1.5 focus:outline-hidden hover:text-indigo-500">
-                      <span>📚</span> Ver Lista de Funções Oficiais do ENEM (Cheatsheet)
-                    </summary>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800 cursor-default">
-                      {ENEM_ROLES.map((role) => (
-                        <div key={role.name} className="p-2.5 bg-white dark:bg-[#101726]/40 border border-slate-150 dark:border-slate-800 rounded-lg text-[11px] hover:border-indigo-400 transition animate-fade-in">
-                          <div className="flex items-center justify-between font-bold text-indigo-600 dark:text-indigo-400 gap-1.5 flex-wrap">
-                            <span>{role.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updatedRoles = { ...pastEditionsRoles };
-                                Object.keys(pastEditionsSelected).forEach((yr) => {
-                                  if (pastEditionsSelected[parseInt(yr)]) {
-                                    updatedRoles[parseInt(yr)] = role.name;
-                                  }
-                                });
-                                setPastEditionsRoles(updatedRoles);
-                              }}
-                              className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 py-0.5 rounded hover:bg-emerald-555/20 cursor-pointer"
-                            >
-                              Aplicar aos marcados
-                            </button>
-                          </div>
-                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">{role.desc}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-
-                  {showPastYears ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[190px] overflow-y-auto pr-2 border-t border-slate-100 dark:border-slate-800 pt-3">
-                      {availableYears.map((yr) => (
-                        <div key={yr} className="flex flex-col p-2 bg-slate-50 dark:bg-[#070b13]/50 border-2 border-slate-200 dark:border-slate-800 rounded-xl hover:border-emerald-555/40 transition">
-                          <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-300 select-none">
-                            <input
-                              type="checkbox"
-                              checked={!!pastEditionsSelected[yr]}
-                              onChange={(e) => setPastEditionsSelected({
-                                ...pastEditionsSelected,
-                                [yr]: e.target.checked
-                              })}
-                              className="rounded text-emerald-500 w-3.5 h-3.5 shrink-0"
-                            />
-                            <span className="font-mono text-slate-900 dark:text-white font-black">{yr}</span>
-                          </label>
-                          {pastEditionsSelected[yr] && (
-                            <input
-                              type="text"
-                              placeholder="Chefe de Setor, Fiscal, Ledor, etc."
-                              list="enem-roles-list"
-                              value={pastEditionsRoles[yr] || ""}
-                              onChange={(e) => setPastEditionsRoles({
-                                ...pastEditionsRoles,
-                                [yr]: e.target.value
-                              })}
-                              className="mt-1.5 border border-slate-200 dark:border-slate-800 rounded px-2 py-0.5 text-[10px] bg-white dark:bg-slate-900 text-slate-800 dark:text-white font-semibold"
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-[10px] text-slate-400 font-semibold text-center py-1">
-                      Clique em "Exibir Anos" para registrar suas edições passadas.
-                    </div>
-                  )}
+                <div>
+                  <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2">
+                    Marque as edições trabalhadas:
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {availableYears.map((yr) => (
+                      <div 
+                        key={yr} 
+                        className={`flex flex-col p-2.5 border-2 rounded-xl transition ${
+                          pastEditionsSelected[yr]
+                            ? "bg-emerald-500/10 border-emerald-500 dark:border-emerald-500"
+                            : "bg-slate-50 dark:bg-[#070b13]/50 border-slate-200 dark:border-slate-800 hover:border-emerald-500/40"
+                        }`}
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-300 select-none">
+                          <input
+                            type="checkbox"
+                            checked={!!pastEditionsSelected[yr]}
+                            onChange={(e) => setPastEditionsSelected({
+                              ...pastEditionsSelected,
+                              [yr]: e.target.checked
+                            })}
+                            className="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 shrink-0"
+                          />
+                          <span className="font-mono text-slate-900 dark:text-white font-black text-sm">{yr}</span>
+                        </label>
+                        {pastEditionsSelected[yr] && (
+                          <input
+                            type="text"
+                            placeholder="Ex: Fiscal de Sala"
+                            list="enem-roles-list"
+                            value={pastEditionsRoles[yr] || ""}
+                            onChange={(e) => setPastEditionsRoles({
+                              ...pastEditionsRoles,
+                              [yr]: e.target.value
+                            })}
+                            className="mt-2 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-[11px] bg-white dark:bg-slate-900 text-slate-800 dark:text-white font-semibold focus:outline-hidden focus:border-emerald-500"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
 
             {/* SUBMIT SECTION */}
             <div className="pt-4 border-t-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
                 <ShieldCheck className="w-5 h-5 text-[#10b981]" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Criptografia Privada Orion Cebraspe</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider">Criptografia Privada CalanguS</span>
               </div>
               
               <div className="flex gap-3">

@@ -51,6 +51,7 @@ export default function CollaboratorDashboard({
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
   const [education, setEducation] = useState<any>("Ensino Superior Completo");
+  const [referencePerson, setReferencePerson] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState("");
@@ -80,6 +81,7 @@ export default function CollaboratorDashboard({
       setWhatsapp(collaboratorRecord.whatsapp || "");
       setEmail(collaboratorRecord.email || "");
       setEducation(collaboratorRecord.education || "Ensino Superior Completo");
+      setReferencePerson(collaboratorRecord.referencePerson || "");
       setPhotoUrl(collaboratorRecord.photoUrl || "");
       setRestrictions(collaboratorRecord.foodRestrictions || "");
       setSnackPreference(collaboratorRecord.snackPreference || "Padrão");
@@ -141,6 +143,7 @@ export default function CollaboratorDashboard({
         whatsapp,
         email,
         education,
+        referencePerson,
         photoUrl
       });
       setProfileSuccessMsg("Seu cadastro de fiscal foi atualizado com sucesso e sincronizado.");
@@ -583,6 +586,20 @@ export default function CollaboratorDashboard({
                   <option value="Mestrado">Mestrado</option>
                   <option value="Doutorado">Doutorado</option>
                 </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[9px] uppercase font-extrabold tracking-wider text-slate-400 mb-1">Pessoa de Referência</label>
+                <input
+                  type="text"
+                  value={referencePerson}
+                  onChange={(e) => setReferencePerson(e.target.value)}
+                  placeholder="Ex: MARIA"
+                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold text-slate-800 dark:text-white focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 font-medium leading-relaxed">
+                  Informe aqui o nome da pessoa (amigo, parente ou familiar) que lhe indicou para esse CLA. Exemplo: Minha amiga MARIA conversou com o CLA para me indicar para os trabalhos desse ano, então na referência eu digito MARIA.
+                </span>
               </div>
             </div>
 

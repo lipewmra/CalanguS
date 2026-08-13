@@ -6,7 +6,8 @@ export const CSV_HEADERS = [
   "Data de Nascimento",
   "Telefone",
   "Email",
-  "Escolaridade"
+  "Escolaridade",
+  "Pessoa de Referencia"
 ];
 
 export const CSV_EXAMPLE_ROWS = [
@@ -16,7 +17,8 @@ export const CSV_EXAMPLE_ROWS = [
     "05/12/1988",
     "(11) 98765-4321",
     "carlos.silva@email.com",
-    "Ensino Superior Completo"
+    "Ensino Superior Completo",
+    "MARIA"
   ],
   [
     "Ana Maria de Oliveira",
@@ -24,7 +26,8 @@ export const CSV_EXAMPLE_ROWS = [
     "22/07/1992",
     "(11) 91111-2222",
     "ana.maria@email.com",
-    "Ensino Médio"
+    "Ensino Médio",
+    "JOAO"
   ],
   [
     "Fabiano Alves Santos",
@@ -32,7 +35,8 @@ export const CSV_EXAMPLE_ROWS = [
     "14/03/1995",
     "(21) 99888-7766",
     "fabiano.alves@email.com",
-    "Ensino Superior Cursando"
+    "Ensino Superior Cursando",
+    ""
   ]
 ];
 

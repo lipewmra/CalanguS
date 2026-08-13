@@ -209,6 +209,13 @@ export default function App() {
         };
         await saveUserProfile(updatedProfile);
         setCurrentUser(updatedProfile);
+
+        if (building) {
+          const updatedBuilding = { ...building, coordRoom: regCoordCode };
+          await saveBuilding(updatedBuilding);
+          setBuilding(updatedBuilding);
+        }
+
         setIsEditingProfile(false);
       }
     } catch (err) {
@@ -216,6 +223,17 @@ export default function App() {
       setRegError("Erro ao salvar cadastro. Tente novamente.");
     } finally {
       setRegLoading(false);
+    }
+  };
+
+  // Handler to save building and keep coordination code synchronized with user profile
+  const handleSaveBuildingAndSyncUser = async (bData: BuildingInfo) => {
+    await saveBuilding(bData);
+    setBuilding(bData);
+    if (currentUser && bData.coordRoom && bData.coordRoom !== currentUser.coordinationCode) {
+      const updatedProfile = { ...currentUser, coordinationCode: bData.coordRoom };
+      await saveUserProfile(updatedProfile);
+      setCurrentUser(updatedProfile);
     }
   };
 
@@ -555,7 +573,7 @@ export default function App() {
           onClick={() => setShowSplash(false)}
           className="mt-6 cursor-pointer px-6 py-2.5 rounded-xl font-mono font-black text-xs uppercase tracking-wider bg-slate-900/90 hover:bg-slate-800 border-2 border-slate-750 text-slate-350 hover:text-white transition-all duration-200 active:translate-y-[2px] shadow-lg flex items-center gap-2"
         >
-          <span>Pular Animação</span>
+          <span style={{ color: "#fffefe" }}>Pular Animação</span>
           <span className="bg-slate-800 px-1.5 py-0.5 rounded text-[10px] text-slate-400">ESC</span>
         </button>
       </div>
@@ -666,7 +684,7 @@ export default function App() {
                 <div className="hidden md:block text-right">
                   <span className="text-sm font-extrabold block leading-none text-slate-800 dark:text-white">{effectiveUser?.name}</span>
                   <span className="text-[9px] uppercase font-bold text-emerald-500 dark:text-emerald-400 tracking-wider">
-                    {effectiveRole}{effectiveUser?.coordinationCode ? ` - Coord: ${effectiveUser.coordinationCode}` : ""}
+                    {effectiveRole}{(effectiveUser?.coordinationCode || building?.coordRoom) ? ` - Coord: ${effectiveUser?.coordinationCode || building?.coordRoom}` : ""}
                   </span>
                 </div>
 
@@ -863,8 +881,7 @@ export default function App() {
                 { id: "team", label: "5. Gestão de Equipe", badge: "TEAM", icon: Users, iconColor: "text-emerald-450" },
                 { id: "catering", label: "6. Alimentação", badge: "CATER", icon: Coffee, iconColor: "text-amber-400" },
                 { id: "plates", label: "7. Impressão", badge: "PRINT", icon: Printer, iconColor: "text-pink-400" },
-                { id: "photos", label: "8. Fotos", badge: "CAM", icon: Camera, iconColor: "text-violet-400" },
-                { id: "activities", label: "9. Atividades do CLA", badge: "TASK", icon: CheckSquare, iconColor: "text-emerald-450" }
+                { id: "activities", label: "8. Atividades do CLA", badge: "TASK", icon: CheckSquare, iconColor: "text-emerald-450" }
               ];
 
               const renderTabContent = (tabId: string) => {
@@ -908,7 +925,7 @@ export default function App() {
                           <BuildingConfigView 
                             initialBuilding={building} 
                             claId={effectiveUser?.uid || currentUser.uid} 
-                            onSave={saveBuilding} 
+                            onSave={handleSaveBuildingAndSyncUser} 
                             userRole={effectiveRole}
                             readOnly={effectiveRole === "ALA"}
                           />
@@ -1000,18 +1017,6 @@ export default function App() {
                             ...(building?.extraRooms || [])
                           ]}
                           building={building}
-                          readOnly={effectiveRole === "ALA"}
-                        />
-                      </div>
-                    );
-                  case "photos":
-                    return (
-                      <div className="animate-fade-in">
-                        <PhotoRecordLogsView 
-                          photos={photos} 
-                          claId={effectiveUser?.uid || currentUser.uid} 
-                          onAdd={addPhoto} 
-                          onDelete={deletePhoto} 
                           readOnly={effectiveRole === "ALA"}
                         />
                       </div>
@@ -1144,10 +1149,10 @@ export default function App() {
                             </div>
                           )}
 
-                          {effectiveRole === "CLA" && effectiveUser?.coordinationCode && !isSidebarCollapsed && (
+                          {effectiveRole === "CLA" && (effectiveUser?.coordinationCode || building?.coordRoom) && !isSidebarCollapsed && (
                             <div className="p-4 bg-emerald-500/10 border-2 border-emerald-500/30 text-emerald-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]">
                               🏢 <strong className="uppercase">Sua Coordenação</strong>
-                              <div className="mt-1 font-mono">Código: {effectiveUser.coordinationCode}</div>
+                              <div className="mt-1 font-mono">Código: {effectiveUser?.coordinationCode || building?.coordRoom}</div>
                               <div className="text-slate-400 mt-1 font-normal">Coordenador do local de aplicação do ENEM.</div>
                               <button 
                                 onClick={() => setIsEditingProfile(true)}

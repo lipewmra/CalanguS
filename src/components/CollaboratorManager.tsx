@@ -55,6 +55,7 @@ export default function CollaboratorManager({
   const [disability, setDisability] = useState("Nenhuma");
   const [hasWorkedEnem, setHasWorkedEnem] = useState(false);
   const [pixKey, setPixKey] = useState("");
+  const [referencePerson, setReferencePerson] = useState("");
   const [specialRole, setSpecialRole] = useState<any>("Nenhuma");
   const [languages, setLanguages] = useState<string>("");
   const [isReserve, setIsReserve] = useState(false);
@@ -125,6 +126,7 @@ export default function CollaboratorManager({
     setDisability(collab.disability || "Nenhuma");
     setHasWorkedEnem(collab.hasWorkedEnem || false);
     setPixKey(collab.pixKey || "");
+    setReferencePerson(collab.referencePerson || "");
     setSpecialRole(collab.specialRole || "Nenhuma");
     setLanguages(collab.languages ? collab.languages.join("; ") : "");
     setIsReserve(collab.isReserve ?? false);
@@ -153,17 +155,15 @@ export default function CollaboratorManager({
 
     // Build past exam list
     const finalPastEditions: PastEdition[] = [];
-    if (hasWorkedEnem) {
-      Object.keys(pastEditionsSelected).forEach(yearStr => {
-        const y = Number(yearStr);
-        if (pastEditionsSelected[y]) {
-          finalPastEditions.push({
-            year: y,
-            role: pastEditionsRoles[y] || "Fiscal de Sala"
-          });
-        }
-      });
-    }
+    Object.keys(pastEditionsSelected).forEach(yearStr => {
+      const y = Number(yearStr);
+      if (pastEditionsSelected[y]) {
+        finalPastEditions.push({
+          year: y,
+          role: pastEditionsRoles[y] || "Fiscal de Sala"
+        });
+      }
+    });
 
     // Run audits first as requested by the user parameters:
     const validations = auditCollaborator({ name, cpf, whatsapp, email, education, pixKey });
@@ -178,9 +178,10 @@ export default function CollaboratorManager({
       email,
       education,
       disability,
-      hasWorkedEnem,
+      hasWorkedEnem: finalPastEditions.length > 0,
       pastEditions: finalPastEditions,
       pixKey,
+      referencePerson,
       specialRole,
       languages: languages.split(";").map(l => l.trim()).filter(Boolean),
       isReserve,
@@ -201,6 +202,7 @@ export default function CollaboratorManager({
       setWhatsapp("");
       setEmail("");
       setPixKey("");
+      setReferencePerson("");
       setHasWorkedEnem(false);
       setLanguages("");
       setIsReserve(false);
@@ -220,17 +222,15 @@ export default function CollaboratorManager({
 
     // Build past exam list
     const finalPastEditions: PastEdition[] = [];
-    if (hasWorkedEnem) {
-      Object.keys(pastEditionsSelected).forEach(yearStr => {
-        const y = Number(yearStr);
-         if (pastEditionsSelected[y]) {
-          finalPastEditions.push({
-            year: y,
-            role: pastEditionsRoles[y] || "Fiscal de Sala"
-          });
-        }
-      });
-    }
+    Object.keys(pastEditionsSelected).forEach(yearStr => {
+      const y = Number(yearStr);
+      if (pastEditionsSelected[y]) {
+        finalPastEditions.push({
+          year: y,
+          role: pastEditionsRoles[y] || "Fiscal de Sala"
+        });
+      }
+    });
 
     // Run audits first as requested by the user parameters:
     const validations = auditCollaborator({ name, cpf, whatsapp, email, education, pixKey });
@@ -245,9 +245,10 @@ export default function CollaboratorManager({
       email,
       education,
       disability,
-      hasWorkedEnem,
+      hasWorkedEnem: finalPastEditions.length > 0,
       pastEditions: finalPastEditions,
       pixKey,
+      referencePerson,
       specialRole,
       languages: languages.split(";").map(l => l.trim()).filter(Boolean),
       isReserve,
@@ -268,6 +269,7 @@ export default function CollaboratorManager({
       setWhatsapp("");
       setEmail("");
       setPixKey("");
+      setReferencePerson("");
       setHasWorkedEnem(false);
       setLanguages("");
       setIsReserve(false);
@@ -411,6 +413,7 @@ export default function CollaboratorManager({
           whatsapp: columns[3] || "",
           email: columns[4] || "",
           education: getEducation(columns[5] || "Ensino Superior Completo"),
+          referencePerson: columns[6] || "",
         };
 
         // Run audit checks
@@ -442,6 +445,7 @@ export default function CollaboratorManager({
           whatsapp: itemCollab.whatsapp,
           email: itemCollab.email,
           education: itemCollab.education,
+          referencePerson: itemCollab.referencePerson,
           disability: "Nenhuma",
           hasWorkedEnem: false,
           pastEditions: [],
@@ -539,8 +543,8 @@ export default function CollaboratorManager({
       {activeTabSubAddForm(
         activeSubTab, name, setName, birthDate, setBirthDate, cpf, setCpf, whatsapp, setWhatsapp, email, setEmail,
         education, setEducation, disability, setDisability, hasWorkedEnem, setHasWorkedEnem, pixKey, setPixKey,
-        specialRole, setSpecialRole, languages, setLanguages, isReserve, setIsReserve, showPastYears, setShowPastYears,
-        availableYears, pastEditionsSelected, setPastEditionsSelected, pastEditionsRoles, setPastEditionsRoles,
+        referencePerson, setReferencePerson, specialRole, setSpecialRole, languages, setLanguages, isReserve, setIsReserve,
+        showPastYears, setShowPastYears, availableYears, pastEditionsSelected, setPastEditionsSelected, pastEditionsRoles, setPastEditionsRoles,
         handleCreateCollaboratorSubmit, handleCpfChange, handlePhoneChange, handleBirthDateChange
       )}
 
@@ -623,6 +627,20 @@ export default function CollaboratorManager({
               />
             </div>
 
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Pessoa de Referência</label>
+              <input
+                type="text"
+                value={referencePerson}
+                onChange={(e) => setReferencePerson(e.target.value)}
+                placeholder="Ex: MARIA"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white text-xs font-semibold focus:outline-hidden"
+              />
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 font-medium leading-relaxed">
+                Informe aqui o nome da pessoa (amigo, parente ou familiar) que lhe indicou para esse CLA. Exemplo: Minha amiga MARIA conversou com o CLA para me indicar para os trabalhos desse ano, então na referência eu digito MARIA.
+              </span>
+            </div>
+
             <div>
               <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Escolaridade</label>
               <select
@@ -654,106 +672,85 @@ export default function CollaboratorManager({
           </div>
 
           <div className="pt-2">
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-extrabold text-slate-800 dark:text-slate-300 mb-2 select-none">
-              <input
-                type="checkbox"
-                checked={hasWorkedEnem}
-                onChange={(e) => setHasWorkedEnem(e.target.checked)}
-                className="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 border-2"
-              />
-              <span>Historico comprovado em edicoes anteriores do ENEM (1998 a 2025)</span>
-            </label>
-
-            {hasWorkedEnem && (
-              <div className="p-4 bg-white dark:bg-[#101726]/40 border-2 border-slate-200 dark:border-slate-800 rounded-2xl mt-3 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase">Selecione anos e funções</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowRolesHelp(!showRolesHelp)}
-                      className="text-[10px] bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 font-extrabold px-2 py-0.5 rounded hover:bg-indigo-500/20 flex items-center gap-1 cursor-pointer"
-                    >
-                      <HelpCircle className="w-3 h-3" />
-                      {showRolesHelp ? "Fechar Guia de Funções" : "Ver Guia de Funções"}
-                    </button>
-                  </div>
+            <div className="p-4 bg-white dark:bg-[#101726]/40 border-2 border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase">Histórico em edições anteriores do ENEM (1998 a 2025)</span>
                   <button
                     type="button"
-                    onClick={() => setShowPastYears(!showPastYears)}
-                    className="text-xs text-indigo-500 dark:text-indigo-400 font-extrabold cursor-pointer"
+                    onClick={() => setShowRolesHelp(!showRolesHelp)}
+                    className="text-[10px] bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 font-extrabold px-2 py-0.5 rounded hover:bg-indigo-500/20 flex items-center gap-1 cursor-pointer"
                   >
-                    {showPastYears ? "Ocultar" : "Exibir Anos"}
+                    <HelpCircle className="w-3 h-3" />
+                    {showRolesHelp ? "Fechar Guia de Funções" : "Ver Guia de Funções"}
                   </button>
                 </div>
+              </div>
 
-                {showRolesHelp && (
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 max-h-[220px] overflow-y-auto">
-                    <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Funções Oficiais do ENEM para preenchimento:</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {ENEM_ROLES.map((role) => (
-                        <div key={role.name} className="p-2 bg-white dark:bg-[#101726] border border-slate-150 dark:border-slate-800 rounded-lg text-[11px]">
-                          <div className="flex items-center justify-between font-bold text-indigo-600 dark:text-indigo-400 gap-1.5 flex-wrap">
-                            <span>{role.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updatedRoles = { ...pastEditionsRoles };
-                                Object.keys(pastEditionsSelected).forEach((yr) => {
-                                  if (pastEditionsSelected[parseInt(yr)]) {
-                                    updatedRoles[parseInt(yr)] = role.name;
-                                  }
-                                });
-                                setPastEditionsRoles(updatedRoles);
-                              }}
-                              className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 py-0.5 rounded hover:bg-emerald-555/20 cursor-pointer"
-                              title="Preencher nos anos marcados"
-                            >
-                              Aplicar aos marcados
-                            </button>
-                          </div>
-                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">{role.desc}</p>
+              {showRolesHelp && (
+                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 max-h-[220px] overflow-y-auto">
+                  <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Funções Oficiais do ENEM para preenchimento:</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {ENEM_ROLES.map((role) => (
+                      <div key={role.name} className="p-2 bg-white dark:bg-[#101726] border border-slate-150 dark:border-slate-800 rounded-lg text-[11px]">
+                        <div className="flex items-center justify-between font-bold text-indigo-600 dark:text-indigo-400 gap-1.5 flex-wrap">
+                          <span>{role.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updatedRoles = { ...pastEditionsRoles };
+                              Object.keys(pastEditionsSelected).forEach((yr) => {
+                                if (pastEditionsSelected[parseInt(yr)]) {
+                                  updatedRoles[parseInt(yr)] = role.name;
+                                }
+                              });
+                              setPastEditionsRoles(updatedRoles);
+                            }}
+                            className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 py-0.5 rounded hover:bg-emerald-500/20 cursor-pointer font-bold"
+                            title="Preencher nos anos marcados"
+                          >
+                            Aplicar aos marcados
+                          </button>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {showPastYears && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[180px] overflow-y-auto pr-2">
-                    {availableYears.map((yr) => (
-                      <div key={yr} className="flex flex-col p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-                        <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-805 dark:text-slate-305 select-none">
-                          <input
-                            type="checkbox"
-                            checked={!!pastEditionsSelected[yr]}
-                            onChange={(e) => setPastEditionsSelected({
-                              ...pastEditionsSelected,
-                              [yr]: e.target.checked
-                            })}
-                            className="rounded text-emerald-505 w-3.5 h-3.5"
-                          />
-                          <span className="font-mono text-slate-905 dark:text-white font-black">{yr}</span>
-                        </label>
-                        {pastEditionsSelected[yr] && (
-                          <input
-                            type="text"
-                            placeholder="Cargo"
-                            list="enem-roles-list"
-                            value={pastEditionsRoles[yr] || ""}
-                            onChange={(e) => setPastEditionsRoles({
-                              ...pastEditionsRoles,
-                              [yr]: e.target.value
-                            })}
-                            className="mt-1 border border-slate-200 dark:border-slate-800 rounded px-2 py-0.5 text-[10px] bg-white dark:bg-slate-950 text-slate-800 dark:text-white focus:outline-hidden"
-                          />
-                        )}
+                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">{role.desc}</p>
                       </div>
                     ))}
                   </div>
-                )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {availableYears.map((yr) => (
+                  <div key={yr} className={`flex flex-col p-2 border-2 rounded-xl transition ${pastEditionsSelected[yr] ? 'bg-emerald-500/10 border-emerald-500' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'}`}>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-300 select-none">
+                      <input
+                        type="checkbox"
+                        checked={!!pastEditionsSelected[yr]}
+                        onChange={(e) => setPastEditionsSelected({
+                          ...pastEditionsSelected,
+                          [yr]: e.target.checked
+                        })}
+                        className="rounded text-emerald-500 w-3.5 h-3.5"
+                      />
+                      <span className="font-mono text-slate-900 dark:text-white font-black">{yr}</span>
+                    </label>
+                    {pastEditionsSelected[yr] && (
+                      <input
+                        type="text"
+                        placeholder="Cargo"
+                        list="enem-roles-list"
+                        value={pastEditionsRoles[yr] || ""}
+                        onChange={(e) => setPastEditionsRoles({
+                          ...pastEditionsRoles,
+                          [yr]: e.target.value
+                        })}
+                        className="mt-1 border border-slate-200 dark:border-slate-800 rounded px-2 py-0.5 text-[10px] bg-white dark:bg-slate-950 text-slate-800 dark:text-white focus:outline-hidden"
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-3 border-t-2 border-slate-100 dark:border-slate-800">
@@ -904,6 +901,12 @@ function activeTabSubList(
                       )}
                     </div>
                     <div className="text-[10px] text-slate-400 dark:text-slate-450 font-mono mt-0.5">{c.email} | {c.whatsapp}</div>
+                    {c.referencePerson && (
+                      <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5 flex items-center gap-1">
+                        <span>👤 Indicação / Ref:</span>
+                        <span className="underline">{c.referencePerson}</span>
+                      </div>
+                    )}
                     <div className="mt-1.5 flex items-center gap-1.5">
                       {c.isReserve ? (
                         <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/10">
@@ -1040,6 +1043,8 @@ function activeTabSubAddForm(
   setHasWorkedEnem: any,
   pixKey: string,
   setPixKey: any,
+  referencePerson: string,
+  setReferencePerson: any,
   specialRole: string,
   setSpecialRole: any,
   languages: string,
@@ -1138,6 +1143,20 @@ function activeTabSubAddForm(
           />
         </div>
 
+        <div className="md:col-span-2 lg:col-span-3">
+          <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Pessoa de Referência</label>
+          <input
+            type="text"
+            value={referencePerson}
+            onChange={(e) => setReferencePerson(e.target.value)}
+            placeholder="Ex: MARIA"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-[#10b981]/40 text-xs font-semibold"
+          />
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 font-medium leading-relaxed">
+            Informe aqui o nome da pessoa (amigo, parente ou familiar) que lhe indicou para esse CLA. Exemplo: Minha amiga MARIA conversou com o CLA para me indicar para os trabalhos desse ano, então na referência eu digito MARIA.
+          </span>
+        </div>
+
         <div>
           <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Grau de Escolaridade</label>
           <select
@@ -1171,95 +1190,74 @@ function activeTabSubAddForm(
 
       {/* Checklist ENEM Worked years */}
       <div className="pt-2">
-        <label className="flex items-center gap-2 cursor-pointer text-xs font-extrabold text-slate-850 dark:text-slate-300 mb-2 select-none">
-          <input
-            type="checkbox"
-            checked={hasWorkedEnem}
-            onChange={(e) => setHasWorkedEnem(e.target.checked)}
-            className="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 border-2"
-          />
-          <span>Possui histórico comprovado em outras edições do ENEM? (1998 a 2025)</span>
-        </label>
-
-        {hasWorkedEnem && (
-          <div className="p-4 bg-white dark:bg-[#101726]/40 border-2 border-slate-250 dark:border-slate-800 rounded-2xl mt-3 space-y-3 shadow-inner">
-            <div className="flex items-center justify-between border-b pb-2 border-slate-100 dark:border-slate-800">
-              <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Marque as edições e registre a função</span>
-              <button
-                type="button"
-                onClick={() => setShowPastYears(!showPastYears)}
-                className="text-xs text-indigo-550 dark:text-indigo-400 font-black hover:underline cursor-pointer"
-              >
-                {showPastYears ? "Recolher Histórico" : "Expandir Lista de Anos (28 Edições)"}
-              </button>
-            </div>
-
-            <details className="text-xs bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-xl p-3 cursor-pointer group">
-              <summary className="font-extrabold text-indigo-650 dark:text-indigo-455 select-none flex items-center gap-1.5 focus:outline-hidden hover:text-indigo-505">
-                <span>📚</span> Ver Lista de Funções Oficiais do ENEM (Cheatsheet)
-              </summary>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800 cursor-default">
-                {ENEM_ROLES.map((role) => (
-                  <div key={role.name} className="p-2.5 bg-white dark:bg-[#101726] border border-slate-150 dark:border-slate-800 rounded-lg text-[11px] hover:border-indigo-400 transition">
-                    <div className="flex items-center justify-between font-bold text-indigo-600 dark:text-indigo-400 gap-1.5 flex-wrap">
-                      <span>{role.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updatedRoles = { ...pastEditionsRoles };
-                          Object.keys(pastEditionsSelected).forEach((yr) => {
-                            if (pastEditionsSelected[parseInt(yr)]) {
-                              updatedRoles[parseInt(yr)] = role.name;
-                            }
-                          });
-                          setPastEditionsRoles(updatedRoles);
-                        }}
-                        className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 py-0.5 rounded hover:bg-emerald-555/20 cursor-pointer"
-                      >
-                        Aplicar aos marcados
-                      </button>
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">{role.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </details>
-
-            {showPastYears && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[220px] overflow-y-auto pr-2 border-t border-slate-100 dark:border-slate-800 pt-3">
-                {availableYears.map((yr) => (
-                  <div key={yr} className="flex flex-col p-2 bg-slate-50 dark:bg-[#070b13]/50 border-2 border-slate-200 dark:border-slate-800 rounded-xl hover:border-emerald-555/40 transition">
-                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-305 select-none">
-                      <input
-                        type="checkbox"
-                        checked={!!pastEditionsSelected[yr]}
-                        onChange={(e) => setPastEditionsSelected({
-                          ...pastEditionsSelected,
-                          [yr]: e.target.checked
-                        })}
-                        className="rounded text-emerald-555 w-3.5 h-3.5"
-                      />
-                      <span className="font-mono text-slate-900 dark:text-white font-black">{yr}</span>
-                    </label>
-                    {pastEditionsSelected[yr] && (
-                      <input
-                        type="text"
-                        placeholder="Chefe de Setor, Fiscal, etc."
-                        list="enem-roles-list"
-                        value={pastEditionsRoles[yr] || ""}
-                        onChange={(e) => setPastEditionsRoles({
-                          ...pastEditionsRoles,
-                          [yr]: e.target.value
-                        })}
-                        className="mt-1.5 border-2 border-slate-200 dark:border-slate-800 rounded-lg px-2 py-0.5 text-[10px] bg-white dark:bg-slate-950 text-slate-800 dark:text-white font-semibold"
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+        <div className="p-4 bg-white dark:bg-[#101726]/40 border-2 border-slate-200 dark:border-slate-800 rounded-2xl space-y-3 shadow-inner">
+          <div className="flex items-center justify-between border-b pb-2 border-slate-100 dark:border-slate-800">
+            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Histórico em edições do ENEM (1998 a 2025)</span>
           </div>
-        )}
+
+          <details className="text-xs bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-xl p-3 cursor-pointer group">
+            <summary className="font-extrabold text-indigo-600 dark:text-indigo-400 select-none flex items-center gap-1.5 focus:outline-hidden hover:text-indigo-500">
+              <span>📚</span> Ver Lista de Funções Oficiais do ENEM (Cheatsheet)
+            </summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800 cursor-default">
+              {ENEM_ROLES.map((role) => (
+                <div key={role.name} className="p-2.5 bg-white dark:bg-[#101726] border border-slate-150 dark:border-slate-800 rounded-lg text-[11px] hover:border-indigo-400 transition">
+                  <div className="flex items-center justify-between font-bold text-indigo-600 dark:text-indigo-400 gap-1.5 flex-wrap">
+                    <span>{role.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updatedRoles = { ...pastEditionsRoles };
+                        Object.keys(pastEditionsSelected).forEach((yr) => {
+                          if (pastEditionsSelected[parseInt(yr)]) {
+                            updatedRoles[parseInt(yr)] = role.name;
+                          }
+                        });
+                        setPastEditionsRoles(updatedRoles);
+                      }}
+                      className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 py-0.5 rounded hover:bg-emerald-500/20 cursor-pointer font-bold"
+                    >
+                      Aplicar aos marcados
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">{role.desc}</p>
+                </div>
+              ))}
+            </div>
+          </details>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {availableYears.map((yr) => (
+              <div key={yr} className={`flex flex-col p-2 border-2 rounded-xl transition ${pastEditionsSelected[yr] ? 'bg-emerald-500/10 border-emerald-500' : 'bg-slate-50 dark:bg-[#070b13]/50 border-slate-200 dark:border-slate-800 hover:border-emerald-500/40'}`}>
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-300 select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!pastEditionsSelected[yr]}
+                    onChange={(e) => setPastEditionsSelected({
+                      ...pastEditionsSelected,
+                      [yr]: e.target.checked
+                    })}
+                    className="rounded text-emerald-500 w-3.5 h-3.5"
+                  />
+                  <span className="font-mono text-slate-900 dark:text-white font-black">{yr}</span>
+                </label>
+                {pastEditionsSelected[yr] && (
+                  <input
+                    type="text"
+                    placeholder="Chefe de Setor, Fiscal, etc."
+                    list="enem-roles-list"
+                    value={pastEditionsRoles[yr] || ""}
+                    onChange={(e) => setPastEditionsRoles({
+                      ...pastEditionsRoles,
+                      [yr]: e.target.value
+                    })}
+                    className="mt-1.5 border-2 border-slate-200 dark:border-slate-800 rounded-lg px-2 py-0.5 text-[10px] bg-white dark:bg-slate-950 text-slate-800 dark:text-white font-semibold"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-end gap-3 pt-3 border-t-2 border-slate-100 dark:border-slate-800">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BuildingInfo, RoomDetails } from "../types";
-import { Landmark, Save, MapPin, Calculator, BookOpen, AlertCircle, Check } from "lucide-react";
+import { Landmark, Save, MapPin, Calculator, BookOpen, AlertCircle, Check, FileUp, FileText, Download, Sparkles, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 
 export const FLOOR_OPTIONS = [
   "10º Andar",
@@ -47,6 +47,116 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
   const [extraRooms, setExtraRooms] = useState<RoomDetails[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  // OCR Ensalamento states
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrSuccessMsg, setOcrSuccessMsg] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+      setOcrError(null);
+      setOcrSuccessMsg(null);
+    }
+  };
+
+  const handleRunOCR = async (fileToUse?: File | null, useDefaultTemplate = false) => {
+    setOcrLoading(true);
+    setOcrError(null);
+    setOcrSuccessMsg(null);
+
+    try {
+      let bodyData: any = {};
+
+      if (useDefaultTemplate) {
+        bodyData = {};
+      } else if (fileToUse || selectedFile) {
+        const file = fileToUse || selectedFile;
+        if (!file) {
+          throw new Error("Nenhum arquivo selecionado. Escolha um arquivo PDF/Imagem ou clique em 'Usar Modelo'.");
+        }
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(file);
+        });
+        bodyData = {
+          fileData: base64,
+          mimeType: file.type || "application/pdf"
+        };
+      } else {
+        bodyData = {};
+      }
+
+      const res = await fetch("/api/parse-ensalamento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyData)
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Falha no processamento do OCR de ensalamento.");
+      }
+
+      const data = json.data;
+
+      // Populate extracted data into form
+      if (data.schoolName && (isSuperAdmin || !name)) {
+        setName(data.schoolName);
+      }
+      if (data.address && (isSuperAdmin || !address)) {
+        setAddress(data.address);
+      }
+      if (data.coordRoom) {
+        setCoordRoom(data.coordRoom);
+      }
+
+      if (data.rooms && Array.isArray(data.rooms) && data.rooms.length > 0) {
+        setRooms(data.rooms);
+        setRoomsCount(data.rooms.length);
+        if (data.rooms[0]?.capacity) {
+          setVirtualCapacity(data.rooms[0].capacity);
+        }
+      }
+
+      if (data.specialRooms && Array.isArray(data.specialRooms) && data.specialRooms.length > 0) {
+        setSpecialRooms(data.specialRooms);
+        setSpecialRoomsCount(data.specialRooms.length);
+        if (data.specialDetails) {
+          setSpecialDetails(data.specialDetails);
+        }
+      } else {
+        setSpecialRooms([]);
+        setSpecialRoomsCount(0);
+      }
+
+      if (data.extraRooms && Array.isArray(data.extraRooms) && data.extraRooms.length > 0) {
+        setExtraRooms(data.extraRooms);
+        setExtraRoomsCount(data.extraRooms.length);
+      } else {
+        setExtraRooms([]);
+        setExtraRoomsCount(0);
+      }
+
+      const roomCount = data.rooms?.length || 0;
+      const extraCount = data.extraRooms?.length || 0;
+      const specCount = data.specialRooms?.length || 0;
+
+      setOcrSuccessMsg(
+        `✨ Leitura OCR do Ensalamento concluída com sucesso! Foram extraídas ${roomCount} salas normais, ${extraCount} sala(s) extra/reserva e ${specCount} sala(s) especial(is). Todos os campos do sistema foram preenchidos.`
+      );
+    } catch (err: any) {
+      console.error(err);
+      setOcrError(err.message || "Erro ao executar OCR no arquivo de ensalamento.");
+    } finally {
+      setOcrLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (initialBuilding) {
@@ -309,6 +419,75 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
           <span>Informações do prédio do exame salvas com sucesso em tempo real com persistência na nuvem!</span>
         </div>
       )}
+
+      {/* MÓDULO OCR DE ENSALAMENTO */}
+      <div className="mb-6 p-5 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 dark:from-emerald-950/40 dark:via-teal-950/40 dark:to-indigo-950/40 border-2 border-emerald-500/30 rounded-2xl shadow-xs relative overflow-hidden">
+        <div className="pb-3 border-b border-emerald-500/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-emerald-500 text-white rounded-xl shadow-md">
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span>OCR & Envio do Ensalamento</span>
+                <span className="text-[9px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-mono font-black">GEMINI AI 3.6 VISION</span>
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                Envie o documento de ensalamento para extrair automaticamente salas de prova, capacidades, sala da coordenação e salas extras.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col sm:flex-row gap-2 items-stretch">
+          <label className="flex-1 cursor-pointer flex items-center gap-2 px-3.5 py-2.5 bg-white dark:bg-[#101726] border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-400 rounded-xl transition text-xs font-semibold text-slate-700 dark:text-slate-200 overflow-hidden">
+            <FileUp className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="truncate">
+              {selectedFile ? selectedFile.name : "Escolher arquivo de Ensalamento..."}
+            </span>
+            <input
+              type="file"
+              accept=".pdf,image/png,image/jpeg,image/jpg"
+              onChange={handleFileChange}
+              className="hidden"
+              disabled={isReadOnly || ocrLoading}
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={() => handleRunOCR()}
+            disabled={isReadOnly || ocrLoading}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition disabled:opacity-50 cursor-pointer shrink-0"
+          >
+            {ocrLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>ANALISANDO...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>ANALISAR ARQUIVO</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {ocrError && (
+          <div className="mt-3 p-3 bg-red-500/10 text-red-700 dark:text-red-400 text-xs font-bold rounded-xl flex items-center gap-2 border border-red-500/20">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+            <span>{ocrError}</span>
+          </div>
+        )}
+
+        {ocrSuccessMsg && (
+          <div className="mt-3 p-3 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold rounded-xl flex items-center gap-2 border border-emerald-500/30 animate-fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>{ocrSuccessMsg}</span>
+          </div>
+        )}
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

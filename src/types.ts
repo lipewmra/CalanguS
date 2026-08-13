@@ -69,6 +69,7 @@ export interface CollaboratorInfo {
   foodRestrictions?: string;
   snackPreference?: "Padrão" | "Vegetariano" | "Vegano" | "Sem Glúten";
   isExternalRecruit?: boolean;
+  referencePerson?: string;
 }
 
 export interface Quote {

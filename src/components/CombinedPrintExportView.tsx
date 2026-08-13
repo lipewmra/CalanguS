@@ -55,7 +55,7 @@ export default function CombinedPrintExportView({
           building={building} 
         />
       ) : (
-        <RoomPlatesPrint readOnly={readOnly} />
+        <RoomPlatesPrint readOnly={readOnly} building={building} rooms={rooms} />
       )}
     </div>
   );
