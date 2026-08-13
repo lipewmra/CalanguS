@@ -27,6 +27,7 @@ import {
   updateCollaborator,
   deleteCollaborator,
   saveUserProfile,
+  deleteUserProfile,
   getCurrentUserProfile,
   getUserProfileByEmail,
   claimProfileByEmail,
@@ -278,68 +279,23 @@ export default function App() {
     }
   };
 
-  // Google Login popup authentication
-  const handleGmailLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({
-      prompt: "select_account"
-    });
-    
-    try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      
-      if (!user.email) {
-        alert("E-mail não pôde ser resgatado do login do Google.");
-        return;
-      }
-      
-      const email = user.email.toLowerCase();
-      
-      // Enforce ONLY gmail.com domain login
-      if (!email.endsWith("@gmail.com")) {
-        await signOut(auth);
-        alert("Apenas contas de e-mail do Gmail (@gmail.com) são permitidas para acessar o sistema.");
-        return;
-      }
+  // Helper to strictly validate and resolve authorized profiles
+  const validateAndResolveUser = async (user: any): Promise<UserProfile | null> => {
+    if (!user || !user.email) return null;
+    const email = user.email.toLowerCase().trim();
 
-      // Check for Superadmin override
-      const isSuperAdminEmail = email === "lipewmra@gmail.com" || email === "philippewagnermra@gmail.com";
+    // 1. Enforce ONLY gmail.com domain login
+    if (!email.endsWith("@gmail.com")) {
+      await signOut(auth);
+      alert("Apenas contas de e-mail do Gmail (@gmail.com) são permitidas para acessar o sistema.");
+      return null;
+    }
 
-      // Look up existing session profile
+    // 2. SuperAdmin hardcoded authorized emails
+    const isSuperAdminEmail = email === "lipewmra@gmail.com" || email === "philippewagnermra@gmail.com";
+    if (isSuperAdminEmail) {
       let profile = await getCurrentUserProfile(user.uid);
       if (!profile) {
-        profile = await claimProfileByEmail(email, user.uid);
-      }
-
-      // Look up if user is registered in the collaborators collection
-      if (!profile) {
-        const linkedCollab = await findCollaboratorByEmail(email);
-        if (linkedCollab) {
-          profile = {
-            uid: user.uid,
-            email: email,
-            name: linkedCollab.name || user.displayName || "Colaborador ENEM",
-            role: "Colaborador",
-            roles: ["Colaborador"],
-            claId: linkedCollab.claId,
-            hasAccessed: true,
-          };
-          await saveUserProfile(profile);
-        }
-      }
-
-      // If NOT registered and NOT SuperAdmin: reject access and forward to fiscal form
-      if (!profile && !isSuperAdminEmail) {
-        await signOut(auth);
-        setCurrentUser(null);
-        setPublicFormPrefill({ email, name: user.displayName || "" });
-        setUnregisteredNotice(`O e-mail "${email}" não possui cadastro ativo no sistema CalanguS. Se você deseja fazer parte da equipe de aplicação do ENEM 2026, realize sua pré-inscrição de fiscal no formulário abaixo.`);
-        setIsPublicForm(true);
-        return;
-      }
-
-      if (!profile && isSuperAdminEmail) {
         profile = {
           uid: user.uid,
           email: email,
@@ -349,25 +305,112 @@ export default function App() {
           hasAccessed: true,
         };
         await saveUserProfile(profile);
-      } else if (profile) {
-        let changed = false;
-        let nextProfile = { ...profile };
-        if (isSuperAdminEmail && nextProfile.role !== "SuperAdmin") {
-          nextProfile.role = "SuperAdmin";
-          nextProfile.roles = [...(nextProfile.roles || []), "SuperAdmin"];
-          changed = true;
-        }
-        if (!nextProfile.hasAccessed) {
-          nextProfile.hasAccessed = true;
-          changed = true;
-        }
-        if (changed) {
-          profile = nextProfile;
+      } else {
+        const roles = profile.roles || [profile.role];
+        if (!roles.includes("SuperAdmin") || profile.role !== "SuperAdmin" || !profile.hasAccessed) {
+          profile = {
+            ...profile,
+            role: "SuperAdmin",
+            roles: Array.from(new Set([...roles, "SuperAdmin"])),
+            hasAccessed: true,
+          };
           await saveUserProfile(profile);
         }
       }
+      return profile;
+    }
 
-      setCurrentUser(profile);
+    // 3. Look up if there is a pre-registered profile by email in users collection
+    let profile = await claimProfileByEmail(email, user.uid);
+
+    // 4. Look up existing profile document in users/{uid}
+    if (!profile) {
+      profile = await getCurrentUserProfile(user.uid);
+    }
+
+    // 5. If a profile was found in users collection, verify that it was legitimately registered
+    if (profile) {
+      // SuperAdmin or CLA are valid
+      if (profile.role === "SuperAdmin" || profile.role === "CLA") {
+        if (!profile.hasAccessed) {
+          profile.hasAccessed = true;
+          await saveUserProfile(profile);
+        }
+        return profile;
+      }
+
+      // ALA is valid if it has an assigned claId
+      if (profile.role === "ALA" && profile.claId) {
+        if (!profile.hasAccessed) {
+          profile.hasAccessed = true;
+          await saveUserProfile(profile);
+        }
+        return profile;
+      }
+
+      // Colaborador is valid ONLY if registered under a CLA and existing in collaborators
+      if (profile.role === "Colaborador" && profile.claId) {
+        const collab = await findCollaboratorByEmail(email);
+        if (collab && (collab.claId === profile.claId || collab.status === "Confirmado")) {
+          if (!profile.hasAccessed) {
+            profile.hasAccessed = true;
+            await saveUserProfile(profile);
+          }
+          return profile;
+        }
+      }
+
+      // If we reach here, this profile was an invalid self-created or orphaned profile.
+      // Delete the invalid profile from Firestore so it no longer grants access!
+      try {
+        await deleteUserProfile(user.uid);
+      } catch (err) {
+        console.warn("Could not delete orphan profile:", err);
+      }
+      profile = null;
+    }
+
+    // 6. Check if registered in collaborators collection with status Confirmado
+    const collabRecord = await findCollaboratorByEmail(email);
+    if (collabRecord && collabRecord.claId && collabRecord.status === "Confirmado") {
+      profile = {
+        uid: user.uid,
+        email: email,
+        name: collabRecord.name || user.displayName || "Colaborador ENEM",
+        role: "Colaborador",
+        roles: ["Colaborador"],
+        claId: collabRecord.claId,
+        hasAccessed: true,
+      };
+      await saveUserProfile(profile);
+      return profile;
+    }
+
+    // 7. USER IS UNREGISTERED: block access, sign out, and redirect to public fiscal inscription
+    await signOut(auth);
+    setPublicFormPrefill({ email, name: user.displayName || "" });
+    setUnregisteredNotice(
+      `O e-mail "${email}" não possui cadastro ativo no sistema CalanguS. Se você deseja fazer parte da equipe de aplicação do ENEM 2026, realize sua pré-inscrição de fiscal no formulário abaixo.`
+    );
+    setIsPublicForm(true);
+    return null;
+  };
+
+  // Google Login popup authentication
+  const handleGmailLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: "select_account"
+    });
+    
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const profile = await validateAndResolveUser(result.user);
+      if (profile) {
+        setCurrentUser(profile);
+      } else {
+        setCurrentUser(null);
+      }
     } catch (err) {
       console.error("Login popup failed:", err);
     }
@@ -396,77 +439,14 @@ export default function App() {
         return;
       }
 
-      const email = user.email ? user.email.toLowerCase() : "";
-      if (!email || !email.endsWith("@gmail.com")) {
-        if (active) {
-          setCurrentUser(null);
-          setAuthInitialized(true);
-        }
-        return;
-      }
-
       try {
-        const isSuperAdminEmail = email === "lipewmra@gmail.com" || email === "philippewagnermra@gmail.com";
-
-        let profile = await getCurrentUserProfile(user.uid);
+        const profile = await validateAndResolveUser(user);
         if (!profile) {
-          profile = await claimProfileByEmail(email, user.uid);
-        }
-
-        if (!profile) {
-          const linkedCollab = await findCollaboratorByEmail(email);
-          if (linkedCollab) {
-            profile = {
-              uid: user.uid,
-              email: email,
-              name: linkedCollab.name || user.displayName || "Colaborador ENEM",
-              role: "Colaborador",
-              roles: ["Colaborador"],
-              claId: linkedCollab.claId,
-              hasAccessed: true,
-            };
-            await saveUserProfile(profile);
-          }
-        }
-
-        // If NOT registered and NOT superadmin: sign out
-        if (!profile && !isSuperAdminEmail) {
-          await signOut(auth);
           if (active) {
             setCurrentUser(null);
             setAuthInitialized(true);
           }
           return;
-        }
-
-        if (!profile && isSuperAdminEmail) {
-          profile = {
-            uid: user.uid,
-            email: email,
-            name: user.displayName || "Super Administrador",
-            role: "SuperAdmin",
-            roles: ["SuperAdmin"],
-            hasAccessed: true
-          };
-          await saveUserProfile(profile);
-        } else if (profile) {
-          // Verify if isSuperAdminEmail and lacks SuperAdmin role/roles
-          let changed = false;
-          let nextProfile = { ...profile };
-          const roles = nextProfile.roles || [nextProfile.role];
-          if (isSuperAdminEmail && !roles.includes("SuperAdmin")) {
-            nextProfile.role = "SuperAdmin";
-            nextProfile.roles = [...roles, "SuperAdmin"];
-            changed = true;
-          }
-          if (!nextProfile.hasAccessed) {
-            nextProfile.hasAccessed = true;
-            changed = true;
-          }
-          if (changed) {
-            profile = nextProfile;
-            await saveUserProfile(profile);
-          }
         }
 
         if (active) {

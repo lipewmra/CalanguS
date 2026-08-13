@@ -101,6 +101,16 @@ export async function updateUserRoles(uid: string, primaryRole: any, rolesList: 
   }
 }
 
+// Delete user profile
+export async function deleteUserProfile(uid: string): Promise<void> {
+  const path = `users/${uid}`;
+  try {
+    await deleteDoc(doc(db, "users", uid));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 // Find user profile by email
 export async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
   const path = "users";
