@@ -71,14 +71,18 @@ export default function AssociationView({
     }
   };
 
-  // Compute metrics
-  const totalCollabs = collaborators.length;
-  const associatedCollabs = collaborators.filter(c => c.assignedRole && c.assignedRole !== "");
-  const unassociatedCollabs = collaborators.filter(c => !c.assignedRole || c.assignedRole === "");
+  // Filter only approved/confirmed collaborators (c.status === "Confirmado")
+  const approvedCollaborators = collaborators.filter(c => c.status === "Confirmado");
+  const pendingCount = collaborators.filter(c => c.status === "Pendente").length;
+
+  // Compute metrics from approved collaborators
+  const totalCollabs = approvedCollaborators.length;
+  const associatedCollabs = approvedCollaborators.filter(c => c.assignedRole && c.assignedRole !== "");
+  const unassociatedCollabs = approvedCollaborators.filter(c => !c.assignedRole || c.assignedRole === "");
 
   // Counting for each role
   const roleCounts = ENEM_ROLES.reduce((acc, current) => {
-    acc[current.name] = collaborators.filter(c => c.assignedRole === current.name).length;
+    acc[current.name] = approvedCollaborators.filter(c => c.assignedRole === current.name).length;
     return acc;
   }, {} as Record<string, number>);
 
@@ -87,7 +91,7 @@ export default function AssociationView({
     setIsUpdatingId(collabId);
     try {
       const isReserve = roleName === ""; // unassociated is reserve
-      const collab = collaborators.find(c => c.id === collabId);
+      const collab = approvedCollaborators.find(c => c.id === collabId);
       if (collab) {
         await onUpdate(collabId, {
           assignedRole: roleName,
@@ -105,8 +109,8 @@ export default function AssociationView({
     }
   };
 
-  // Filtered Collaborators
-  const filtered = collaborators.filter(c => {
+  // Filtered Collaborators from approved list
+  const filtered = approvedCollaborators.filter(c => {
     const matchesSearch = 
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.cpf.includes(searchTerm) ||
@@ -152,6 +156,18 @@ export default function AssociationView({
         <div className="p-4 bg-emerald-500/10 border-2 border-emerald-500/20 text-emerald-800 dark:text-emerald-400 rounded-2xl text-xs font-black flex items-center gap-2.5 shadow-xs animate-fade-in">
           <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
           <span>{successMsg}</span>
+        </div>
+      )}
+
+      {/* Pending Approval Notice */}
+      {pendingCount > 0 && (
+        <div className="p-4 bg-amber-500/10 border-2 border-amber-500/30 text-amber-900 dark:text-amber-300 rounded-2xl text-xs font-bold flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+            <span>
+              Há <strong>{pendingCount} fiscal(is) pendente(s) de aprovação</strong> no <strong>Menu 2 (Fiscais)</strong>. O CLA deve realizar o filtro primário de aprovação antes que o fiscal fique disponível para associação de funções.
+            </span>
+          </div>
         </div>
       )}
 

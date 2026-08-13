@@ -13,6 +13,9 @@ import {
   subscribeToEventConfig, 
   subscribeToBuilding, 
   subscribeToCollaborators, 
+  subscribeToAllCollaborators,
+  subscribeToAllBuildings,
+  subscribeToUsers,
   subscribeToCatering, 
   subscribeToPhotos,
   saveEventConfig,
@@ -29,7 +32,11 @@ import {
   claimProfileByEmail,
   subscribeToColegas,
   subscribeToUserProfile,
-  subscribeToClaActivities
+  subscribeToClaActivities,
+  requestCollaboratorTransfer,
+  approveCollaboratorTransfer,
+  rejectCollaboratorTransfer,
+  cancelCollaboratorTransfer
 } from "./lib/db-services";
 
 import SuperAdminDash from "./components/SuperAdminDash";
@@ -147,6 +154,9 @@ export default function App() {
   const [eventConfig, setEventConfig] = useState<EventConfigInfo | null>(null);
   const [building, setBuilding] = useState<BuildingInfo | null>(null);
   const [collaborators, setCollaborators] = useState<CollaboratorInfo[]>([]);
+  const [allCollaborators, setAllCollaborators] = useState<CollaboratorInfo[]>([]);
+  const [allBuildings, setAllBuildings] = useState<BuildingInfo[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [catering, setCatering] = useState<CateringInfo | null>(null);
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
   const [claActivities, setClaActivities] = useState<ClaActivities | null>(null);
@@ -500,6 +510,19 @@ export default function App() {
       });
     }
 
+    // Subscribe to network-wide pool for general reserves exchange and CLA buildings
+    const unsubAllCollabs = subscribeToAllCollaborators((allList) => {
+      setAllCollaborators(allList);
+    });
+
+    const unsubAllBuildings = subscribeToAllBuildings((allB) => {
+      setAllBuildings(allB);
+    });
+
+    const unsubAllUsers = subscribeToUsers((allU) => {
+      setAllUsers(allU);
+    });
+
     return () => {
       unsubBuilding();
       unsubCollab();
@@ -507,6 +530,9 @@ export default function App() {
       unsubPhotos();
       unsubColegas();
       unsubActivities();
+      unsubAllCollabs();
+      unsubAllBuildings();
+      unsubAllUsers();
     };
   }, [authInitialized, effectiveUser?.uid, effectiveUser?.role, effectiveUser?.claId]);
 
@@ -981,10 +1007,20 @@ export default function App() {
                       <div className="animate-fade-in">
                         <CollaboratorManager 
                           collaborators={collaborators} 
+                          allCollaborators={allCollaborators}
                           claId={effectiveUser?.uid || currentUser.uid} 
+                          currentUserName={currentUser?.name}
+                          currentUserEmail={currentUser?.email}
+                          buildingName={building?.name}
+                          allBuildings={allBuildings}
+                          allUsers={allUsers}
                           onAdd={addCollaborator} 
                           onUpdate={updateCollaborator} 
                           onDelete={deleteCollaborator} 
+                          onRequestTransfer={requestCollaboratorTransfer}
+                          onApproveTransfer={approveCollaboratorTransfer}
+                          onRejectTransfer={rejectCollaboratorTransfer}
+                          onCancelTransfer={cancelCollaboratorTransfer}
                           onSimulatePublicRecruit={() => setIsPublicForm(true)}
                         />
                       </div>

@@ -84,9 +84,9 @@ export default function CollaboratorManager({
     c => c.transferRequest && c.transferRequest.status === "Pendente"
   ).length;
 
-  // Count reserve collaborators in other CLAs
+  // Count reserve collaborators in other CLAs who are approved/confirmed
   const otherReservesCount = allCollaborators.filter(
-    c => c.isReserve && c.claId !== claId
+    c => (c.isReserve || !c.assignedRoom) && c.claId !== claId && c.status === "Confirmado"
   ).length;
 
   // Form states
@@ -295,8 +295,11 @@ export default function CollaboratorManager({
       referencePerson,
       specialRole,
       languages: languages.split(";").map(l => l.trim()).filter(Boolean),
-      isReserve,
-      status: "Pendente",
+      isReserve: true, // CLA registering a fiscal directly -> automatically reserve
+      status: "Confirmado", // CLA registering a fiscal directly -> automatically approved
+      originalClaId: claId,
+      originalClaName: currentUserName || buildingName || "CLA Cadastrador",
+      claName: currentUserName || buildingName || "CLA Cadastrador",
       orionStatus: hasAuditError ? "Erro" : "Ok",
       orionErrors: errorsList,
       orionSynced: !hasAuditError,
@@ -365,9 +368,25 @@ export default function CollaboratorManager({
     }
   };
 
-  // Toggle Confirm
+  // Toggle Confirm / Approve
   const confirmStaff = async (id: string) => {
-    await onUpdate(id, { status: "Confirmado" });
+    const target = collaborators.find(c => c.id === id);
+    const updates: Partial<CollaboratorInfo> = { status: "Confirmado" };
+    if (target) {
+      if (!target.originalClaId) {
+        updates.originalClaId = claId;
+      }
+      if (!target.originalClaName) {
+        updates.originalClaName = currentUserName || buildingName || "CLA Mantenedor";
+      }
+      if (!target.claName) {
+        updates.claName = currentUserName || buildingName || "CLA Mantenedor";
+      }
+      if (!target.assignedRoom) {
+        updates.isReserve = true;
+      }
+    }
+    await onUpdate(id, updates);
   };
 
   // Toggle Recused
@@ -496,8 +515,11 @@ export default function CollaboratorManager({
           pixKey: itemCollab.cpf, // set pix key as CPF
           specialRole: itemCollab.specialRole,
           languages: [],
-          isReserve: false,
-          status: "Pendente",
+          isReserve: true,
+          status: "Confirmado",
+          originalClaId: claId,
+          originalClaName: currentUserName || buildingName || "CLA Cadastrador",
+          claName: currentUserName || buildingName || "CLA Cadastrador",
           orionStatus: audits.length > 0 ? "Erro" : "Ok",
           orionErrors: audits.map(a => a.message),
           orionSynced: audits.length === 0,
@@ -525,8 +547,8 @@ export default function CollaboratorManager({
 
   // List filters helper
   const filteredCollaborators = collaborators.filter(collab => {
-    if (filterType === "efetivos") return !collab.isReserve;
-    if (filterType === "reservas") return collab.isReserve;
+    if (filterType === "efetivos") return !collab.isReserve && collab.status === "Confirmado";
+    if (filterType === "reservas") return collab.isReserve && collab.status === "Confirmado";
     if (filterType === "com_erro") return collab.orionStatus === "Erro";
     return true; // todos
   });
@@ -1060,12 +1082,20 @@ function activeTabSubList(
                         <span>CLA: {originName}</span>
                       </span>
 
-                      {c.isReserve ? (
-                        <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/10">
+                      {c.status === "Pendente" ? (
+                        <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/30 flex items-center gap-1">
+                          <span>⏳ Aguardando Aprovação</span>
+                        </span>
+                      ) : c.status === "Recusado" ? (
+                        <span className="bg-rose-500/15 text-rose-700 dark:text-rose-300 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-rose-500/30">
+                          Recusado
+                        </span>
+                      ) : c.isReserve ? (
+                        <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/20">
                           RESERVA
                         </span>
                       ) : (
-                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-500/10">
+                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-500/20">
                           {c.assignedRole || "Não Definido"}: {c.assignedRoom || "Sem Sala (Arraste)"}
                         </span>
                       )}
@@ -1168,13 +1198,24 @@ function activeTabSubList(
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => confirmStaff(c.id!)}
-                        title="Forçar Confirmação Manual"
-                        className="p-1 px-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:scale-105 rounded-lg text-emerald-500 font-extrabold cursor-pointer active:scale-90 transition-all text-sm"
-                      >
-                        ✓
-                      </button>
+                      {c.status === "Pendente" ? (
+                        <button
+                          onClick={() => confirmStaff(c.id!)}
+                          title="Aprovar cadastro e integrar à reserva de fiscais"
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] rounded-lg shadow-sm hover:scale-105 cursor-pointer active:scale-90 transition-all flex items-center gap-1"
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>Aprovar</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => confirmStaff(c.id!)}
+                          title="Confirmar / Revalidar Colaborador"
+                          className="p-1 px-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:scale-105 rounded-lg text-emerald-500 font-extrabold cursor-pointer active:scale-90 transition-all text-sm"
+                        >
+                          ✓
+                        </button>
+                      )}
                       <button
                         onClick={() => refuseStaff(c.id!)}
                         title="Recusar Participante"

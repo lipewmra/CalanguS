@@ -39,18 +39,18 @@ export default function NetworkReservesPool({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  // Filter reserve collaborators registered in OTHER CLAs
+  // Filter reserve collaborators registered in OTHER CLAs who are approved/confirmed
   const otherReserves = allCollaborators.filter(
-    c => c.isReserve && c.claId !== currentClaId
+    c => (c.isReserve || !c.assignedRoom) && c.claId !== currentClaId && c.status === "Confirmado"
   );
 
   const getClaDisplayName = (targetClaId: string, customName?: string) => {
-    if (customName && customName.trim()) return customName;
     const user = allUsers.find(u => u.uid === targetClaId);
     const b = allBuildings.find(item => item.claId === targetClaId);
     if (b?.name) return `${b.name}${user?.name ? ` (${user.name})` : ""}`;
     if (user?.name) return user.name;
     if (user?.email) return user.email;
+    if (customName && customName.trim()) return customName;
     return `CLA ${targetClaId.slice(0, 6)}`;
   };
 

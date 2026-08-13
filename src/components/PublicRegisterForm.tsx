@@ -242,7 +242,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
         referencePerson: referencePerson.trim(),
         specialRole,
         languages: languages.split(";").map(l => l.trim()).filter(Boolean),
-        isReserve: true, // recruited public are automatically reserve status first until CLA promotes
+        isReserve: false, // only enters reserve once CLA approves the registration
         status: "Pendente" as const,
         orionStatus: audits.length > 0 ? ("Erro" as const) : ("Ok" as const),
         orionErrors: audits.map(a => a.message),

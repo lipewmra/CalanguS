@@ -66,7 +66,7 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
 }
 
 // Subscribe to Users List (for SuperAdmin to configure permissions)
-export function subscribeToUsers(onUpdate: (users: UserProfile[]) => void, onError: (err: any) => void) {
+export function subscribeToUsers(onUpdate: (users: UserProfile[]) => void, onError?: (err: any) => void) {
   const path = "users";
   const q = query(collection(db, "users"));
   return onSnapshot(q, (snapshot) => {
@@ -77,7 +77,7 @@ export function subscribeToUsers(onUpdate: (users: UserProfile[]) => void, onErr
     onUpdate(users);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
-    onError(error);
+    if (onError) onError(error);
   });
 }
 

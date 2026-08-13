@@ -3,7 +3,7 @@ import { CollaboratorInfo, RoomDetails } from "../types";
 import CollaboratorFailureModal from "./CollaboratorFailureModal";
 import { 
   Users, ShieldAlert, BadgeInfo, HelpCircle, CornerDownRight, 
-  Check, MoveRight, ArrowRight, UserCheck, Inbox, RefreshCw, Building2 
+  Check, MoveRight, ArrowRight, UserCheck, Inbox, RefreshCw, Building2, AlertCircle 
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
 
@@ -21,8 +21,12 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
   const [diagnoseCollab, setDiagnoseCollab] = useState<CollaboratorInfo | null>(null);
 
   // Computations
+  // Only approved collaborators can be allocated in classrooms or function lanes
+  const approvedCollaborators = collaborators.filter(c => c.status === "Confirmado");
+  const pendingCount = collaborators.filter(c => c.status === "Pendente").length;
+
   // Unallocated are those who do not have an assignedRoom
-  const unallocated = collaborators.filter(c => !c.assignedRoom || c.assignedRoom === "");
+  const unallocated = approvedCollaborators.filter(c => !c.assignedRoom || c.assignedRoom === "");
   
   // 1. Reserves: those who are unallocated AND have no assignedRole (unassociated)
   const unallocatedReservas = unallocated.filter(c => !c.assignedRole || c.assignedRole === "");
@@ -139,6 +143,18 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
         <div className="mb-4 p-4 bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2 border-2 border-emerald-500/20 animate-bounce">
           <Check className="w-4 h-4 text-emerald-500 shrink-0" />
           <span>{successMsg}</span>
+        </div>
+      )}
+
+      {/* Pending Notice */}
+      {pendingCount > 0 && (
+        <div className="mb-4 p-4 bg-amber-500/10 border-2 border-amber-500/30 text-amber-900 dark:text-amber-300 rounded-2xl text-xs font-bold flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+            <span>
+              Há <strong>{pendingCount} fiscal(is) pendente(s) de aprovação</strong> no <strong>Menu 2 (Fiscais)</strong>. Apenas fiscais aprovados/confirmados pelo CLA aparecem para alocação nas salas de provas.
+            </span>
+          </div>
         </div>
       )}
 
@@ -358,7 +374,7 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4">
             {rooms.map((room) => {
               // Fiscais associated with room
-              const assignedCollabs = collaborators.filter(c => c.assignedRoom === room.number);
+              const assignedCollabs = approvedCollaborators.filter(c => c.assignedRoom === room.number);
               
               return (
                 <div
