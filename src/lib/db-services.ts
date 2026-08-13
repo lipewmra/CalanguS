@@ -278,6 +278,22 @@ export async function saveBuilding(building: BuildingInfo): Promise<void> {
 // 4. Collaborators Module
 // ==========================================
 
+export async function findCollaboratorByEmail(email: string): Promise<CollaboratorInfo | null> {
+  const path = "collaborators";
+  try {
+    const q = query(collection(db, "collaborators"), where("email", "==", email.toLowerCase()));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const docVal = snap.docs[0];
+      return { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+    return null;
+  }
+}
+
 export function subscribeToCollaborators(claId: string, onUpdate: (collabs: CollaboratorInfo[]) => void) {
   const path = "collaborators";
   const q = query(collection(db, "collaborators"), where("claId", "==", claId));

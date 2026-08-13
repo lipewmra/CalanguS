@@ -30,6 +30,7 @@ import {
   getCurrentUserProfile,
   getUserProfileByEmail,
   claimProfileByEmail,
+  findCollaboratorByEmail,
   subscribeToColegas,
   subscribeToUserProfile,
   subscribeToClaActivities,
@@ -184,6 +185,10 @@ export default function App() {
   // Colaborador simulation states
   const [individualConfirmationStatus, setIndividualConfirmationStatus] = useState<"Pendente" | "Confirmado" | "Recusado">("Pendente");
 
+  // Unregistered user redirection states for public fiscal form
+  const [publicFormPrefill, setPublicFormPrefill] = useState<{ email?: string; name?: string }>({});
+  const [unregisteredNotice, setUnregisteredNotice] = useState<string>("");
+
   // CLA registration and edit states
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
@@ -299,7 +304,7 @@ export default function App() {
       }
 
       // Check for Superadmin override
-      const isSuperAdminEmail = email === "lipewmra@gmail.com";
+      const isSuperAdminEmail = email === "lipewmra@gmail.com" || email === "philippewagnermra@gmail.com";
 
       // Look up existing session profile
       let profile = await getCurrentUserProfile(user.uid);
@@ -307,20 +312,49 @@ export default function App() {
         profile = await claimProfileByEmail(email, user.uid);
       }
 
+      // Look up if user is registered in the collaborators collection
       if (!profile) {
+        const linkedCollab = await findCollaboratorByEmail(email);
+        if (linkedCollab) {
+          profile = {
+            uid: user.uid,
+            email: email,
+            name: linkedCollab.name || user.displayName || "Colaborador ENEM",
+            role: "Colaborador",
+            roles: ["Colaborador"],
+            claId: linkedCollab.claId,
+            hasAccessed: true,
+          };
+          await saveUserProfile(profile);
+        }
+      }
+
+      // If NOT registered and NOT SuperAdmin: reject access and forward to fiscal form
+      if (!profile && !isSuperAdminEmail) {
+        await signOut(auth);
+        setCurrentUser(null);
+        setPublicFormPrefill({ email, name: user.displayName || "" });
+        setUnregisteredNotice(`O e-mail "${email}" não possui cadastro ativo no sistema CalanguS. Se você deseja fazer parte da equipe de aplicação do ENEM 2026, realize sua pré-inscrição de fiscal no formulário abaixo.`);
+        setIsPublicForm(true);
+        return;
+      }
+
+      if (!profile && isSuperAdminEmail) {
         profile = {
           uid: user.uid,
           email: email,
-          name: user.displayName || "Coordenador/Fiscal",
-          role: isSuperAdminEmail ? "SuperAdmin" : "Colaborador",
+          name: user.displayName || "Super Administrador",
+          role: "SuperAdmin",
+          roles: ["SuperAdmin"],
           hasAccessed: true,
         };
         await saveUserProfile(profile);
-      } else {
+      } else if (profile) {
         let changed = false;
         let nextProfile = { ...profile };
         if (isSuperAdminEmail && nextProfile.role !== "SuperAdmin") {
           nextProfile.role = "SuperAdmin";
+          nextProfile.roles = [...(nextProfile.roles || []), "SuperAdmin"];
           changed = true;
         }
         if (!nextProfile.hasAccessed) {
@@ -372,23 +406,50 @@ export default function App() {
       }
 
       try {
+        const isSuperAdminEmail = email === "lipewmra@gmail.com" || email === "philippewagnermra@gmail.com";
+
         let profile = await getCurrentUserProfile(user.uid);
         if (!profile) {
           profile = await claimProfileByEmail(email, user.uid);
         }
 
-        const isSuperAdminEmail = email === "lipewmra@gmail.com";
         if (!profile) {
+          const linkedCollab = await findCollaboratorByEmail(email);
+          if (linkedCollab) {
+            profile = {
+              uid: user.uid,
+              email: email,
+              name: linkedCollab.name || user.displayName || "Colaborador ENEM",
+              role: "Colaborador",
+              roles: ["Colaborador"],
+              claId: linkedCollab.claId,
+              hasAccessed: true,
+            };
+            await saveUserProfile(profile);
+          }
+        }
+
+        // If NOT registered and NOT superadmin: sign out
+        if (!profile && !isSuperAdminEmail) {
+          await signOut(auth);
+          if (active) {
+            setCurrentUser(null);
+            setAuthInitialized(true);
+          }
+          return;
+        }
+
+        if (!profile && isSuperAdminEmail) {
           profile = {
             uid: user.uid,
             email: email,
-            name: user.displayName || "Usuário CalanguS",
-            role: isSuperAdminEmail ? "SuperAdmin" : "Colaborador",
-            roles: isSuperAdminEmail ? ["SuperAdmin"] : ["Colaborador"],
+            name: user.displayName || "Super Administrador",
+            role: "SuperAdmin",
+            roles: ["SuperAdmin"],
             hasAccessed: true
           };
           await saveUserProfile(profile);
-        } else {
+        } else if (profile) {
           // Verify if isSuperAdminEmail and lacks SuperAdmin role/roles
           let changed = false;
           let nextProfile = { ...profile };
@@ -639,25 +700,47 @@ export default function App() {
         {isDarkModeActive && (
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[350px] bg-radial from-emerald-500/10 via-indigo-500/5 to-transparent blur-3xl pointer-events-none -z-10" />
         )}
-        <div className="no-print pt-6 pb-2 max-w-3xl mx-auto px-4 flex justify-end gap-2">
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] flex items-center gap-1.5 ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-emerald-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-emerald-700 hover:bg-slate-200"}`}
-            title="Configurações do Sistema"
-          >
-            <Settings className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">Configuração</span>
-          </button>
-          <button
-            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-            className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-yellow-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"}`}
-            title="Alternar Tema Claro/Escuro"
-          >
-            {isDarkModeActive ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
+        <div className="no-print pt-6 pb-2 max-w-3xl mx-auto px-4 flex justify-between items-center gap-2">
+          {!currentUser ? (
+            <button
+              onClick={() => {
+                setIsPublicForm(false);
+                setUnregisteredNotice("");
+              }}
+              className={`p-2 px-3 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] flex items-center gap-1.5 font-bold text-xs ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"}`}
+              title="Voltar ao Portal de Acesso"
+            >
+              <span>← Voltar ao Login</span>
+            </button>
+          ) : (
+            <div />
+          )}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] flex items-center gap-1.5 ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-emerald-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-emerald-700 hover:bg-slate-200"}`}
+              title="Configurações do Sistema"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="text-xs font-bold uppercase tracking-wider">Configuração</span>
+            </button>
+            <button
+              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+              className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-yellow-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"}`}
+              title="Alternar Tema Claro/Escuro"
+            >
+              {isDarkModeActive ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
         <div className="max-w-4xl mx-auto">
-          <PublicRegisterForm onBackToApp={currentUser ? () => setIsPublicForm(false) : undefined} />
+          <PublicRegisterForm 
+            onBackToApp={currentUser ? () => setIsPublicForm(false) : () => { setIsPublicForm(false); setUnregisteredNotice(""); }} 
+            initialEmail={publicFormPrefill.email}
+            initialName={publicFormPrefill.name}
+            unregisteredNotice={unregisteredNotice}
+          />
         </div>
       </div>
     );
@@ -699,7 +782,7 @@ export default function App() {
             <div className="space-y-2">
               <h2 className="text-sm font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Portal de Acesso unificado</h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
-                Para ingressar na coordenação de locais de aplicação do ENEM, efetue login utilizando exclusivamente sua conta do Gmail autorizada.
+                Acesso exclusivo para membros cadastrados na coordenação e aplicação do ENEM.
               </p>
             </div>
 
@@ -714,6 +797,24 @@ export default function App() {
               <span>Entrar com Gmail</span>
             </button>
 
+            {/* Inscription redirect section for new fiscais */}
+            <div className="pt-4 border-t-2 border-slate-100 dark:border-slate-800/80 space-y-2">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                Ainda não possui cadastro ou deseja atuar como fiscal?
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setUnregisteredNotice("");
+                  setPublicFormPrefill({});
+                  setIsPublicForm(true);
+                }}
+                className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 rounded-xl font-extrabold text-xs transition cursor-pointer flex items-center justify-center gap-2 border border-slate-300 dark:border-slate-700 shadow-xs"
+              >
+                <Users className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>Formulário de Inscrição de Fiscais</span>
+              </button>
+            </div>
 
           </div>
         </div>

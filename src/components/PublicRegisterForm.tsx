@@ -13,20 +13,28 @@ import { ENEM_ROLES } from "./CollaboratorManager";
 
 interface PublicRegisterFormProps {
   onBackToApp?: () => void;
+  initialEmail?: string;
+  initialName?: string;
+  unregisteredNotice?: string;
 }
 
-export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormProps) {
+export default function PublicRegisterForm({ 
+  onBackToApp,
+  initialEmail,
+  initialName,
+  unregisteredNotice
+}: PublicRegisterFormProps) {
   // Fetch lists of buildings
   const [buildings, setBuildings] = useState<BuildingInfo[]>([]);
   const [loadingBuildings, setLoadingBuildings] = useState(true);
 
   // Form states
   const [selectedBuildingId, setSelectedBuildingId] = useState("");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName || "");
   const [birthDate, setBirthDate] = useState("");
   const [cpf, setCpf] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail || "");
   const [education, setEducation] = useState<any>("Ensino Superior Completo");
   const [disability, setDisability] = useState("Nenhuma");
   const [hasWorkedEnem, setHasWorkedEnem] = useState(false);
@@ -34,6 +42,11 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
   const [referencePerson, setReferencePerson] = useState("");
   const [specialRole, setSpecialRole] = useState<any>("Nenhuma");
   const [languages, setLanguages] = useState<string>("");
+
+  useEffect(() => {
+    if (initialEmail) setEmail(initialEmail);
+    if (initialName) setName(initialName);
+  }, [initialEmail, initialName]);
 
   // Past Editions checklist helper (ENEM 1998 to 2025)
   const [pastEditionsSelected, setPastEditionsSelected] = useState<Record<number, boolean>>({});
@@ -359,6 +372,21 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
                 </p>
               </div>
             </div>
+
+            {/* Unregistered Alert Banner */}
+            {unregisteredNotice && (
+              <div className="p-4 bg-amber-500/15 border-2 border-amber-500/30 text-amber-900 dark:text-amber-200 rounded-2xl text-xs font-bold flex items-start gap-3 shadow-sm animate-fade-in">
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-extrabold uppercase tracking-wide text-[10px] text-amber-600 dark:text-amber-400">
+                    Acesso Restrito ao CalanguS
+                  </div>
+                  <p className="leading-relaxed font-semibold">
+                    {unregisteredNotice}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {selectedBuildingId && !getClaParamFromUrl() && (
               (() => {
