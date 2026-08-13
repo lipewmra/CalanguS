@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { CollaboratorInfo, RoomDetails } from "../types";
+import CollaboratorFailureModal from "./CollaboratorFailureModal";
 import { 
   Users, ShieldAlert, BadgeInfo, HelpCircle, CornerDownRight, 
-  Check, MoveRight, ArrowRight, UserCheck, Inbox, RefreshCw 
+  Check, MoveRight, ArrowRight, UserCheck, Inbox, RefreshCw, Building2 
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
 
@@ -17,6 +18,7 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   // Track active function filter on the mobile fast assignment or selector if needed
   const [showRoleInfo, setShowRoleInfo] = useState<string | null>(null);
+  const [diagnoseCollab, setDiagnoseCollab] = useState<CollaboratorInfo | null>(null);
 
   // Computations
   // Unallocated are those who do not have an assignedRoom
@@ -197,6 +199,12 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
                         <div className="truncate">
                           <h5 className="font-extrabold text-slate-800 dark:text-white text-xs truncate">{collab.name}</h5>
                           <p className="text-[9px] text-slate-400 font-mono font-bold mt-0.5">{collab.cpf}</p>
+                          <div className="mt-1">
+                            <span className="inline-flex items-center gap-1 text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
+                              <Building2 className="w-2.5 h-2.5 text-indigo-500" />
+                              <span>CLA: {collab.originalClaName || collab.claName || "Local"}</span>
+                            </span>
+                          </div>
                         </div>
                         {collab.specialRole && collab.specialRole !== "Nenhuma" && (
                           <span className="bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 text-[8px] font-black px-1.5 py-0.2 rounded border border-indigo-500/10">
@@ -205,7 +213,7 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
                         )}
                       </div>
                       
-                      {collaboratorWarnings(collab)}
+                      {collaboratorWarnings(collab, setDiagnoseCollab)}
 
                       {/* Fast Mobile Action */}
                       <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 block lg:hidden">
@@ -282,6 +290,12 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
                             <div className="truncate">
                               <h5 className="font-extrabold text-slate-805 dark:text-white text-xs truncate">{collab.name}</h5>
                               <p className="text-[9px] text-slate-400 font-mono font-bold mt-0.5">{collab.cpf}</p>
+                              <div className="mt-1">
+                                <span className="inline-flex items-center gap-1 text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
+                                  <Building2 className="w-2.5 h-2.5 text-indigo-500" />
+                                  <span>CLA: {collab.originalClaName || collab.claName || "Local"}</span>
+                                </span>
+                              </div>
                             </div>
                             
                             <div className="text-right shrink-0">
@@ -291,7 +305,7 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
                             </div>
                           </div>
                           
-                          {collaboratorWarnings(collab)}
+                          {collaboratorWarnings(collab, setDiagnoseCollab)}
 
                           {/* Fast Mobile Action */}
                           <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 block lg:hidden">
@@ -386,6 +400,10 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
                             <div className="truncate pr-1 flex-1">
                               <span className="font-extrabold text-slate-805 dark:text-white block truncate text-xs">{collab.name}</span>
                               <div className="flex flex-wrap gap-1 mt-1">
+                                <span className="inline-flex items-center gap-1 text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
+                                  <Building2 className="w-2.5 h-2.5 text-indigo-500" />
+                                  <span>CLA: {collab.originalClaName || collab.claName || "Local"}</span>
+                                </span>
                                 {collab.assignedRole ? (
                                   <span className="text-[8px] font-black bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 px-1 rounded truncate max-w-[100px]" title={collab.assignedRole}>
                                     {collab.assignedRole}
@@ -462,17 +480,35 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
         </div>
 
       </div>
+
+      {/* DIAGNOSTIC FAILURE MODAL */}
+      <CollaboratorFailureModal
+        isOpen={!!diagnoseCollab}
+        collaborator={diagnoseCollab}
+        onClose={() => setDiagnoseCollab(null)}
+      />
     </div>
   );
 }
 
-function collaboratorWarnings(collab: CollaboratorInfo) {
+function collaboratorWarnings(collab: CollaboratorInfo, onDiagnose?: (c: CollaboratorInfo) => void) {
   if (collab.orionStatus === "Erro") {
     return (
-      <div className="mt-2 text-[9px] text-rose-700 bg-rose-500/10 dark:text-rose-400 p-1.5 rounded-lg flex items-center gap-1 border border-rose-550/15">
-        <ShieldAlert className="w-3 h-3 text-rose-500 shrink-0" />
-        <span className="font-extrabold text-[8.5px] text-rose-600 dark:text-rose-400 truncate">{collab.orionErrors[0] || "Inconsistência Orion"}</span>
-      </div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDiagnose?.(collab);
+        }}
+        title="Clique para abrir detalhes da falha cadastral"
+        className="mt-2 w-full text-left text-[9px] text-rose-700 bg-rose-500/10 hover:bg-rose-500/20 dark:text-rose-400 p-1.5 rounded-lg flex items-center justify-between gap-1 border border-rose-500/30 cursor-pointer group active:scale-95 transition"
+      >
+        <div className="flex items-center gap-1 min-w-0">
+          <ShieldAlert className="w-3 h-3 text-rose-500 shrink-0 group-hover:animate-bounce" />
+          <span className="font-extrabold text-[8.5px] text-rose-600 dark:text-rose-400 truncate">{collab.orionErrors[0] || "Inconsistência Orion"}</span>
+        </div>
+        <span className="text-[8px] bg-rose-500/20 text-rose-700 dark:text-rose-300 px-1 py-0.2 rounded font-mono font-bold shrink-0">Ver</span>
+      </button>
     );
   }
   return null;

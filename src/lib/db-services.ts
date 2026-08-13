@@ -18,6 +18,7 @@ import {
   UserProfile, 
   BuildingInfo, 
   CollaboratorInfo, 
+  TransferRequestInfo,
   CateringInfo, 
   PhotoRecord, 
   EventConfigInfo,
@@ -332,6 +333,116 @@ export async function deleteCollaborator(id: string): Promise<void> {
     await deleteDoc(doc(db, "collaborators", id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+// Request release/transfer of a reserve collaborator from another CLA
+export async function requestCollaboratorTransfer(
+  collaborator: CollaboratorInfo,
+  targetCla: { uid: string; name: string; buildingName?: string; email?: string; phone?: string },
+  notes?: string
+): Promise<void> {
+  if (!collaborator.id) return;
+  const path = `collaborators/${collaborator.id}`;
+  const request: TransferRequestInfo = {
+    requestId: doc(collection(db, "collaborators")).id,
+    targetClaId: targetCla.uid,
+    targetClaName: targetCla.name || targetCla.email || "CLA Solicitante",
+    targetBuildingName: targetCla.buildingName,
+    targetUserEmail: targetCla.email,
+    targetClaPhone: targetCla.phone,
+    requestedAt: new Date().toISOString(),
+    status: "Pendente",
+    notes: notes || ""
+  };
+
+  try {
+    await updateDoc(doc(db, "collaborators", collaborator.id), {
+      transferRequest: request,
+      // Ensure origin CLA is recorded if not already set
+      originalClaId: collaborator.originalClaId || collaborator.claId,
+      originalClaName: collaborator.originalClaName || collaborator.claName || "CLA Mantenedor Inicial"
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+// Maintainer CLA approves the release and transfers the collaborator to the requesting CLA
+export async function approveCollaboratorTransfer(
+  collaborator: CollaboratorInfo,
+  approvedByName?: string
+): Promise<void> {
+  if (!collaborator.id || !collaborator.transferRequest) return;
+  const path = `collaborators/${collaborator.id}`;
+  const req = collaborator.transferRequest;
+
+  const originClaId = collaborator.originalClaId || collaborator.claId;
+  const originClaName = collaborator.originalClaName || collaborator.claName || "CLA Mantenedor";
+
+  const historyItem = {
+    fromClaId: collaborator.claId,
+    fromClaName: originClaName,
+    toClaId: req.targetClaId,
+    toClaName: req.targetClaName,
+    date: new Date().toISOString(),
+    approvedBy: approvedByName || "CLA Mantenedor"
+  };
+
+  const updatedHistory = [...(collaborator.transferHistory || []), historyItem];
+
+  try {
+    await updateDoc(doc(db, "collaborators", collaborator.id), {
+      claId: req.targetClaId,
+      claName: req.targetClaName,
+      originalClaId: originClaId,
+      originalClaName: originClaName,
+      isReserve: true,
+      assignedRoom: "",
+      assignedRole: "",
+      transferRequest: {
+        ...req,
+        status: "Aprovado",
+        respondedAt: new Date().toISOString()
+      },
+      transferHistory: updatedHistory
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+// Maintainer CLA rejects the release request
+export async function rejectCollaboratorTransfer(
+  collaborator: CollaboratorInfo
+): Promise<void> {
+  if (!collaborator.id || !collaborator.transferRequest) return;
+  const path = `collaborators/${collaborator.id}`;
+  try {
+    await updateDoc(doc(db, "collaborators", collaborator.id), {
+      transferRequest: {
+        ...collaborator.transferRequest,
+        status: "Recusado",
+        respondedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+// Requester CLA cancels the request
+export async function cancelCollaboratorTransfer(
+  collaborator: CollaboratorInfo
+): Promise<void> {
+  if (!collaborator.id) return;
+  const path = `collaborators/${collaborator.id}`;
+  try {
+    await updateDoc(doc(db, "collaborators", collaborator.id), {
+      transferRequest: null
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
 

@@ -42,9 +42,25 @@ export interface PastEdition {
   role: string;
 }
 
+export interface TransferRequestInfo {
+  requestId: string;
+  targetClaId: string;
+  targetClaName: string;
+  targetBuildingName?: string;
+  targetUserEmail?: string;
+  targetClaPhone?: string;
+  requestedAt: string;
+  status: "Pendente" | "Aprovado" | "Recusado" | "Cancelado";
+  respondedAt?: string;
+  notes?: string;
+}
+
 export interface CollaboratorInfo {
   id?: string;
   claId: string;
+  claName?: string; // Name of currently assigned CLA
+  originalClaId?: string; // CLA who originally registered the fiscal
+  originalClaName?: string; // Name/School of origin CLA
   name: string;
   birthDate: string;
   cpf: string;
@@ -70,6 +86,15 @@ export interface CollaboratorInfo {
   snackPreference?: "Padrão" | "Vegetariano" | "Vegano" | "Sem Glúten";
   isExternalRecruit?: boolean;
   referencePerson?: string;
+  transferRequest?: TransferRequestInfo | null;
+  transferHistory?: Array<{
+    fromClaId: string;
+    fromClaName: string;
+    toClaId: string;
+    toClaName: string;
+    date: string;
+    approvedBy?: string;
+  }>;
 }
 
 export interface Quote {

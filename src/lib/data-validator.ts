@@ -52,7 +52,9 @@ export function isFullyUppercase(name: string): boolean {
 }
 
 /**
- * Checks collaborator and returns isOrionSynced status, plus an array of error messages
+ * Checks collaborator and returns validation status plus an array of error messages.
+ * Focuses on mathematical CPF validation, name conventions, and communication channels.
+ * Note: PIX key is NOT validated in the audit.
  */
 export interface CollabValidationError {
   field: string;
@@ -69,7 +71,7 @@ export function auditCollaborator(data: {
 }): CollabValidationError[] {
   const errors: CollabValidationError[] = [];
   
-  // 1. Name Check (User requested "Não pode ser tudo maiúsculo")
+  // 1. Name Check (Cannot be fully uppercase or empty)
   if (!data.name || data.name.trim().length < 5) {
     errors.push({ field: "name", message: "Nome muito curto ou vazio." });
   } else if (isFullyUppercase(data.name)) {
@@ -78,33 +80,28 @@ export function auditCollaborator(data: {
     errors.push({ field: "name", message: "Nome contém caracteres inválidos." });
   }
   
-  // 2. CPF check
-  if (!data.cpf) {
-    errors.push({ field: "cpf", message: "CPF é obrigatório." });
+  // 2. CPF check - Validação rigorosa dos 11 dígitos e cálculo dos dígitos verificadores (Receita Federal)
+  if (!data.cpf || data.cpf.trim() === "") {
+    errors.push({ field: "cpf", message: "CPF é obrigatório para validação Cebraspe/Inep." });
   } else if (!validateCPF(data.cpf)) {
-    errors.push({ field: "cpf", message: "CPF informado é matematicamente inválido." });
+    errors.push({ field: "cpf", message: "CPF informado é matematicamente inválido (dígitos verificadores incorretos)." });
   }
   
   // 3. Whatsapp check
-  if (!data.whatsapp) {
+  if (!data.whatsapp || data.whatsapp.trim() === "") {
     errors.push({ field: "whatsapp", message: "Telefone Whatsapp é obrigatório." });
   } else if (!validatePhone(data.whatsapp)) {
     errors.push({ field: "whatsapp", message: "Whatsapp com formato incorreto. Use (DDD) + 9 dígitos." });
   }
   
   // 4. Email check
-  if (!data.email) {
+  if (!data.email || data.email.trim() === "") {
     errors.push({ field: "email", message: "E-mail é obrigatório." });
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
     errors.push({ field: "email", message: "Formato de e-mail inválido." });
   }
   
-  // 5. Simulated Orion Check (Cebraspe Integration verification)
-  // Let's flag any CPF starting with '123' or ending in '00' as a discrepancy found in Orion system to make the app interactive and demonstrate Orion warnings.
-  const cpfClean = data.cpf.replace(/[^\d]/g, "");
-  if (cpfClean && (cpfClean.startsWith("000") || cpfClean.endsWith("00") || data.name.length % 7 === 0)) {
-    errors.push({ field: "orion", message: "Divergência de dados encontrada no cadastro do sistema Orion (Cebraspe)." });
-  }
+  // Observação: Conforme diretriz, a Chave PIX NÃO é auditada nem gera erros cadastrais.
   
   return errors;
 }

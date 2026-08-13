@@ -1,10 +1,14 @@
 import React, { useState, useRef } from "react";
-import { CollaboratorInfo, PastEdition } from "../types";
+import { CollaboratorInfo, PastEdition, BuildingInfo, UserProfile } from "../types";
 import { downloadCsvTemplate } from "./CsvTemplate";
 import { auditCollaborator } from "../lib/data-validator";
+import CollaboratorFailureModal from "./CollaboratorFailureModal";
+import TransferRequestsModal from "./TransferRequestsModal";
+import NetworkReservesPool from "./NetworkReservesPool";
 import { 
   Users, UserPlus, Upload, ShieldAlert, BadgeInfo, Trash, Mail, 
-  MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil
+  MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
+  Building2, Globe, Clock, ArrowRightLeft, Sparkles
 } from "lucide-react";
 
 export const ENEM_ROLES = [
@@ -23,27 +27,67 @@ export const ENEM_ROLES = [
 
 interface CollaboratorManagerProps {
   collaborators: CollaboratorInfo[];
+  allCollaborators?: CollaboratorInfo[];
   claId: string;
+  currentUserName?: string;
+  currentUserEmail?: string;
+  buildingName?: string;
+  allBuildings?: BuildingInfo[];
+  allUsers?: UserProfile[];
   onAdd: (collab: Omit<CollaboratorInfo, "id">) => Promise<string>;
   onUpdate: (id: string, updates: Partial<CollaboratorInfo>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onRequestTransfer?: (
+    collab: CollaboratorInfo,
+    targetCla: { uid: string; name: string; buildingName?: string; email?: string; phone?: string },
+    notes?: string
+  ) => Promise<void>;
+  onApproveTransfer?: (collab: CollaboratorInfo, approvedByName?: string) => Promise<void>;
+  onRejectTransfer?: (collab: CollaboratorInfo) => Promise<void>;
+  onCancelTransfer?: (collab: CollaboratorInfo) => Promise<void>;
   onSimulatePublicRecruit?: () => void;
 }
 
 export default function CollaboratorManager({ 
   collaborators, 
+  allCollaborators = [],
   claId, 
+  currentUserName,
+  currentUserEmail,
+  buildingName,
+  allBuildings = [],
+  allUsers = [],
   onAdd, 
   onUpdate, 
   onDelete,
+  onRequestTransfer,
+  onApproveTransfer,
+  onRejectTransfer,
+  onCancelTransfer,
   onSimulatePublicRecruit
 }: CollaboratorManagerProps) {
   
-  const [activeSubTab, setActiveSubTab] = useState<"list" | "add" | "import" | "edit">("list");
+  const [activeSubTab, setActiveSubTab] = useState<"list" | "network_reserves" | "add" | "import" | "edit">("list");
   const [filterType, setFilterType] = useState<"todos" | "efetivos" | "reservas" | "com_erro">("todos");
+
+  // Transfer requests modal state
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
   // Edit State
   const [editingCollabId, setEditingCollabId] = useState<string | null>(null);
+
+  // Diagnostic / Failure modal state
+  const [diagnoseCollab, setDiagnoseCollab] = useState<CollaboratorInfo | null>(null);
+
+  // Count incoming pending release requests for current CLA
+  const pendingIncomingCount = collaborators.filter(
+    c => c.transferRequest && c.transferRequest.status === "Pendente"
+  ).length;
+
+  // Count reserve collaborators in other CLAs
+  const otherReservesCount = allCollaborators.filter(
+    c => c.isReserve && c.claId !== claId
+  ).length;
 
   // Form states
   const [name, setName] = useState("");
@@ -498,22 +542,49 @@ export default function CollaboratorManager({
             <span>Colaboradores e Fiscais de Apoio</span>
             <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono font-bold uppercase tracking-wider">CEBRASPE ACTIVE</span>
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Inscreva individualmente ou envie links de pré-cadastro público para novos fiscais.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Inscreva individualmente, busque reservas em outros locais ou envie links de pré-cadastro público.</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => { setActiveSubTab("list"); setParseStatus("idle"); setEditingCollabId(null); }}
-            className={`btn-3d py-2.5 px-4 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${activeSubTab === "list" ? "btn-3d-primary" : "bg-slate-150 dark:bg-slate-800/80 text-slate-705 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"}`}
+            className={`btn-3d py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${activeSubTab === "list" ? "btn-3d-primary" : "bg-slate-150 dark:bg-slate-800/80 text-slate-705 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"}`}
           >
-            <span>👥 Relação de Fiscais</span>
+            <span>👥 Minha Equipe ({collaborators.length})</span>
           </button>
+
+          <button
+            onClick={() => { setActiveSubTab("network_reserves"); setParseStatus("idle"); setEditingCollabId(null); }}
+            className={`btn-3d py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${activeSubTab === "network_reserves" ? "bg-indigo-600 text-white border-indigo-800 shadow-md" : "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/20 border border-indigo-500/20"}`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>🌐 Banco Geral de Reservas ({otherReservesCount})</span>
+          </button>
+
+          <button
+            onClick={() => setIsTransferModalOpen(true)}
+            className={`py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 border-2 ${
+              pendingIncomingCount > 0
+                ? "bg-amber-500 text-white border-amber-600 animate-pulse shadow-md"
+                : "bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700"
+            }`}
+          >
+            <ArrowRightLeft className="w-3.5 h-3.5" />
+            <span>⚡ Pedidos de Liberação</span>
+            {pendingIncomingCount > 0 && (
+              <span className="bg-white text-amber-700 text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                {pendingIncomingCount}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={() => { setActiveSubTab("add"); setParseStatus("idle"); setEditingCollabId(null); }}
-            className={`btn-3d py-2.5 px-4 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${activeSubTab === "add" ? "btn-3d-secondary" : "bg-slate-150 dark:bg-slate-800/80 text-slate-705 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"}`}
+            className={`btn-3d py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${activeSubTab === "add" ? "btn-3d-secondary" : "bg-slate-150 dark:bg-slate-800/80 text-slate-705 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"}`}
           >
             <span>➕ Novo Cadastro</span>
           </button>
+
           {activeSubTab === "edit" && (
             <span className="btn-3d bg-indigo-650 text-white border-indigo-900 py-2.5 px-4 text-xs font-black rounded-xl cursor-default flex items-center gap-1.5">
               <span>📝 Editando Cadastro</span>
@@ -521,6 +592,31 @@ export default function CollaboratorManager({
           )}
         </div>
       </div>
+
+      {/* Prominent Alert for Incoming Transfer / Release Requests */}
+      {pendingIncomingCount > 0 && (
+        <div className="mb-5 p-4 bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                Aviso de Transferência de Fiscais Reservas
+              </h4>
+              <p className="text-xs text-amber-900/80 dark:text-amber-200">
+                Há <strong>{pendingIncomingCount} fiscal(is) reserva(s)</strong> do seu local com solicitação de liberação/associação enviada por outro CLA.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsTransferModalOpen(true)}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl shadow-md transition cursor-pointer active:scale-95 shrink-0"
+          >
+            Revisar e Liberar Fiscais ({pendingIncomingCount}) ➔
+          </button>
+        </div>
+      )}
 
       {localSuccessMsg && (
         <div className="mb-4 p-4 bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-1 border-2 border-emerald-500/20 animate-bounce">
@@ -537,9 +633,27 @@ export default function CollaboratorManager({
       )}
 
       {/* SUBTAB 1: COLLABORATORS LIST */}
-      {activeTabSubList(activeSubTab, filterType, setFilterType, filteredCollaborators, sendEmailNotification, confirmStaff, refuseStaff, onDelete, handleStartEdit, claId, onSimulatePublicRecruit)}
+      {activeTabSubList(
+        activeSubTab, filterType, setFilterType, filteredCollaborators, 
+        sendEmailNotification, confirmStaff, refuseStaff, onDelete, handleStartEdit, 
+        claId, onSimulatePublicRecruit, setDiagnoseCollab, () => setIsTransferModalOpen(true)
+      )}
 
-      {/* SUBTAB 2: ADD FORM */}
+      {/* SUBTAB 2: NETWORK RESERVES POOL (BANCO GERAL DE RESERVAS) */}
+      {activeSubTab === "network_reserves" && (
+        <NetworkReservesPool
+          allCollaborators={allCollaborators}
+          currentClaId={claId}
+          currentUserName={currentUserName}
+          currentUserEmail={currentUserEmail}
+          buildingName={buildingName}
+          allBuildings={allBuildings}
+          allUsers={allUsers}
+          onRequestTransfer={onRequestTransfer || (async () => {})}
+        />
+      )}
+
+      {/* SUBTAB 3: ADD FORM */}
       {activeTabSubAddForm(
         activeSubTab, name, setName, birthDate, setBirthDate, cpf, setCpf, whatsapp, setWhatsapp, email, setEmail,
         education, setEducation, disability, setDisability, hasWorkedEnem, setHasWorkedEnem, pixKey, setPixKey,
@@ -776,6 +890,32 @@ export default function CollaboratorManager({
           <option key={r.name} value={r.name} />
         ))}
       </datalist>
+
+      {/* Failure / Inconsistency Diagnostic Modal */}
+      <CollaboratorFailureModal
+        isOpen={!!diagnoseCollab}
+        collaborator={diagnoseCollab}
+        onClose={() => setDiagnoseCollab(null)}
+        onEdit={(c) => {
+          setDiagnoseCollab(null);
+          handleStartEdit(c);
+        }}
+      />
+
+      {/* Transfer / Association Requests Modal */}
+      <TransferRequestsModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        collaborators={collaborators}
+        allCollaborators={allCollaborators}
+        claId={claId}
+        currentUserName={currentUserName}
+        allBuildings={allBuildings}
+        allUsers={allUsers}
+        onApproveTransfer={onApproveTransfer || (async () => {})}
+        onRejectTransfer={onRejectTransfer || (async () => {})}
+        onCancelTransfer={onCancelTransfer}
+      />
     </div>
   );
 }
@@ -791,7 +931,9 @@ function activeTabSubList(
   onDelete: any,
   onStartEdit: (c: CollaboratorInfo) => void,
   claId: string,
-  onSimulatePublicRecruit?: () => void
+  onSimulatePublicRecruit?: () => void,
+  onOpenDiagnostic?: (c: CollaboratorInfo) => void,
+  onOpenTransferRequests?: () => void
 ) {
   if (activeSubTab !== "list") return null;
 
@@ -880,7 +1022,7 @@ function activeTabSubList(
           <table className="w-full text-left text-xs border-collapse font-sans">
             <thead>
               <tr className="bg-slate-50 dark:bg-[#101726]/50 uppercase text-[9px] font-black text-slate-550 dark:text-slate-400 tracking-widest border-b-2 border-slate-200 dark:border-slate-800">
-                <th className="p-4">Nome Colaborador</th>
+                <th className="p-4">Nome Colaborador / Origem CLA</th>
                 <th className="p-4 font-mono">CPF / Chave Pix</th>
                 <th className="p-4">Função Especial</th>
                 <th className="p-4">Escolaridade / Deficiência</th>
@@ -890,7 +1032,9 @@ function activeTabSubList(
               </tr>
             </thead>
             <tbody className="divide-y-2 divide-slate-155 dark:divide-slate-800">
-              {filteredCollaborators.map((c) => (
+              {filteredCollaborators.map((c) => {
+                const originName = c.originalClaName || c.claName || "CLA Mantenedor";
+                return (
                 <tr key={c.id} className="hover:bg-slate-500/5 transition">
                   {/* Name detail */}
                   <td className="p-4">
@@ -907,7 +1051,15 @@ function activeTabSubList(
                         <span className="underline">{c.referencePerson}</span>
                       </div>
                     )}
-                    <div className="mt-1.5 flex items-center gap-1.5">
+                    
+                    {/* Tags line: CLA Tag, Reserve/Role Tag, Transfer request tag */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {/* Origin CLA TAG */}
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20" title={`Cadastrado no CLA: ${originName}`}>
+                        <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
+                        <span>CLA: {originName}</span>
+                      </span>
+
                       {c.isReserve ? (
                         <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/10">
                           RESERVA
@@ -916,6 +1068,17 @@ function activeTabSubList(
                         <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-500/10">
                           {c.assignedRole || "Não Definido"}: {c.assignedRoom || "Sem Sala (Arraste)"}
                         </span>
+                      )}
+
+                      {c.transferRequest && c.transferRequest.status === "Pendente" && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenTransferRequests?.()}
+                          className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-300 font-black text-[8.5px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/40 animate-pulse cursor-pointer flex items-center gap-1"
+                          title="Clique para abrir e responder ao pedido de liberação"
+                        >
+                          <span>⏳ Pedido de Liberação Pendente</span>
+                        </button>
                       )}
                     </div>
                   </td>
@@ -948,21 +1111,36 @@ function activeTabSubList(
                   {/* Orion Cross-audit reports */}
                   <td className="p-4">
                     {c.orionStatus === "Erro" ? (
-                      <div className="bg-rose-500/10 text-rose-800 dark:text-rose-400 border-rose-500/20 border-2 p-1.5 rounded-xl max-w-[210px] shadow-sm">
-                        <div className="flex items-center gap-1 text-[9px] font-black uppercase text-rose-700 dark:text-rose-400">
-                          <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                          <span>Erro Cadastral</span>
+                      <button
+                        type="button"
+                        onClick={() => onOpenDiagnostic?.(c)}
+                        className="w-full text-left bg-rose-500/10 hover:bg-rose-500/20 text-rose-800 dark:text-rose-300 border-rose-500/30 hover:border-rose-500/60 border-2 p-2 rounded-xl max-w-[220px] shadow-xs hover:shadow-md transition-all cursor-pointer group active:scale-95 block"
+                        title="Clique para abrir detalhes da falha cadastral"
+                      >
+                        <div className="flex items-center justify-between gap-1 text-[9px] font-black uppercase text-rose-700 dark:text-rose-400">
+                          <div className="flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 group-hover:animate-bounce" />
+                            <span>Erro Cadastral</span>
+                          </div>
+                          <span className="text-[8px] bg-rose-500/20 text-rose-700 dark:text-rose-300 px-1.5 py-0.2 rounded-md font-mono font-extrabold border border-rose-500/30">
+                            Ver Falha 🔍
+                          </span>
                         </div>
                         <ul className="text-[9px] list-disc list-inside mt-1 space-y-0.5 max-h-[50px] overflow-y-auto font-mono font-bold text-rose-600/90 dark:text-rose-400/90">
                           {c.orionErrors.map((err, i) => (
                             <li key={i} className="truncate" title={err}>{err}</li>
                           ))}
                         </ul>
-                      </div>
+                      </button>
                     ) : (
-                      <span className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 border-2 font-black text-[9px] px-2.5 py-1 rounded-full shadow-xs">
-                        ✓ Orion OK
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onOpenDiagnostic?.(c)}
+                        className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:border-emerald-500/40 border-2 font-black text-[9px] px-2.5 py-1 rounded-full shadow-xs cursor-pointer transition-all active:scale-95 inline-flex items-center gap-1"
+                        title="Auditoria Orion OK - Clique para ver detalhes do cadastro"
+                      >
+                        <span>✓ Orion OK</span>
+                      </button>
                     )}
                   </td>
 
@@ -1014,7 +1192,7 @@ function activeTabSubList(
                     </div>
                   </td>
                 </tr>
-              ))}
+              ); })}
             </tbody>
           </table>
         </div>
