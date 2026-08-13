@@ -297,12 +297,12 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
         </div>
       )}
 
-      <div className="bg-white dark:bg-[#0c1220]/95 p-6 md:p-8 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[6px_6px_0px_0px_#cbd5e1] dark:shadow-[6px_6px_0px_0px_#10b981]/20 transition-all">
+      <div className="bg-white dark:bg-[#0c1220]/95 p-6 md:p-8 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[6px_6px_0px_0px_#cbd5e1] dark:shadow-[6px_6px_0px_0px_var(--color-emerald-500)]/20 transition-all">
         
         {/* SUCCESS PANEL */}
         {submitSuccess ? (
           <div className="py-8 text-center space-y-6">
-            <div className="w-20 h-20 bg-emerald-500/10 dark:bg-[#10b981]/10 rounded-full flex items-center justify-center mx-auto border-4 border-emerald-500 max-w-max">
+            <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto border-4 border-emerald-500 max-w-max">
               <CheckCircle className="w-12 h-12 text-emerald-500 animate-pulse" />
             </div>
             <div className="space-y-2 max-w-md mx-auto">
@@ -545,7 +545,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
 
                 <div>
                   <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5 flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-[#10b981]" />
+                    <Phone className="w-3.5 h-3.5 text-emerald-500" />
                     <span>Telefone WhatsApp</span>
                   </label>
                   <input
@@ -561,7 +561,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
 
                 <div>
                   <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5 flex items-center gap-1">
-                    <Mail className="w-3.5 h-3.5 text-[#10b981]" />
+                    <Mail className="w-3.5 h-3.5 text-emerald-500" />
                     <span>E-mail</span>
                   </label>
                   <input
@@ -752,7 +752,7 @@ export default function PublicRegisterForm({ onBackToApp }: PublicRegisterFormPr
             {/* SUBMIT SECTION */}
             <div className="pt-4 border-t-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
-                <ShieldCheck className="w-5 h-5 text-[#10b981]" />
+                <ShieldCheck className="w-5 h-5 text-emerald-500" />
                 <span className="text-[10px] font-bold uppercase tracking-wider">Criptografia Privada CalanguS</span>
               </div>
               

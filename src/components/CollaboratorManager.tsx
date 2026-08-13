@@ -1079,7 +1079,7 @@ function activeTabSubAddForm(
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Ex: Carlos Costa Neto"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-[#10b981]/40 text-xs font-semibold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-semibold"
             required
           />
         </div>
@@ -1091,7 +1091,7 @@ function activeTabSubAddForm(
             value={birthDate}
             onChange={(e) => handleBirthDateChange(e.target.value)}
             placeholder="DD/MM/AAAA"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-[#10b981]/40 text-xs font-semibold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-semibold"
             required
           />
         </div>
@@ -1103,7 +1103,7 @@ function activeTabSubAddForm(
             value={cpf}
             onChange={(e) => handleCpfChange(e.target.value)}
             placeholder="Ex: 403.401.503-12"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-[#10b981]/40 text-xs font-mono font-bold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-mono font-bold"
             required
           />
         </div>
@@ -1115,7 +1115,7 @@ function activeTabSubAddForm(
             value={whatsapp}
             onChange={(e) => handlePhoneChange(e.target.value)}
             placeholder="Ex: (87) 98123-4567"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-[#10b981]/40 text-xs font-mono font-bold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-mono font-bold"
             required
           />
         </div>
@@ -1127,7 +1127,7 @@ function activeTabSubAddForm(
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Ex: carlos@email.com"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-[#10b981]/40 text-xs font-semibold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-semibold"
             required
           />
         </div>
@@ -1139,7 +1139,7 @@ function activeTabSubAddForm(
             value={pixKey}
             onChange={(e) => setPixKey(e.target.value)}
             placeholder="Chave Pix para repasse Cebraspe"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-[#10b981]/40 text-xs font-mono font-bold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-mono font-bold"
           />
         </div>
 
@@ -1150,7 +1150,7 @@ function activeTabSubAddForm(
             value={referencePerson}
             onChange={(e) => setReferencePerson(e.target.value)}
             placeholder="Ex: MARIA"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-[#10b981]/40 text-xs font-semibold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-semibold"
           />
           <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 font-medium leading-relaxed">
             Informe aqui o nome da pessoa (amigo, parente ou familiar) que lhe indicou para esse CLA. Exemplo: Minha amiga MARIA conversou com o CLA para me indicar para os trabalhos desse ano, então na referência eu digito MARIA.

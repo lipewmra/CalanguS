@@ -13,6 +13,97 @@
 
 /* Custom 3D Tactile Design utilities */
 
+/* Default / Emerald Theme (CalanguS Esmeralda) */
+:root,
+:root[data-color-theme="emerald"] {
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-200: #a7f3d0;
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065f46;
+  --color-emerald-900: #064e3b;
+  --color-emerald-950: #022c22;
+}
+
+/* 2. Ocean Theme (Oceano Profundo) */
+:root[data-color-theme="ocean"] {
+  --color-emerald-50: #f0f9ff;
+  --color-emerald-100: #e0f2fe;
+  --color-emerald-200: #bae6fd;
+  --color-emerald-300: #7dd3fc;
+  --color-emerald-400: #38bdf8;
+  --color-emerald-500: #0284c7;
+  --color-emerald-600: #0369a1;
+  --color-emerald-700: #075985;
+  --color-emerald-800: #0c4a6e;
+  --color-emerald-900: #0a364f;
+  --color-emerald-950: #082f49;
+}
+
+/* 3. Amethyst Theme (Ametista Cósmica) */
+:root[data-color-theme="amethyst"] {
+  --color-emerald-50: #f5f3ff;
+  --color-emerald-100: #ede9fe;
+  --color-emerald-200: #ddd6fe;
+  --color-emerald-300: #c4b5fd;
+  --color-emerald-400: #a78bfa;
+  --color-emerald-500: #8b5cf6;
+  --color-emerald-600: #7c3aed;
+  --color-emerald-700: #6d28d9;
+  --color-emerald-800: #5b21b6;
+  --color-emerald-900: #4c1d95;
+  --color-emerald-950: #2e1065;
+}
+
+/* 4. Amber / Sunset Theme (Pôr do Sol / Dourado) */
+:root[data-color-theme="amber"] {
+  --color-emerald-50: #fffbeb;
+  --color-emerald-100: #fef3c7;
+  --color-emerald-200: #fde68a;
+  --color-emerald-300: #fcd34d;
+  --color-emerald-400: #fbbf24;
+  --color-emerald-500: #f59e0b;
+  --color-emerald-600: #d97706;
+  --color-emerald-700: #b45309;
+  --color-emerald-800: #92400e;
+  --color-emerald-900: #78350f;
+  --color-emerald-950: #451a03;
+}
+
+/* 5. Crimson / Ruby Theme (Carmesim / Rubi) */
+:root[data-color-theme="crimson"] {
+  --color-emerald-50: #fff1f2;
+  --color-emerald-100: #ffe4e6;
+  --color-emerald-200: #fecdd3;
+  --color-emerald-300: #fda4af;
+  --color-emerald-400: #fb7185;
+  --color-emerald-500: #f43f5e;
+  --color-emerald-600: #e11d48;
+  --color-emerald-700: #be123c;
+  --color-emerald-800: #9f1239;
+  --color-emerald-900: #881337;
+  --color-emerald-950: #4c0519;
+}
+
+/* 6. Monochrome / High Contrast Theme (Alto Contraste) */
+:root[data-color-theme="monochrome"] {
+  --color-emerald-50: #f8fafc;
+  --color-emerald-100: #f1f5f9;
+  --color-emerald-200: #e2e8f0;
+  --color-emerald-300: #cbd5e1;
+  --color-emerald-400: #94a3b8;
+  --color-emerald-500: #64748b;
+  --color-emerald-600: #475569;
+  --color-emerald-700: #334155;
+  --color-emerald-800: #1e293b;
+  --color-emerald-900: #0f172a;
+  --color-emerald-950: #020617;
+}
+
 /* Lifted cards with rigid 3D shadow style */
 .card-3d {
   position: relative;
@@ -21,12 +112,12 @@
 }
 
 .card-3d-emerald {
-  border-color: #10b981;
-  box-shadow: 4px 4px 0px 0px #047857;
+  border-color: var(--color-emerald-500, #10b981);
+  box-shadow: 4px 4px 0px 0px var(--color-emerald-700, #047857);
 }
 .card-3d-emerald:hover {
   transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0px 0px #047857;
+  box-shadow: 6px 6px 0px 0px var(--color-emerald-700, #047857);
 }
 
 .card-3d-indigo {
@@ -105,13 +196,13 @@
 }
 
 .btn-3d-primary {
-  background-color: #10b981;
+  background-color: var(--color-emerald-500, #10b981);
   color: #ffffff;
-  border-color: #047857;
+  border-color: var(--color-emerald-700, #047857);
   border-bottom-width: 4px;
 }
 .btn-3d-primary:hover {
-  background-color: #34d399;
+  background-color: var(--color-emerald-400, #34d399);
 }
 .btn-3d-primary:active {
   transform: translateY(2px);
@@ -176,7 +267,7 @@
 
 /* Cute glow effects for glass */
 .glow-emerald {
-  box-shadow: 0 0 15px -3px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 15px -3px var(--color-emerald-500, rgba(16, 185, 129, 0.4));
 }
 .glow-indigo {
   box-shadow: 0 0 15px -3px rgba(99, 102, 241, 0.4);

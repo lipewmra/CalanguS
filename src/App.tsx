@@ -46,13 +46,14 @@ import ClaActivitiesView from "./components/ClaActivitiesView";
 import ExportAllocationsView from "./components/ExportAllocationsView";
 import CombinedPrintExportView from "./components/CombinedPrintExportView";
 import PublicRegisterForm from "./components/PublicRegisterForm";
+import SettingsModal, { FontSizeOption, ColorThemeOption } from "./components/SettingsModal";
 
 import { 
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
   Printer, Sun, Moon, Sparkles, HelpCircle, MapPin,
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet,
-  Activity, Calendar, PlusCircle, Trash2
+  Activity, Calendar, PlusCircle, Trash2, Settings
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
@@ -63,6 +64,21 @@ export default function App() {
     const stored = localStorage.getItem("enem_app_theme");
     return (stored as "light" | "dark") || "dark";
   });
+
+  // Font size state (6 predefined sizes: 5pt, 8pt, 12pt, 14pt, 18pt, 24pt)
+  const [fontSize, setFontSize] = useState<FontSizeOption>(() => {
+    const stored = localStorage.getItem("calangus_font_size");
+    return (stored as FontSizeOption) || "12pt";
+  });
+
+  // Color theme state (6 themes: emerald, ocean, amethyst, amber, crimson, monochrome)
+  const [colorTheme, setColorTheme] = useState<ColorThemeOption>(() => {
+    const stored = localStorage.getItem("calangus_color_theme");
+    return (stored as ColorThemeOption) || "emerald";
+  });
+
+  // Settings modal visibility state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Sidebar collapsible state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -90,6 +106,16 @@ export default function App() {
       document.documentElement.classList.remove("dark");
     }
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("calangus_font_size", fontSize);
+    document.documentElement.style.fontSize = fontSize;
+  }, [fontSize]);
+
+  useEffect(() => {
+    localStorage.setItem("calangus_color_theme", colorTheme);
+    document.documentElement.setAttribute("data-color-theme", colorTheme);
+  }, [colorTheme]);
 
   // Authentication & Connection readiness state
   const [authInitialized, setAuthInitialized] = useState(false);
@@ -535,7 +561,7 @@ export default function App() {
   if (showSplash) {
     return (
       <div className="fixed inset-0 z-50 bg-[#070b13] flex flex-col items-center justify-center p-6 select-none transition-all duration-500 overflow-y-auto">
-        <div className="absolute inset-0 bg-radial from-[#10b981]/10 via-[#070b13]/80 to-[#070b13] pointer-events-none" />
+        <div className="absolute inset-0 bg-radial from-emerald-500/10 via-[#070b13]/80 to-[#070b13] pointer-events-none" />
         
         <div className="relative w-full max-w-2xl aspect-video rounded-3xl overflow-hidden border-4 border-slate-800 dark:border-slate-900 shadow-[0_0_60px_rgba(16,185,129,0.2)] bg-slate-950 flex flex-col justify-center items-center">
           <video
@@ -587,7 +613,15 @@ export default function App() {
         {isDarkModeActive && (
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[350px] bg-radial from-emerald-500/10 via-indigo-500/5 to-transparent blur-3xl pointer-events-none -z-10" />
         )}
-        <div className="no-print pt-6 pb-2 max-w-3xl mx-auto px-4 flex justify-end">
+        <div className="no-print pt-6 pb-2 max-w-3xl mx-auto px-4 flex justify-end gap-2">
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] flex items-center gap-1.5 ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-emerald-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-emerald-700 hover:bg-slate-200"}`}
+            title="Configurações do Sistema"
+          >
+            <Settings className="w-4 h-4" />
+            <span className="text-xs font-bold uppercase tracking-wider">Configuração</span>
+          </button>
           <button
             onClick={() => setTheme(theme === "light" ? "dark" : "light")}
             className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-yellow-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"}`}
@@ -620,7 +654,7 @@ export default function App() {
       ) : !currentUser ? (
         /* CASE B: LOGIN PORTAL (EXCLUSIVELY VIA GMAIL) */
         <div className="min-h-screen flex flex-col items-center justify-center p-6 animate-fade-in">
-          <div className="max-w-md w-full bg-white dark:bg-[#0c1220]/95 p-8 rounded-3xl border-2 border-slate-200 dark:border-slate-800 shadow-[8px_8px_0px_0px_#e2e8f0] dark:shadow-[8px_8px_0px_0px_#10b981]/20 space-y-8 text-center transition-all duration-300">
+          <div className="max-w-md w-full bg-white dark:bg-[#0c1220]/95 p-8 rounded-3xl border-2 border-slate-200 dark:border-slate-800 shadow-[8px_8px_0px_0px_#e2e8f0] dark:shadow-[8px_8px_0px_0px_var(--color-emerald-500)]/20 space-y-8 text-center transition-all duration-300">
             
             {/* Logo/Branding */}
             <div className="flex flex-col items-center space-y-3">
@@ -688,6 +722,16 @@ export default function App() {
                   </span>
                 </div>
 
+                {/* Configuration Settings Button */}
+                <button
+                  onClick={() => setIsSettingsOpen(true)}
+                  className={`p-2 px-3 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-y-[1px] active:translate-x-[1px] active:shadow-0 flex items-center gap-1.5 ${isDarkMode ? "bg-slate-900 border-slate-700 text-emerald-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-emerald-700 hover:bg-slate-200"}`}
+                  title="Abrir Configurações do Sistema"
+                >
+                  <Settings className="w-5 h-5" />
+                  <span className="hidden sm:inline text-xs font-black uppercase tracking-wider">Configuração</span>
+                </button>
+
                 {/* Light / Dark Mode Toggle Button */}
                 <button
                   onClick={() => setTheme(theme === "light" ? "dark" : "light")}
@@ -742,13 +786,13 @@ export default function App() {
         
         {/* EVENT TICKER BRIEF INSTRUCTIONS CARD (glowing 3D warning/announcement design) */}
         {eventConfig && (
-          <div className={`no-print p-5 rounded-2xl mb-8 border-2 flex flex-col md:flex-row md:items-center justify-between gap-5 transition ${isDarkMode ? "bg-[#0f172a]/90 border-emerald-500/30 shadow-[4px_4px_0px_0px_#047857] glow-emerald" : "bg-emerald-50/75 border-emerald-300/60 shadow-[4px_4px_0px_0px_#10b981]"}`}>
+          <div className={`no-print p-5 rounded-2xl mb-8 border-2 flex flex-col md:flex-row md:items-center justify-between gap-5 transition ${isDarkMode ? "bg-[#0f172a]/90 border-emerald-500/30 shadow-[4px_4px_0px_0px_var(--color-emerald-700)] glow-emerald" : "bg-emerald-50/75 border-emerald-300/60 shadow-[4px_4px_0px_0px_var(--color-emerald-500)]"}`}>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-extrabold text-emerald-500 dark:text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded-md">Diretiva Geral ENEM {eventConfig.year}</span>
                 <span className="text-[9px] bg-indigo-500/25 text-indigo-400 font-bold px-2 py-0.5 rounded-full font-mono border border-indigo-400/20">Sincronizado Cebraspe</span>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans font-medium">{eventConfig.generalInstructions}</p>
+              <p className="text-xs text-slate-950 dark:text-white leading-relaxed font-sans font-medium">{eventConfig.generalInstructions}</p>
             </div>
             <div className="flex gap-4 text-xs shrink-0 font-bold text-slate-500 dark:text-slate-400 border-l-2 border-slate-200 dark:border-slate-800 pl-4">
               <div>
@@ -1195,6 +1239,18 @@ export default function App() {
       </main>
     </>
    )}
+
+      {/* GLOBAL CONFIGURATION SETTINGS MODAL */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        fontSize={fontSize}
+        setFontSize={setFontSize}
+        colorTheme={colorTheme}
+        setColorTheme={setColorTheme}
+        themeMode={theme}
+        setThemeMode={setTheme}
+      />
   </div>
   );
 }
