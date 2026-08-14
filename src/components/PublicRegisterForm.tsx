@@ -10,6 +10,7 @@ import {
   History
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
+import PhotoUploader from "./PhotoUploader";
 
 interface PublicRegisterFormProps {
   onBackToApp?: () => void;
@@ -30,6 +31,7 @@ export default function PublicRegisterForm({
 
   // Form states
   const [selectedBuildingId, setSelectedBuildingId] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
   const [name, setName] = useState(initialName || "");
   const [birthDate, setBirthDate] = useState("");
   const [cpf, setCpf] = useState("");
@@ -247,6 +249,7 @@ export default function PublicRegisterForm({
         cpf,
         whatsapp,
         email: email.trim(),
+        photoUrl: photoUrl || "",
         education,
         disability: disability.trim(),
         hasWorkedEnem: hasWorkedEnemComputed,
@@ -530,6 +533,15 @@ export default function PublicRegisterForm({
                 <FileText className="w-4 h-4 shrink-0" />
                 <span>2. Seus Dados Cadastrais</span>
               </h3>
+
+              {/* Photo Upload Section */}
+              <PhotoUploader
+                photoUrl={photoUrl}
+                onChange={setPhotoUrl}
+                name={name || "Fiscal"}
+                label="Sua Foto de Perfil / Identificação"
+                helpText="Envie uma foto de frente com boa iluminação (tipo 3x4 ou selfie) para identificação visual no sistema e impressão de crachás."
+              />
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>

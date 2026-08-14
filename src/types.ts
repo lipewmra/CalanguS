@@ -10,6 +10,7 @@ export interface UserProfile {
   coordinationCode?: string;
   claId?: string;
   hasAccessed?: boolean;
+  photoUrl?: string;
 }
 
 export interface RoomDetails {

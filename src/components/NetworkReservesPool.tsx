@@ -5,6 +5,7 @@ import {
   Clock, ShieldAlert, ArrowRight, Sparkles, MessageSquare, AlertCircle, X
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
+import FiscalAvatar from "./FiscalAvatar";
 
 interface NetworkReservesPoolProps {
   allCollaborators: CollaboratorInfo[];
@@ -19,6 +20,15 @@ interface NetworkReservesPoolProps {
     targetCla: { uid: string; name: string; buildingName?: string; email?: string; phone?: string },
     notes?: string
   ) => Promise<void>;
+  onViewPhoto?: (data: {
+    imageUrl: string;
+    name: string;
+    role?: string;
+    cpf?: string;
+    claName?: string;
+    education?: string;
+    specialRole?: string;
+  }) => void;
 }
 
 export default function NetworkReservesPool({
@@ -29,7 +39,8 @@ export default function NetworkReservesPool({
   buildingName,
   allBuildings = [],
   allUsers = [],
-  onRequestTransfer
+  onRequestTransfer,
+  onViewPhoto
 }: NetworkReservesPoolProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterSpecialRole, setFilterSpecialRole] = useState<string>("all");
@@ -203,9 +214,25 @@ export default function NetworkReservesPool({
                   {/* Top: Name and Origin Tag */}
                   <div>
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-extrabold text-slate-900 dark:text-white text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate" title={collab.name}>
-                        {collab.name}
-                      </h4>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <FiscalAvatar
+                          photoUrl={collab.photoUrl}
+                          name={collab.name}
+                          size="sm"
+                          onClick={() => onViewPhoto?.({
+                            imageUrl: collab.photoUrl || "",
+                            name: collab.name,
+                            role: "Fiscal Reserva",
+                            cpf: collab.cpf,
+                            claName: originName,
+                            education: collab.education,
+                            specialRole: collab.specialRole
+                          })}
+                        />
+                        <h4 className="font-extrabold text-slate-900 dark:text-white text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate" title={collab.name}>
+                          {collab.name}
+                        </h4>
+                      </div>
                       <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-amber-500/20 shrink-0">
                         Reserva
                       </span>

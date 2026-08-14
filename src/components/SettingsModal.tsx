@@ -1,5 +1,7 @@
-import React from "react";
-import { Settings, X, Type, Palette, Sun, Moon, Check, Sparkles, RefreshCw } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Settings, X, Type, Palette, Sun, Moon, Check, Sparkles, RefreshCw, Camera, User } from "lucide-react";
+import { UserProfile } from "../types";
+import PhotoUploader from "./PhotoUploader";
 
 export type FontSizeOption = "5pt" | "8pt" | "12pt" | "14pt" | "18pt" | "24pt";
 export type ColorThemeOption = "emerald" | "ocean" | "amethyst" | "amber" | "crimson" | "monochrome";
@@ -13,6 +15,8 @@ interface SettingsModalProps {
   setColorTheme: (theme: ColorThemeOption) => void;
   themeMode: "light" | "dark";
   setThemeMode: (mode: "light" | "dark") => void;
+  currentUser?: UserProfile | null;
+  onUpdatePhoto?: (newPhotoUrl: string) => Promise<void>;
 }
 
 export const FONT_SIZES: { value: FontSizeOption; label: string; desc: string }[] = [
@@ -105,7 +109,19 @@ export default function SettingsModal({
   setColorTheme,
   themeMode,
   setThemeMode,
+  currentUser,
+  onUpdatePhoto,
 }: SettingsModalProps) {
+  const [photoUrl, setPhotoUrl] = useState(currentUser?.photoUrl || "");
+  const [isSavingPhoto, setIsSavingPhoto] = useState(false);
+  const [photoSavedMsg, setPhotoSavedMsg] = useState("");
+
+  useEffect(() => {
+    if (currentUser?.photoUrl !== undefined) {
+      setPhotoUrl(currentUser.photoUrl || "");
+    }
+  }, [currentUser?.photoUrl]);
+
   if (!isOpen) return null;
 
   const handleResetDefaults = () => {
@@ -113,6 +129,29 @@ export default function SettingsModal({
     setColorTheme("emerald");
     setThemeMode("dark");
   };
+
+  const handlePhotoChange = async (newUrl: string) => {
+    setPhotoUrl(newUrl);
+    if (onUpdatePhoto) {
+      setIsSavingPhoto(true);
+      try {
+        await onUpdatePhoto(newUrl);
+        setPhotoSavedMsg("Foto de perfil atualizada com sucesso!");
+        setTimeout(() => setPhotoSavedMsg(""), 3500);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsSavingPhoto(false);
+      }
+    }
+  };
+
+  const isCoordinatorOrAdmin = currentUser && (
+    currentUser.role === "SuperAdmin" || 
+    currentUser.role === "CLA" || 
+    currentUser.role === "ALA" ||
+    (currentUser.roles && currentUser.roles.some(r => r === "SuperAdmin" || r === "CLA" || r === "ALA"))
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in no-print">
@@ -131,7 +170,7 @@ export default function SettingsModal({
                 Configurações do Sistema
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                Personalize o tamanho das letras e o esquema de cores
+                Personalize sua foto de perfil, tamanho das letras e esquema de cores
               </p>
             </div>
           </div>
@@ -147,6 +186,35 @@ export default function SettingsModal({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-8 flex-1">
+
+          {/* SECTION 0: PHOTO PROFILE (SUPERADMIN, CLA, ALA) */}
+          {isCoordinatorOrAdmin && (
+            <div className="space-y-3 p-4 bg-emerald-500/5 dark:bg-slate-900/60 rounded-2xl border-2 border-emerald-500/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-slate-800 dark:text-white font-extrabold text-sm uppercase tracking-wider">
+                  <Camera className="w-4 h-4 text-emerald-500" />
+                  <span>Foto de Perfil ({currentUser?.role || "Usuário"})</span>
+                </div>
+                {photoSavedMsg && (
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-lg border border-emerald-500/30 animate-fade-in">
+                    ✓ {photoSavedMsg}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Envie sua foto de identificação funcional para ser exibida no cabeçalho superior, crachás e relatórios da equipe:
+              </p>
+
+              <PhotoUploader
+                photoUrl={photoUrl}
+                onChange={handlePhotoChange}
+                name={currentUser?.name || currentUser?.role || "Coordenador"}
+                label=""
+                helpText="A foto será redimensionada e otimizada automaticamente com compressão de alta qualidade."
+              />
+            </div>
+          )}
           
           {/* SECTION 1: FONT SIZE (6 PREDEFINED SIZES) */}
           <div className="space-y-3">

@@ -9,6 +9,7 @@ import {
   Navigation, 
   Check, 
   Upload, 
+  Camera,
   X, 
   ExternalLink, 
   Video, 
@@ -22,6 +23,7 @@ import {
   ChevronDown
 } from "lucide-react";
 import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo } from "../types";
+import PhotoUploader from "./PhotoUploader";
 
 interface CollaboratorDashboardProps {
   currentUser: UserProfile;
@@ -116,18 +118,19 @@ export default function CollaboratorDashboard({
     localStorage.setItem(`enem_checklist_${currentUser.uid}`, JSON.stringify(reduction));
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 1024 * 1024) {
-        alert("A foto excedeu o limite de 1MB. Por favor utilize uma imagem otimizada.");
-        return;
+  const handleCollaboratorPhotoChange = async (newUrl: string) => {
+    setPhotoUrl(newUrl);
+    if (collaboratorRecord?.id) {
+      setIsSavingProfile(true);
+      try {
+        await onUpdateProfile({ photoUrl: newUrl });
+        setProfileSuccessMsg("Foto do crachá atualizada e sincronizada com sucesso!");
+        setTimeout(() => setProfileSuccessMsg(""), 3500);
+      } catch (err) {
+        console.error("Error saving collaborator photo:", err);
+      } finally {
+        setIsSavingProfile(false);
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
     }
   };
 
@@ -238,26 +241,38 @@ export default function CollaboratorDashboard({
       {/* LEFT SIDE NAVIGATION PANEL - 3D Tactile Sidebar */}
       <div className="w-full md:w-64 shrink-0 bg-white dark:bg-[#0c1220]/90 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.05)] dark:shadow-[4px_4px_0px_0px_#10b981]/10 flex flex-col gap-2">
         <div className="px-3 py-2 text-center border-b border-slate-100 dark:border-slate-850 pb-4 mb-2 flex flex-col items-center">
-          <div className="relative group mb-2.5">
+          <div 
+            className="relative group mb-2.5 cursor-pointer"
+            onClick={() => setActiveMenuTab("profile")}
+            title="Clique para enviar ou alterar sua foto"
+          >
             {photoUrl ? (
               <img 
                 src={photoUrl} 
-                alt="Foto" 
-                className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500 shadow-md bg-slate-100" 
+                alt="Foto do Fiscal" 
+                className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500 shadow-md bg-slate-100 group-hover:scale-105 transition duration-200" 
               />
             ) : (
-              <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-indigo-650 text-white rounded-full flex items-center justify-center font-black text-xl border-2 border-indigo-500/10 shadow-md">
+              <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-indigo-650 text-white rounded-full flex items-center justify-center font-black text-xl border-2 border-indigo-500/10 shadow-md group-hover:scale-105 transition duration-200">
                 {name ? name.substring(0, 2).toUpperCase() : "CM"}
               </div>
             )}
-            <div className="absolute -bottom-1 -right-1 bg-indigo-500 text-white rounded-full p-1 border-2 border-white dark:border-slate-900 shadow-sm cursor-pointer hover:bg-indigo-600 transition" onClick={() => setActiveMenuTab("profile")}>
-              <UserCheck className="w-3.5 h-3.5" />
+            <div className="absolute -bottom-1 -right-1 bg-indigo-500 group-hover:bg-emerald-500 text-white rounded-full p-1.5 border-2 border-white dark:border-slate-900 shadow-sm transition">
+              <Camera className="w-3.5 h-3.5" />
             </div>
           </div>
           <h2 className="font-display font-black text-slate-850 dark:text-white text-sm line-clamp-1">{name || "Carregando..."}</h2>
           <span className="text-[9px] font-extrabold uppercase bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 px-2 py-0.5 rounded-full mt-1 tracking-wide">
             {collaboratorRecord?.isReserve ? "Fiscal de Reserva " : `Fiscal Sala: ${collaboratorRecord?.assignedRoom || "Sem Sala"}`}
           </span>
+          <button
+            type="button"
+            onClick={() => setActiveMenuTab("profile")}
+            className="mt-2 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 active:scale-95"
+          >
+            <Camera className="w-3 h-3" />
+            <span>{photoUrl ? "Alterar Foto" : "Enviar Foto"}</span>
+          </button>
         </div>
 
         {/* Navigation Buttons - Toggle on click */}
@@ -367,6 +382,56 @@ export default function CollaboratorDashboard({
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Sinalize suas intenções de participação ao Cebraspe para que os coordenadores de prédio concluam as alocações.</p>
             </div>
 
+            {/* Quick Photo & Fiscal Status Banner */}
+            <div className="p-4 bg-gradient-to-r from-indigo-500/10 via-emerald-500/10 to-teal-500/10 border-2 border-indigo-500/20 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 text-center sm:text-left">
+                <div 
+                  className="relative group cursor-pointer shrink-0" 
+                  onClick={() => setActiveMenuTab("profile")}
+                  title="Clique para enviar ou trocar sua foto"
+                >
+                  {photoUrl ? (
+                    <img 
+                      src={photoUrl} 
+                      alt="Foto do Fiscal" 
+                      className="w-14 h-14 rounded-full object-cover border-2 border-indigo-500 shadow-md bg-slate-100 group-hover:scale-105 transition" 
+                    />
+                  ) : (
+                    <div className="w-14 h-14 bg-gradient-to-tr from-indigo-500 to-indigo-650 text-white rounded-full flex items-center justify-center font-black text-lg border-2 border-indigo-500/20 shadow-md group-hover:scale-105 transition">
+                      {name ? name.substring(0, 2).toUpperCase() : "CM"}
+                    </div>
+                  )}
+                  <div className="absolute -bottom-1 -right-1 bg-indigo-500 text-white rounded-full p-1 border-2 border-white dark:border-slate-900 shadow-xs">
+                    <Camera className="w-3 h-3" />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-display font-black text-slate-850 dark:text-white text-sm">{name}</span>
+                    {photoUrl ? (
+                      <span className="text-[9px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">Foto enviada</span>
+                    ) : (
+                      <span className="text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20">Foto pendente</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {photoUrl 
+                      ? "Sua foto de identificação está cadastrada para o crachá oficial do ENEM." 
+                      : "Clique no perfil ou no botão ao lado para enviar a foto do seu crachá."}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveMenuTab("profile")}
+                className="btn-3d py-2 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shrink-0 flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>{photoUrl ? "Alterar Foto" : "Enviar Foto"}</span>
+              </button>
+            </div>
+
             <div className="p-4 bg-slate-50 dark:bg-[#070b13]/60 border border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
               <div>
                 <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block mb-1">Seu status atual de presença:</span>
@@ -467,52 +532,13 @@ export default function CollaboratorDashboard({
             )}
 
             {/* Profile image uploading wrapper */}
-            <div className="flex flex-col sm:flex-row items-center gap-4 bg-slate-50 dark:bg-[#070b13]/60 p-4 border border-slate-200 dark:border-slate-800 rounded-xl">
-              <div className="relative group shrink-0">
-                {photoUrl ? (
-                  <img 
-                    src={photoUrl} 
-                    alt="Preview" 
-                    className="w-20 h-20 rounded-full object-cover border-2 border-slate-200 dark:border-slate-800 shadow-md bg-stone-100" 
-                  />
-                ) : (
-                  <div className="w-20 h-20 bg-indigo-500/10 text-indigo-500 rounded-full flex items-center justify-center font-black text-xl border border-dashed border-indigo-500/30">
-                    Sem Foto
-                  </div>
-                )}
-                {photoUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setPhotoUrl("")}
-                    className="absolute -top-1 -right-1 bg-rose-600 hover:bg-rose-700 text-white rounded-full p-1 border-2 border-white dark:border-slate-900 shadow-xs cursor-pointer hover:scale-105 transition"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-              <div className="grow space-y-2 text-center sm:text-left">
-                <span className="block text-[10px] uppercase font-extrabold tracking-wide text-slate-550 dark:text-slate-455">Foto de Identificação do Crachá</span>
-                <p className="text-[10px] text-slate-450 dark:text-slate-440 font-semibold leading-relaxed">Adicione uma foto nítida do seu rosto em fundos claros de até 1MB, pois será impressa no crachá oficial de portaria.</p>
-                
-                <div className="flex justify-center sm:justify-start gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="btn-3d px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-xs font-black flex items-center gap-1 shadow-sm cursor-pointer"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Carregar Foto</span>
-                  </button>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handlePhotoUpload}
-                    accept="image/*"
-                    className="hidden"
-                  />
-                </div>
-              </div>
-            </div>
+            <PhotoUploader
+              photoUrl={photoUrl}
+              onChange={handleCollaboratorPhotoChange}
+              name={name || currentUser.name || "Fiscal"}
+              label="Foto de Identificação do Crachá"
+              helpText="Adicione uma foto nítida do seu rosto em fundos claros, pois será impressa no crachá oficial de portaria e visualizada pela coordenação do CLA."
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>

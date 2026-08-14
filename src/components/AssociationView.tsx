@@ -6,6 +6,8 @@ import {
   Save, ChevronDown, ChevronUp, Plus, Minus
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
+import FiscalAvatar from "./FiscalAvatar";
+import ImageLightboxModal, { LightboxData } from "./ImageLightboxModal";
 
 interface AssociationViewProps {
   collaborators: CollaboratorInfo[];
@@ -26,6 +28,7 @@ export default function AssociationView({
   const [filterRole, setFilterRole] = useState<string>("all"); // "all" | "associated" | "unassociated" | specific role
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
+  const [lightboxData, setLightboxData] = useState<LightboxData | null>(null);
 
   // Collapse state for target quantities
   const [showTargetQuantitiesForm, setShowTargetQuantitiesForm] = useState(false);
@@ -429,12 +432,27 @@ export default function AssociationView({
                 >
                   <div>
                     {/* Header: Name and badges */}
-                    <div className="flex items-start justify-between gap-1.5">
-                      <div className="truncate">
-                        <h4 className="font-extrabold text-[#111827] dark:text-white text-sm truncate" title={collab.name}>
-                          {collab.name}
-                        </h4>
-                        <p className="text-[10px] text-slate-405 font-mono font-bold mt-0.5">{collab.cpf} • {collab.whatsapp}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <FiscalAvatar
+                          photoUrl={collab.photoUrl}
+                          name={collab.name}
+                          size="sm"
+                          onClick={() => setLightboxData({
+                            imageUrl: collab.photoUrl || "",
+                            name: collab.name,
+                            role: collab.assignedRole || "Fiscal Reserva",
+                            cpf: collab.cpf,
+                            education: collab.education,
+                            specialRole: collab.specialRole
+                          })}
+                        />
+                        <div className="truncate">
+                          <h4 className="font-extrabold text-[#111827] dark:text-white text-sm truncate" title={collab.name}>
+                            {collab.name}
+                          </h4>
+                          <p className="text-[10px] text-slate-405 font-mono font-bold mt-0.5">{collab.cpf} • {collab.whatsapp}</p>
+                        </div>
                       </div>
                       
                       {isAssigned ? (
@@ -523,6 +541,11 @@ export default function AssociationView({
         )}
 
       </div>
+
+      <ImageLightboxModal
+        data={lightboxData}
+        onClose={() => setLightboxData(null)}
+      />
     </div>
   );
 }

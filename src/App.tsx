@@ -56,6 +56,7 @@ import ExportAllocationsView from "./components/ExportAllocationsView";
 import CombinedPrintExportView from "./components/CombinedPrintExportView";
 import PublicRegisterForm from "./components/PublicRegisterForm";
 import SettingsModal, { FontSizeOption, ColorThemeOption } from "./components/SettingsModal";
+import FiscalAvatar from "./components/FiscalAvatar";
 
 import { 
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
@@ -131,9 +132,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
 
-  // Derive the active operacionando role of multiple roles
-  const effectiveRole = selectedRole || currentUser?.role || "Colaborador";
-  const effectiveUser = currentUser ? { ...currentUser, role: effectiveRole } : null;
+  // Derive the active operating role strictly when currentUser exists
+  const effectiveRole: UserRole | null = currentUser ? (selectedRole || currentUser.role || "Colaborador") : null;
+  const effectiveUser = (currentUser && effectiveRole) ? { ...currentUser, role: effectiveRole } : null;
 
   // Sync selectedRole with currentUser.role when currentUser changes, but keep if within their roles array
   useEffect(() => {
@@ -348,19 +349,20 @@ export default function App() {
         return profile;
       }
 
-      // Colaborador is valid ONLY if registered under a CLA and existing in collaborators
-      if (profile.role === "Colaborador" && profile.claId) {
+      // Colaborador is valid ONLY if registered in collaborators collection with status Confirmado
+      if (profile.role === "Colaborador") {
         const collab = await findCollaboratorByEmail(email);
-        if (collab && (collab.claId === profile.claId || collab.status === "Confirmado")) {
-          if (!profile.hasAccessed) {
+        if (collab && collab.status === "Confirmado" && (collab.claId === profile.claId || !profile.claId)) {
+          if (!profile.hasAccessed || !profile.claId) {
             profile.hasAccessed = true;
+            profile.claId = collab.claId;
             await saveUserProfile(profile);
           }
           return profile;
         }
       }
 
-      // If we reach here, this profile was an invalid self-created or orphaned profile.
+      // If we reach here, this profile was an invalid, unconfirmed, or orphaned profile.
       // Delete the invalid profile from Firestore so it no longer grants access!
       try {
         await deleteUserProfile(user.uid);
@@ -386,11 +388,13 @@ export default function App() {
       return profile;
     }
 
-    // 7. USER IS UNREGISTERED: block access, sign out, and redirect to public fiscal inscription
+    // 7. USER IS UNREGISTERED OR NOT YET APPROVED: block access, sign out, and redirect to public fiscal form
     await signOut(auth);
+    setCurrentUser(null);
+    setSelectedRole(null);
     setPublicFormPrefill({ email, name: user.displayName || "" });
     setUnregisteredNotice(
-      `O e-mail "${email}" não possui cadastro ativo no sistema CalanguS. Se você deseja fazer parte da equipe de aplicação do ENEM 2026, realize sua pré-inscrição de fiscal no formulário abaixo.`
+      `Acesso Restrito: O e-mail "${email}" não possui cadastro ativo ou homologado no sistema CalanguS. Se você deseja fazer parte da equipe de fiscais do ENEM 2026, realize sua pré-inscrição no formulário abaixo.`
     );
     setIsPublicForm(true);
     return null;
@@ -410,6 +414,7 @@ export default function App() {
         setCurrentUser(profile);
       } else {
         setCurrentUser(null);
+        setSelectedRole(null);
       }
     } catch (err) {
       console.error("Login popup failed:", err);
@@ -420,6 +425,7 @@ export default function App() {
     try {
       await signOut(auth);
       setCurrentUser(null);
+      setSelectedRole(null);
     } catch (err) {
       console.error("Logout failed:", err);
     }
@@ -434,6 +440,7 @@ export default function App() {
       if (!user) {
         if (active) {
           setCurrentUser(null);
+          setSelectedRole(null);
           setAuthInitialized(true);
         }
         return;
@@ -444,27 +451,46 @@ export default function App() {
         if (!profile) {
           if (active) {
             setCurrentUser(null);
+            setSelectedRole(null);
             setAuthInitialized(true);
           }
           return;
         }
 
         if (active) {
+          setCurrentUser(profile);
+          setAuthInitialized(true);
+
           // Subscribe to dynamic database updates for this user profile document
-          unsubUserProfileList = subscribeToUserProfile(user.uid, (updatedProfile) => {
+          unsubUserProfileList = subscribeToUserProfile(user.uid, async (updatedProfile) => {
             if (active) {
               if (updatedProfile) {
+                // If the profile role is Colaborador, verify that their status is still Confirmado
+                if (updatedProfile.role === "Colaborador") {
+                  const collab = await findCollaboratorByEmail(user.email);
+                  if (!collab || collab.status !== "Confirmado") {
+                    await signOut(auth);
+                    setCurrentUser(null);
+                    setSelectedRole(null);
+                    setUnregisteredNotice(
+                      `Acesso revogado: O cadastro associado ao e-mail "${user.email}" não se encontra com status Confirmado.`
+                    );
+                    setIsPublicForm(true);
+                    return;
+                  }
+                }
                 setCurrentUser(updatedProfile);
               } else {
                 setCurrentUser(profile);
               }
-              setAuthInitialized(true);
             }
           });
         }
       } catch (err) {
         console.error("Error signing in user session:", err);
         if (active) {
+          setCurrentUser(null);
+          setSelectedRole(null);
           setAuthInitialized(true);
         }
       }
@@ -603,6 +629,33 @@ export default function App() {
     const rec = collaborators.find(c => c.email === currentUser.email);
     if (rec?.id) {
       await updateCollaborator(rec.id, updates);
+    }
+    // Also synchronize user profile photo and name if changed
+    if (updates.photoUrl !== undefined || updates.name !== undefined) {
+      const updatedUser: UserProfile = {
+        ...currentUser,
+        ...(updates.photoUrl !== undefined ? { photoUrl: updates.photoUrl } : {}),
+        ...(updates.name !== undefined ? { name: updates.name } : {}),
+      };
+      setCurrentUser(updatedUser);
+      await saveUserProfile(updatedUser);
+    }
+  };
+
+  // Handler to update current user's profile photo (SuperAdmin, CLA, ALA, or Colaborador)
+  const handleUpdateUserProfilePhoto = async (newPhotoUrl: string) => {
+    if (!currentUser) return;
+    const updatedUser: UserProfile = {
+      ...currentUser,
+      photoUrl: newPhotoUrl,
+    };
+    setCurrentUser(updatedUser);
+    await saveUserProfile(updatedUser);
+
+    // If user has a collaborator record, synchronize it as well
+    const rec = collaborators.find(c => c.email === currentUser.email);
+    if (rec?.id) {
+      await updateCollaborator(rec.id, { photoUrl: newPhotoUrl });
     }
   };
 
@@ -820,13 +873,30 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                {/* Active Profile Info */}
-                <div className="hidden md:block text-right">
-                  <span className="text-sm font-extrabold block leading-none text-slate-800 dark:text-white">{effectiveUser?.name}</span>
-                  <span className="text-[9px] uppercase font-bold text-emerald-500 dark:text-emerald-400 tracking-wider">
-                    {effectiveRole}{(effectiveUser?.coordinationCode || building?.coordRoom) ? ` - Coord: ${effectiveUser?.coordinationCode || building?.coordRoom}` : ""}
-                  </span>
+              <div className="flex items-center gap-3 md:gap-4">
+                {/* Active Profile Info & Avatar with direct photo click */}
+                <div 
+                  onClick={() => {
+                    if (effectiveRole !== "Colaborador") {
+                      setIsSettingsOpen(true);
+                    }
+                  }}
+                  className={`flex items-center gap-2.5 ${effectiveRole !== "Colaborador" ? "cursor-pointer group hover:opacity-90" : ""}`}
+                  title={effectiveRole !== "Colaborador" ? "Clique para gerenciar foto e configurações" : "Meu Perfil"}
+                >
+                  <FiscalAvatar
+                    photoUrl={effectiveUser?.photoUrl || currentUser?.photoUrl}
+                    name={effectiveUser?.name || currentUser?.name}
+                    role={effectiveRole}
+                    size="md"
+                    className="border-2 border-emerald-500/50 shadow-sm group-hover:scale-105 transition-transform"
+                  />
+                  <div className="hidden md:block text-right">
+                    <span className="text-sm font-extrabold block leading-none text-slate-800 dark:text-white group-hover:text-emerald-500 transition">{effectiveUser?.name}</span>
+                    <span className="text-[9px] uppercase font-bold text-emerald-500 dark:text-emerald-400 tracking-wider">
+                      {effectiveRole}{(effectiveUser?.coordinationCode || building?.coordRoom) ? ` - Coord: ${effectiveUser?.coordinationCode || building?.coordRoom}` : ""}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Configuration Settings Button */}
@@ -1144,7 +1214,7 @@ export default function App() {
                         <AccessManagementView 
                           currentUser={effectiveUser || currentUser} 
                           colegas={colegas} 
-                          activeClaId={(effectiveRole === "ALA" || effectiveRole === "Colaborador") ? (effectiveUser?.claId || effectiveUser?.uid || currentUser.uid) : (effectiveUser?.uid || currentUser.uid)} 
+                          activeClaId={effectiveRole === "ALA" ? (effectiveUser?.claId || effectiveUser?.uid || currentUser.uid) : (effectiveUser?.uid || currentUser.uid)} 
                           readOnly={effectiveRole === "ALA"}
                         />
                       </div>
@@ -1186,7 +1256,7 @@ export default function App() {
                     return (
                       <div className="animate-fade-in">
                         <ClaActivitiesView 
-                          activeClaId={(effectiveRole === "ALA" || effectiveRole === "Colaborador") ? (effectiveUser?.claId || effectiveUser?.uid || currentUser.uid) : (effectiveUser?.uid || currentUser.uid)} 
+                          activeClaId={effectiveRole === "ALA" ? (effectiveUser?.claId || effectiveUser?.uid || currentUser.uid) : (effectiveUser?.uid || currentUser.uid)} 
                           activities={claActivities} 
                           readOnly={effectiveRole === "ALA"}
                         />
@@ -1367,6 +1437,8 @@ export default function App() {
         setColorTheme={setColorTheme}
         themeMode={theme}
         setThemeMode={setTheme}
+        currentUser={effectiveUser || currentUser}
+        onUpdatePhoto={handleUpdateUserProfilePhoto}
       />
   </div>
   );

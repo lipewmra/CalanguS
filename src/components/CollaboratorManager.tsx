@@ -5,6 +5,9 @@ import { auditCollaborator } from "../lib/data-validator";
 import CollaboratorFailureModal from "./CollaboratorFailureModal";
 import TransferRequestsModal from "./TransferRequestsModal";
 import NetworkReservesPool from "./NetworkReservesPool";
+import FiscalAvatar from "./FiscalAvatar";
+import ImageLightboxModal, { LightboxData } from "./ImageLightboxModal";
+import PhotoUploader from "./PhotoUploader";
 import { 
   Users, UserPlus, Upload, ShieldAlert, BadgeInfo, Trash, Mail, 
   MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
@@ -90,6 +93,8 @@ export default function CollaboratorManager({
   ).length;
 
   // Form states
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [lightboxData, setLightboxData] = useState<LightboxData | null>(null);
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [cpf, setCpf] = useState("");
@@ -161,6 +166,7 @@ export default function CollaboratorManager({
 
   const handleStartEdit = (collab: CollaboratorInfo) => {
     setEditingCollabId(collab.id || null);
+    setPhotoUrl(collab.photoUrl || "");
     setName(collab.name || "");
     setBirthDate(collab.birthDate || "");
     setCpf(collab.cpf || "");
@@ -220,6 +226,7 @@ export default function CollaboratorManager({
       cpf,
       whatsapp,
       email,
+      photoUrl,
       education,
       disability,
       hasWorkedEnem: finalPastEditions.length > 0,
@@ -240,6 +247,7 @@ export default function CollaboratorManager({
       
       // Reset form fields
       setEditingCollabId(null);
+      setPhotoUrl("");
       setName("");
       setBirthDate("");
       setCpf("");
@@ -287,6 +295,7 @@ export default function CollaboratorManager({
       cpf,
       whatsapp,
       email,
+      photoUrl,
       education,
       disability,
       hasWorkedEnem: finalPastEditions.length > 0,
@@ -310,6 +319,7 @@ export default function CollaboratorManager({
       setLocalSuccessMsg(`Colaborador "${name}" adicionado com sucesso!`);
       
       // Reset form fields
+      setPhotoUrl("");
       setName("");
       setBirthDate("");
       setCpf("");
@@ -659,7 +669,8 @@ export default function CollaboratorManager({
       {activeTabSubList(
         activeSubTab, filterType, setFilterType, filteredCollaborators, 
         sendEmailNotification, confirmStaff, refuseStaff, onDelete, handleStartEdit, 
-        claId, onSimulatePublicRecruit, setDiagnoseCollab, () => setIsTransferModalOpen(true)
+        claId, onSimulatePublicRecruit, setDiagnoseCollab, () => setIsTransferModalOpen(true),
+        (data) => setLightboxData(data)
       )}
 
       {/* SUBTAB 2: NETWORK RESERVES POOL (BANCO GERAL DE RESERVAS) */}
@@ -673,12 +684,13 @@ export default function CollaboratorManager({
           allBuildings={allBuildings}
           allUsers={allUsers}
           onRequestTransfer={onRequestTransfer || (async () => {})}
+          onViewPhoto={(data) => setLightboxData(data)}
         />
       )}
 
       {/* SUBTAB 3: ADD FORM */}
       {activeTabSubAddForm(
-        activeSubTab, name, setName, birthDate, setBirthDate, cpf, setCpf, whatsapp, setWhatsapp, email, setEmail,
+        activeSubTab, name, setName, photoUrl, setPhotoUrl, birthDate, setBirthDate, cpf, setCpf, whatsapp, setWhatsapp, email, setEmail,
         education, setEducation, disability, setDisability, hasWorkedEnem, setHasWorkedEnem, pixKey, setPixKey,
         referencePerson, setReferencePerson, specialRole, setSpecialRole, languages, setLanguages, isReserve, setIsReserve,
         showPastYears, setShowPastYears, availableYears, pastEditionsSelected, setPastEditionsSelected, pastEditionsRoles, setPastEditionsRoles,
@@ -692,6 +704,14 @@ export default function CollaboratorManager({
             <span>📝</span> Editar Cadastro de Fiscal (Orion Sync)
           </h3>
           
+          <PhotoUploader
+            photoUrl={photoUrl}
+            onChange={setPhotoUrl}
+            name={name || "Fiscal"}
+            label="Foto de Identificação do Fiscal"
+            helpText="Atualize a foto de identificação do colaborador para visualização no sistema e confecção de crachás."
+          />
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Nome Completo</label>
@@ -940,6 +960,12 @@ export default function CollaboratorManager({
         onRejectTransfer={onRejectTransfer || (async () => {})}
         onCancelTransfer={onCancelTransfer}
       />
+
+      {/* Expanded Photo Lightbox Modal */}
+      <ImageLightboxModal
+        data={lightboxData}
+        onClose={() => setLightboxData(null)}
+      />
     </div>
   );
 }
@@ -957,7 +983,8 @@ function activeTabSubList(
   claId: string,
   onSimulatePublicRecruit?: () => void,
   onOpenDiagnostic?: (c: CollaboratorInfo) => void,
-  onOpenTransferRequests?: () => void
+  onOpenTransferRequests?: () => void,
+  onOpenPhotoLightbox?: (data: LightboxData) => void
 ) {
   if (activeSubTab !== "list") return null;
 
@@ -1062,56 +1089,74 @@ function activeTabSubList(
                 <tr key={c.id} className="hover:bg-slate-500/5 transition">
                   {/* Name detail */}
                   <td className="p-4">
-                    <div className="flex items-center gap-1.5">
-                      <div className="font-extrabold text-slate-900 dark:text-white text-sm">{c.name}</div>
-                      {c.isExternalRecruit && (
-                        <span className="text-[8px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-extrabold border border-indigo-500/20 px-1.5 rounded">RECRUTA_EXTERNO</span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-slate-400 dark:text-slate-450 font-mono mt-0.5">{c.email} | {c.whatsapp}</div>
-                    {c.referencePerson && (
-                      <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5 flex items-center gap-1">
-                        <span>👤 Indicação / Ref:</span>
-                        <span className="underline">{c.referencePerson}</span>
+                    <div className="flex items-center gap-3">
+                      <FiscalAvatar
+                        photoUrl={c.photoUrl}
+                        name={c.name}
+                        size="md"
+                        onClick={() => onOpenPhotoLightbox?.({
+                          imageUrl: c.photoUrl || "",
+                          name: c.name,
+                          role: c.assignedRole || (c.isReserve ? "Fiscal Reserva" : "Fiscal de Sala"),
+                          cpf: c.cpf,
+                          claName: originName,
+                          education: c.education,
+                          specialRole: c.specialRole
+                        })}
+                      />
+                      <div className="grow min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <div className="font-extrabold text-slate-900 dark:text-white text-sm truncate">{c.name}</div>
+                          {c.isExternalRecruit && (
+                            <span className="text-[8px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-extrabold border border-indigo-500/20 px-1.5 rounded shrink-0">RECRUTA_EXTERNO</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 dark:text-slate-450 font-mono mt-0.5">{c.email} | {c.whatsapp}</div>
+                        {c.referencePerson && (
+                          <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5 flex items-center gap-1">
+                            <span>👤 Indicação / Ref:</span>
+                            <span className="underline">{c.referencePerson}</span>
+                          </div>
+                        )}
+                        
+                        {/* Tags line: CLA Tag, Reserve/Role Tag, Transfer request tag */}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {/* Origin CLA TAG */}
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20" title={`Cadastrado no CLA: ${originName}`}>
+                            <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
+                            <span>CLA: {originName}</span>
+                          </span>
+
+                          {c.status === "Pendente" ? (
+                            <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/30 flex items-center gap-1">
+                              <span>⏳ Aguardando Aprovação</span>
+                            </span>
+                          ) : c.status === "Recusado" ? (
+                            <span className="bg-rose-500/15 text-rose-700 dark:text-rose-300 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-rose-500/30">
+                              Recusado
+                            </span>
+                          ) : c.isReserve ? (
+                            <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/20">
+                              RESERVA
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-500/20">
+                              {c.assignedRole || "Não Definido"}: {c.assignedRoom || "Sem Sala (Arraste)"}
+                            </span>
+                          )}
+
+                          {c.transferRequest && c.transferRequest.status === "Pendente" && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenTransferRequests?.()}
+                              className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-300 font-black text-[8.5px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/40 animate-pulse cursor-pointer flex items-center gap-1"
+                              title="Clique para abrir e responder ao pedido de liberação"
+                            >
+                              <span>⏳ Pedido de Liberação Pendente</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    )}
-                    
-                    {/* Tags line: CLA Tag, Reserve/Role Tag, Transfer request tag */}
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      {/* Origin CLA TAG */}
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20" title={`Cadastrado no CLA: ${originName}`}>
-                        <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
-                        <span>CLA: {originName}</span>
-                      </span>
-
-                      {c.status === "Pendente" ? (
-                        <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/30 flex items-center gap-1">
-                          <span>⏳ Aguardando Aprovação</span>
-                        </span>
-                      ) : c.status === "Recusado" ? (
-                        <span className="bg-rose-500/15 text-rose-700 dark:text-rose-300 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-rose-500/30">
-                          Recusado
-                        </span>
-                      ) : c.isReserve ? (
-                        <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/20">
-                          RESERVA
-                        </span>
-                      ) : (
-                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-500/20">
-                          {c.assignedRole || "Não Definido"}: {c.assignedRoom || "Sem Sala (Arraste)"}
-                        </span>
-                      )}
-
-                      {c.transferRequest && c.transferRequest.status === "Pendente" && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenTransferRequests?.()}
-                          className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-300 font-black text-[8.5px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/40 animate-pulse cursor-pointer flex items-center gap-1"
-                          title="Clique para abrir e responder ao pedido de liberação"
-                        >
-                          <span>⏳ Pedido de Liberação Pendente</span>
-                        </button>
-                      )}
                     </div>
                   </td>
 
@@ -1248,6 +1293,8 @@ function activeTabSubAddForm(
   activeSubTab: string,
   name: string,
   setName: any,
+  photoUrl: string,
+  setPhotoUrl: any,
   birthDate: string,
   setBirthDate: any,
   cpf: string,
@@ -1291,6 +1338,14 @@ function activeTabSubAddForm(
       <h3 className="text-base font-display font-black text-slate-800 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-800 pb-2 flex items-center gap-2">
         <span>👤</span> Form Cadastro Individual
       </h3>
+
+      <PhotoUploader
+        photoUrl={photoUrl}
+        onChange={setPhotoUrl}
+        name={name || "Novo Fiscal"}
+        label="Foto de Identificação do Fiscal"
+        helpText="Faça o upload de uma foto clara do colaborador para uso nos relatórios, listagens e crachás."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div>
