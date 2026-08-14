@@ -452,6 +452,7 @@ export default function CollaboratorManager({
 
       const getEducation = (educationStr: string): any => {
         const norm = (educationStr || "").trim().toLowerCase();
+        if (norm.includes("fundamental") || norm.includes("alfabetizado")) return "Ensino Fundamental (Alfabetizado)";
         if (norm.includes("médio") || norm.includes("medio")) return "Ensino Médio";
         if (norm.includes("técnico") || norm.includes("tecnico")) return "Ensino Técnico";
         if (norm.includes("superior cursando") || norm.includes("faculdade cursando")) return "Ensino Superior Cursando";
@@ -784,6 +785,7 @@ export default function CollaboratorManager({
                 onChange={(e) => setEducation(e.target.value as any)}
                 className="w-full border-2 border-slate-105 dark:border-slate-805 rounded-xl px-2 py-2.5 bg-white dark:bg-[#101726] text-slate-800 dark:text-slate-200 text-xs font-bold focus:outline-hidden"
               >
+                <option value="Ensino Fundamental (Alfabetizado)">Ensino Fundamental (Alfabetizado)</option>
                 <option value="Ensino Médio">Ensino Médio</option>
                 <option value="Ensino Técnico">Ensino Técnico</option>
                 <option value="Ensino Superior Cursando">Ensino Superior Cursando</option>
@@ -1383,6 +1385,7 @@ function activeTabSubAddForm(
             onChange={(e) => setEducation(e.target.value as any)}
             className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2 py-2.5 bg-white dark:bg-[#101726] text-slate-800 dark:text-slate-200 text-xs font-bold"
           >
+            <option value="Ensino Fundamental (Alfabetizado)">Ensino Fundamental (Alfabetizado)</option>
             <option value="Ensino Médio">Ensino Médio</option>
             <option value="Ensino Técnico">Ensino Técnico</option>
             <option value="Ensino Superior Cursando">Ensino Superior Cursando</option>

@@ -578,6 +578,7 @@ export default function CollaboratorDashboard({
                   onChange={(e) => setEducation(e.target.value as any)}
                   className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold text-slate-800 dark:text-white focus:outline-none"
                 >
+                  <option value="Ensino Fundamental (Alfabetizado)">Ensino Fundamental (Alfabetizado)</option>
                   <option value="Ensino Médio">Ensino Médio</option>
                   <option value="Ensino Técnico">Ensino Técnico</option>
                   <option value="Ensino Superior Cursando">Ensino Superior Cursando</option>

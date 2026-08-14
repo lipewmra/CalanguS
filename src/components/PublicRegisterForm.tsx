@@ -635,6 +635,7 @@ export default function PublicRegisterForm({
                     onChange={(e) => setEducation(e.target.value as any)}
                     className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm font-bold shadow-inner"
                   >
+                    <option value="Ensino Fundamental (Alfabetizado)">Ensino Fundamental (Alfabetizado)</option>
                     <option value="Ensino Médio">Ensino Médio</option>
                     <option value="Ensino Técnico">Ensino Técnico</option>
                     <option value="Ensino Superior Cursando">Ensino Superior Cursando</option>

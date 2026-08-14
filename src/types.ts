@@ -66,7 +66,7 @@ export interface CollaboratorInfo {
   cpf: string;
   whatsapp: string;
   email: string;
-  education: "Ensino Médio" | "Ensino Técnico" | "Ensino Superior Cursando" | "Ensino Superior Completo" | "Pós-Graduação" | "Mestrado" | "Doutorado";
+  education: "Ensino Fundamental (Alfabetizado)" | "Ensino Médio" | "Ensino Técnico" | "Ensino Superior Cursando" | "Ensino Superior Completo" | "Pós-Graduação" | "Mestrado" | "Doutorado";
   disability: string; // "Nenhuma" or text
   hasWorkedEnem: boolean;
   pastEditions: PastEdition[]; // checkbox lists for 1998 up to 2025
