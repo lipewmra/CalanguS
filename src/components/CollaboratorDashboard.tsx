@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo } from "../types";
 import PhotoUploader from "./PhotoUploader";
+import { DEFAULT_ENEM_SCHEDULE } from "./CollaboratorSettingsView";
 
 interface CollaboratorDashboardProps {
   currentUser: UserProfile;
@@ -31,7 +32,7 @@ interface CollaboratorDashboardProps {
   catering: CateringInfo | null;
   collaboratorRecord: CollaboratorInfo | null;
   individualConfirmationStatus: "Pendente" | "Confirmado" | "Recusado";
-  onUpdateConfirmationStatus: (status: "Pendente" | "Confirmado" | "Recusado") => void;
+  onUpdateConfirmationStatus: (status: "Pendente" | "Confirmado" | "Recusado", roleNameToRefuse?: string) => void;
   onUpdateProfile: (updates: Partial<CollaboratorInfo>) => Promise<void>;
 }
 
@@ -45,6 +46,7 @@ export default function CollaboratorDashboard({
   onUpdateProfile
 }: CollaboratorDashboardProps) {
   const [activeMenuTab, setActiveMenuTab] = useState<string>("");
+  const [isRefusingModalOpen, setIsRefusingModalOpen] = useState(false);
   
   // Profile edit states
   const [name, setName] = useState("");
@@ -175,46 +177,10 @@ export default function CollaboratorDashboard({
     }
   };
 
-  // Materials Mock List shared by the CLA 
-  const materialsList = [
-    { 
-      title: "Guia Oficial do Aplicador de Exames ENEM 2026", 
-      type: "pdf", 
-      size: "2.4 MB", 
-      desc: "Normas completas de segurança, recepção de candidatos e tratamento de incidentes." 
-    },
-    { 
-      title: "Procedimentos de Segurança e Biometria Cebraspe", 
-      type: "video", 
-      size: "12 min", 
-      desc: "Videoaula explicativa contendo o protocolo passo a passo de coleta das digitais do envelope." 
-    },
-    { 
-      title: "Cronograma de Toques de Campainha e Portões", 
-      type: "image", 
-      size: "450 KB", 
-      desc: "Folheto visual rápido para fixar na mesa sobre a contagem regressiva de horários do ENEM." 
-    },
-    { 
-      title: "Manual Cebraspe de Incidentes Sanitários e Acessibilidade", 
-      type: "link", 
-      size: "Link Externo", 
-      desc: "Normas de atendimento especializado para candidatos gestantes, cegos e com baixa mobilidade." 
-    }
-  ];
-
-  // Agenda Timeline List
-  const agendaTimeline = [
-    { time: "11:00h", title: "Chegada Obrigatória", desc: "Apresente-se à CLA na sala de coordenação com documento físico para assinatura da ata de presença de fiscais." },
-    { time: "11:15h", title: "Reunião Geral Cebraspe", desc: "Briefing tático comandado pela coordenação do colégio. Alinhamento de salas e entrega do crachá oficial." },
-    { time: "11:30h", title: "Vistoria e Preparo das Salas", desc: "Inspeção física, numeração de carteiras rascunho, e verificação dos lacres de janelas e ar-condicionado." },
-    { time: "12:00h", title: "Abertura dos Portões", desc: "Entrada dos candidatos na escola. Fiscais posicionados em frente às portas orientando o fluxo com calma." },
-    { time: "13:00h", title: "Fechamento dos Portões", desc: "Fechamento automático e irrevogável coordenado com a rota de segurança militar." },
-    { time: "13:00h - 13:30h", title: "Identificação Tática", desc: "Coleta das assinaturas, dados do documento oficial, e verificação dos envelopes porta-objetos lacrados." },
-    { time: "13:30h", title: "Início Oficial das Provas", desc: "Autorização para abertura do pacote plástico de cadernos de prova pela testemunha de sala." },
-    { time: "15:30h", title: "Distribuição do Lanche", desc: "Envio assistido dos lanches aos aplicadores em regime de revezamento programado." },
-    { time: "18:30h / 19:30h", title: "Encerramento e Ata Final", desc: "Coleta rigorosa do material excedente de prova, lacre do envelope de gabaritos e devolução à CLA." }
-  ];
+  // Agenda Timeline List - loaded dynamically from building settings or default official schedule
+  const activeSchedule = (building?.collaboratorSchedule && building.collaboratorSchedule.length > 0)
+    ? building.collaboratorSchedule 
+    : DEFAULT_ENEM_SCHEDULE;
 
   // Is Snack released?
   const isSnackMenuReleased = catering?.releasedToCollaborators === true;
@@ -227,11 +193,10 @@ export default function CollaboratorDashboard({
 
   const activeQuote = catering?.quotes?.find(q => q.selected) || catering?.quotes?.[0] || null;
 
-  // Checklist Progress calculation
+  // Checklist Progress calculation - accurate 0% to 100%
   const totalChecklist = checklistItems.length;
   const checkedCount = checklistItems.filter(i => i.checked).length;
-  const checklistPercent = Math.round((checkedCount / totalChecklist) * 105) || 100; // max out properly
-  const finalPercent = Math.min(100, checklistPercent);
+  const finalPercent = totalChecklist > 0 ? Math.round((checkedCount / totalChecklist) * 100) : 0;
 
   const desktopMenuTab = activeMenuTab || "status";
 
@@ -378,8 +343,8 @@ export default function CollaboratorDashboard({
         {desktopMenuTab === "status" && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Status da Inscrição & Confirmação</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Sinalize suas intenções de participação ao Cebraspe para que os coordenadores de prédio concluam as alocações.</p>
+              <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Status do Colaborador & Local de Aplicação</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Consulte seus dados cadastrais, local de prova e informações de atuação para o ENEM.</p>
             </div>
 
             {/* Quick Photo & Fiscal Status Banner */}
@@ -432,35 +397,174 @@ export default function CollaboratorDashboard({
               </button>
             </div>
 
-            <div className="p-4 bg-slate-50 dark:bg-[#070b13]/60 border border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
-              <div>
-                <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block mb-1">Seu status atual de presença:</span>
-                <div className="flex items-center gap-2">
-                  <span className={`font-black text-xs px-3 py-1 rounded-full border ${individualConfirmationStatus === "Confirmado" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/10" : individualConfirmationStatus === "Recusado" ? "bg-rose-500/15 text-rose-650 dark:text-rose-450 border-rose-500/10" : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/10"}`}>
-                    ★ {individualConfirmationStatus}
-                  </span>
-                  {individualConfirmationStatus === "Confirmado" && (
-                    <span className="text-emerald-555 text-[10px] font-bold">✓ Presença Confirmada no Colégio</span>
-                  )}
+            {/* BUSINESS LOGIC: PRESENCE CONFIRMATION SECTION */}
+            {(() => {
+              const isAuthorized = collaboratorRecord?.status === "Confirmado";
+              const assignedRole = collaboratorRecord?.assignedRole?.trim();
+              const isReserve = Boolean(collaboratorRecord?.isReserve);
+              const hasAssignedRole = Boolean(assignedRole && assignedRole !== "" && !isReserve);
+              const hasRefused = Boolean(collaboratorRecord?.refusedRole || collaboratorRecord?.refusalTag);
+              const isConfirmedAttendance = collaboratorRecord?.attendanceStatus === "Confirmado";
+
+              // Only show presence confirmation when collaborator is authorized AND has an assigned active role (not reserve)
+              if (isAuthorized && hasAssignedRole) {
+                return (
+                  <div className="p-5 bg-gradient-to-r from-emerald-500/10 via-slate-50 to-indigo-500/10 dark:from-emerald-500/10 dark:via-[#0c1220] dark:to-indigo-500/10 border-2 border-emerald-500/30 rounded-2xl space-y-4 shadow-md animate-fade-in">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-mono font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md border border-emerald-500/30">
+                            CONVOCAÇÃO OFICIAL CEBRASPE
+                          </span>
+                          {isConfirmedAttendance ? (
+                            <span className="text-[10px] bg-emerald-600 text-white font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                              <span>Presença Confirmada</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-amber-500/30 animate-pulse">
+                              ⏳ Confirmação Pendente
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="text-sm font-display font-black text-slate-850 dark:text-white mt-1.5 flex items-center gap-1.5">
+                          <span>📋</span> Função Designada: <span className="text-indigo-600 dark:text-indigo-400 underline">{assignedRole}</span>
+                        </h4>
+                      </div>
+
+                      {collaboratorRecord?.assignedRoom && (
+                        <div className="bg-white dark:bg-[#101726] border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-center">
+                          <span className="text-[9px] uppercase font-bold text-slate-400 block">Sala Designada</span>
+                          <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">{collaboratorRecord.assignedRoom}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                        {isConfirmedAttendance ? (
+                          <span>
+                            ✓ Você confirmou sua presença para exercer a função de <strong>{assignedRole}</strong> no ENEM 2026. A coordenação conta com sua pontualidade!
+                          </span>
+                        ) : (
+                          <span>
+                            O CLA autorizou seu cadastro e fez a sua associação na função de <strong>{assignedRole}</strong>. Por favor, <strong>confirme sua presença</strong> para garantir sua vaga na escala oficial do ENEM.
+                          </span>
+                        )}
+                      </p>
+
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onUpdateConfirmationStatus("Confirmado")}
+                          className={`btn-3d py-2.5 px-4 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                            isConfirmedAttendance 
+                              ? "bg-emerald-600 text-white shadow-md" 
+                              : "bg-emerald-500 hover:bg-emerald-600 text-white"
+                          }`}
+                        >
+                          <Check className="w-4 h-4 stroke-[3]" />
+                          <span>{isConfirmedAttendance ? "Presença Já Confirmada" : "Confirmar Presença na Função"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsRefusingModalOpen(true)}
+                          className="btn-3d py-2.5 px-3.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5"
+                          title="Recusar a convocação nesta função e retornar para a reserva"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Recusar Função</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (isAuthorized && !hasAssignedRole && hasRefused) {
+                return (
+                  <div className="p-5 bg-rose-500/10 border-2 border-rose-500/30 rounded-2xl space-y-3 animate-fade-in shadow-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0" />
+                        <h4 className="text-xs font-black uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                          Convocação Recusada — Você está no Banco de Reserva
+                        </h4>
+                      </div>
+                      <span className="text-[9px] bg-rose-500/20 text-rose-800 dark:text-rose-200 border border-rose-500/30 font-mono font-black uppercase px-2 py-0.5 rounded-md">
+                        RESERVA ATIVO
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-white/80 dark:bg-[#070b13]/80 rounded-xl border border-rose-500/20 text-xs text-rose-900 dark:text-rose-200 space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-rose-700 dark:text-rose-300">
+                        <span>🏷️</span>
+                        <span>TAG: <strong>{collaboratorRecord?.refusalTag || `Recusa de trabalho na função ${collaboratorRecord?.refusedRole}`}</strong></span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                        Você recusou a convocação para a função de <strong>{collaboratorRecord?.refusedRole || "Função anterior"}</strong>{collaboratorRecord?.refusedRoleDate ? ` (${collaboratorRecord.refusedRoleDate})` : ""}. A coordenação do CLA foi notificada e o cargo associado voltou a ficar vazio. Você continua cadastrado no banco de <strong>Fiscais Reservas</strong>. Caso o CLA atribua uma nova função a você, a opção de confirmação de presença será reaberta automaticamente aqui.
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
+              // When in reserve or waiting for role assignment: do not show any confirmation div
+              return null;
+            })()}
+
+            {/* Modal to Confirm Refusal of Role Convocations */}
+            {isRefusingModalOpen && collaboratorRecord?.assignedRole && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+                <div className="bg-white dark:bg-[#0c1220] max-w-md w-full rounded-2xl border-2 border-rose-500/30 p-6 space-y-5 shadow-2xl animate-scale-up">
+                  <div className="flex items-start gap-3">
+                    <div className="p-3 bg-rose-500/10 text-rose-600 rounded-xl shrink-0">
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-display font-black text-slate-900 dark:text-white">
+                        Recusar Convocação na Função?
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Você está prestes a recusar a atuação na função de <strong className="text-rose-600 dark:text-rose-400">{collaboratorRecord.assignedRole}</strong>.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-rose-500/5 rounded-xl border border-rose-500/20 text-xs text-slate-700 dark:text-slate-300 space-y-2">
+                    <div className="font-bold text-rose-700 dark:text-rose-400 text-[11px] uppercase tracking-wide">
+                      Consequências da Recusa:
+                    </div>
+                    <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
+                      <li>A coordenação do <strong>CLA receberá aviso imediato</strong> da sua recusa.</li>
+                      <li>O cargo de <strong>{collaboratorRecord.assignedRole}</strong> voltará a ficar vazio para alocação de outro fiscal.</li>
+                      <li>Você retornará para a equipe de <strong>Reserva</strong> com a TAG: <strong className="text-rose-600 dark:text-rose-400">"Recusa de trabalho na função {collaboratorRecord.assignedRole}"</strong>.</li>
+                    </ul>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsRefusingModalOpen(false)}
+                      className="px-4 py-2.5 border-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 cursor-pointer"
+                    >
+                      Cancelar e Manter Função
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onUpdateConfirmationStatus("Recusado", collaboratorRecord.assignedRole);
+                        setIsRefusingModalOpen(false);
+                      }}
+                      className="btn-3d py-2.5 px-5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-md cursor-pointer"
+                    >
+                      Confirmar Recusa
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <div className="flex gap-2.5">
-                <button
-                  onClick={() => onUpdateConfirmationStatus("Confirmado")}
-                  className={`btn-3d py-2 px-4 rounded-xl text-xs font-black transition cursor-pointer ${individualConfirmationStatus === "Confirmado" ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300"}`}
-                >
-                  <Check className="w-3.5 h-3.5 inline mr-1" />
-                  Confirmar Presença
-                </button>
-                <button
-                  onClick={() => onUpdateConfirmationStatus("Recusado")}
-                  className={`btn-3d py-2 px-4 rounded-xl text-xs font-black transition cursor-pointer ${individualConfirmationStatus === "Recusado" ? "bg-rose-600 text-white" : "bg-rose-500/10 text-rose-600 hover:bg-rose-500/20"}`}
-                >
-                  Recusar Participação
-                </button>
-              </div>
-            </div>
+            )}
 
             {building && (
               <div className="space-y-4">
@@ -772,40 +876,25 @@ export default function CollaboratorDashboard({
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Material Didático & Capacitação</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Acesse apostilas, normativas, briefings e vídeos recomendados pela coordenação para obter 100% de aproveitamento na aplicação do ENEM.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Acesse apostilas, normativas, briefings e orientações recomendadas pela coordenação para a aplicação do ENEM.</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {materialsList.map((mat, idx) => (
-                <div key={idx} className="p-4 bg-slate-50 dark:bg-[#070b13]/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3 flex flex-col justify-between shadow-xs">
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${mat.type === "pdf" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : mat.type === "video" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : mat.type === "image" ? "bg-sky-500/10 text-sky-600 dark:text-sky-400" : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"}`}>
-                        {mat.type}
-                      </span>
-                      <span className="text-[9px] text-slate-450 dark:text-slate-450 font-bold font-mono">{mat.size}</span>
-                    </div>
+            <div className="p-8 md:p-12 bg-white dark:bg-[#0c1220] border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl text-center space-y-4 shadow-xs">
+              <div className="w-16 h-16 mx-auto bg-gradient-to-br from-indigo-500/15 via-emerald-500/15 to-teal-500/15 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center border-2 border-indigo-500/25 shadow-sm">
+                <BookOpen className="w-8 h-8" />
+              </div>
 
-                    <h4 className="font-display font-black text-xs text-slate-800 dark:text-white mt-2 leading-snug">{mat.title}</h4>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-semibold leading-relaxed">{mat.desc}</p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => alert(`Simulando visualização/download de: ${mat.title}`)}
-                    className="btn-3d w-full py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-850 dark:text-slate-300 rounded-lg font-bold text-[10px] uppercase cursor-pointer flex items-center justify-center gap-1"
-                  >
-                    {mat.type === "video" ? (
-                      <Video className="w-3.5 h-3.5 text-amber-550" />
-                    ) : mat.type === "image" ? (
-                      <ImageIcon className="w-3.5 h-3.5 text-sky-500" />
-                    ) : (
-                      <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
-                    )}
-                    <span>Visualizar Material</span>
-                  </button>
-                </div>
-              ))}
+              <div className="space-y-2 max-w-md mx-auto">
+                <span className="inline-block px-3.5 py-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-full text-[10px] font-black uppercase tracking-wider">
+                  ⏳ Em Breve Teremos Conteúdo
+                </span>
+                <h4 className="text-base font-display font-black text-slate-850 dark:text-white">
+                  Materiais Didáticos & Guias do ENEM 2026
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                  A coordenação do Cebraspe e do CLA disponibilizará em breve os manuais oficiais, videoaulas instrutivas de procedimentos, portarias e orientações específicas nesta aba antes do dia do exame.
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -815,22 +904,41 @@ export default function CollaboratorDashboard({
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Agenda & Itinerário Tático do Fiscal</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Observe a contagem rigorosa de tempo regulada pela presidência Cebraspe e maratona de segurança nacional.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Observe a contagem rigorosa de horários regulada pela coordenação do local e pelo Cebraspe.</p>
             </div>
 
-            {/* Timeline component */}
+            {/* CLA Custom Instructions/Notices if configured */}
+            {building?.collaboratorInstructions && (
+              <div className="p-4 bg-indigo-500/10 border-2 border-indigo-500/20 rounded-2xl space-y-1.5 animate-fade-in">
+                <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 font-extrabold text-xs uppercase tracking-wider">
+                  <Info className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>Avisos & Instruções da Coordenação (CLA)</span>
+                </div>
+                <p className="text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed whitespace-pre-line">
+                  {building.collaboratorInstructions}
+                </p>
+              </div>
+            )}
+
+            {/* Timeline component with active schedule configured by CLA */}
             <div className="relative border-l-2 border-slate-200 dark:border-slate-800 pl-5 pr-1 ml-3 space-y-6">
-              {agendaTimeline.map((item, idx) => (
-                <div key={idx} className="relative group animate-fade-in font-sans">
+              {activeSchedule.map((item, idx) => (
+                <div key={item.id || idx} className="relative group animate-fade-in font-sans">
                   {/* Glowing timeline node */}
                   <div className="absolute -left-[27px] top-1 bg-white dark:bg-[#070b13] border-2 border-emerald-500 rounded-full w-4 h-4 flex items-center justify-center shadow-md group-hover:scale-110 transition duration-300">
                     <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
                   </div>
 
-                  <div className="bg-slate-50 dark:bg-[#070b13]/30 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
-                    <span className="text-[10px] font-black font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full block w-max uppercase tracking-wider">{item.time}</span>
-                    <h4 className="font-display font-black text-xs text-slate-800 dark:text-white mt-1.5 leading-snug">{item.title}</h4>
-                    <p className="text-[10px] text-slate-550 dark:text-slate-400 mt-1 font-semibold leading-relaxed">{item.desc}</p>
+                  <div className="bg-slate-50 dark:bg-[#070b13]/30 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+                    <span className="text-[10px] font-black font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full block w-max uppercase tracking-wider border border-emerald-500/20">
+                      {item.time}
+                    </span>
+                    <h4 className="font-display font-black text-xs text-slate-800 dark:text-white mt-1.5 leading-snug">
+                      {item.title}
+                    </h4>
+                    <p className="text-[11px] text-slate-550 dark:text-slate-400 mt-1 font-medium leading-relaxed">
+                      {item.desc}
+                    </p>
                   </div>
                 </div>
               ))}

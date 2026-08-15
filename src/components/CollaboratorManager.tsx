@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import { CollaboratorInfo, PastEdition, BuildingInfo, UserProfile } from "../types";
 import { downloadCsvTemplate } from "./CsvTemplate";
 import { auditCollaborator } from "../lib/data-validator";
@@ -11,8 +11,82 @@ import PhotoUploader from "./PhotoUploader";
 import { 
   Users, UserPlus, Upload, ShieldAlert, BadgeInfo, Trash, Mail, 
   MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
-  Building2, Globe, Clock, ArrowRightLeft, Sparkles
+  Building2, Globe, Clock, ArrowRightLeft, Sparkles, Search, Filter,
+  Calendar, ArrowUpDown, FileSpreadsheet, RotateCcw, Send, MessageSquare
 } from "lucide-react";
+
+export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "colaboradores_enem_calangus") {
+  const headers = [
+    "Nome Completo",
+    "CPF",
+    "Data de Nascimento",
+    "E-mail",
+    "WhatsApp",
+    "Chave PIX",
+    "Escolaridade",
+    "Deficiência / PCD",
+    "Função Especial",
+    "Função Atribuída",
+    "Sala Alocada",
+    "Condição",
+    "Status Cadastro CLA",
+    "Confirmação de Presença",
+    "Recusa de Função",
+    "Pessoa de Referência",
+    "Histórico Edições ENEM",
+    "Status Auditoria Orion",
+    "Data de Submissão",
+    "CLA Origem / Mantenedor"
+  ];
+
+  const escapeCSV = (val: any) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const rows = collabs.map(c => {
+    const formattedDate = c.createdAt ? new Date(c.createdAt).toLocaleString("pt-BR") : "Não informada";
+    const condition = c.isReserve ? "Reserva" : (c.assignedRole ? `Associado (${c.assignedRole})` : "Efetivo");
+    const pastExp = c.pastEditions && c.pastEditions.length > 0 
+      ? c.pastEditions.map(p => `${p.year}:${p.role}`).join(" | ") 
+      : (c.hasWorkedEnem ? "Sim" : "Novo no ENEM");
+
+    return [
+      escapeCSV(c.name),
+      escapeCSV(c.cpf),
+      escapeCSV(c.birthDate || ""),
+      escapeCSV(c.email || ""),
+      escapeCSV(c.whatsapp || ""),
+      escapeCSV(c.pixKey || ""),
+      escapeCSV(c.education || ""),
+      escapeCSV(c.disability || "Nenhuma"),
+      escapeCSV(c.specialRole || "Nenhuma"),
+      escapeCSV(c.assignedRole || "Não Atribuída"),
+      escapeCSV(c.assignedRoom || "Sem Sala"),
+      escapeCSV(condition),
+      escapeCSV(c.status),
+      escapeCSV(c.attendanceStatus || (c.assignedRole ? "Pendente" : "N/A")),
+      escapeCSV(c.refusedRole ? `Recusou ${c.refusedRole}` : (c.refusalTag || "Nenhuma")),
+      escapeCSV(c.referencePerson || ""),
+      escapeCSV(pastExp),
+      escapeCSV(c.orionStatus || "Ok"),
+      escapeCSV(formattedDate),
+      escapeCSV(c.originalClaName || c.claName || "")
+    ].join(";");
+  });
+
+  const csvContent = "\uFEFF" + [headers.join(";"), ...rows].join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `${title}_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 export const ENEM_ROLES = [
   { name: "Aplicador", desc: "Entrega cadernos de provas, fiscaliza candidatos e preenche a ata de sala." },
@@ -71,7 +145,12 @@ export default function CollaboratorManager({
 }: CollaboratorManagerProps) {
   
   const [activeSubTab, setActiveSubTab] = useState<"list" | "network_reserves" | "add" | "import" | "edit">("list");
-  const [filterType, setFilterType] = useState<"todos" | "efetivos" | "reservas" | "com_erro">("todos");
+  const [filterType, setFilterType] = useState<"todos" | "confirmados" | "pendentes" | "efetivos" | "reservas" | "recusados" | "com_erro">("todos");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchField, setSearchField] = useState<"all" | "name" | "email" | "cpf">("all");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [sortBy, setSortBy] = useState<"created_desc" | "created_asc" | "name_asc" | "name_desc">("created_desc");
 
   // Transfer requests modal state
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -556,13 +635,80 @@ export default function CollaboratorManager({
     reader.readAsText(file);
   };
 
-  // List filters helper
-  const filteredCollaborators = collaborators.filter(collab => {
-    if (filterType === "efetivos") return !collab.isReserve && collab.status === "Confirmado";
-    if (filterType === "reservas") return collab.isReserve && collab.status === "Confirmado";
-    if (filterType === "com_erro") return collab.orionStatus === "Erro";
-    return true; // todos
-  });
+  // List filters and search helper
+  const filteredCollaborators = useMemo(() => {
+    let result = [...collaborators];
+
+    // 1. Status Filter
+    if (filterType === "confirmados") {
+      result = result.filter(c => c.status === "Confirmado");
+    } else if (filterType === "pendentes") {
+      result = result.filter(c => c.status === "Pendente");
+    } else if (filterType === "efetivos") {
+      result = result.filter(c => !c.isReserve && c.status === "Confirmado");
+    } else if (filterType === "reservas") {
+      result = result.filter(c => c.isReserve && c.status === "Confirmado");
+    } else if (filterType === "recusados") {
+      result = result.filter(c => c.status === "Recusado" || c.refusedRole || c.refusalTag || c.attendanceStatus === "Recusado");
+    } else if (filterType === "com_erro") {
+      result = result.filter(c => c.orionStatus === "Erro");
+    }
+
+    // 2. Text Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(c => {
+        const matchesName = c.name.toLowerCase().includes(q);
+        const matchesEmail = c.email ? c.email.toLowerCase().includes(q) : false;
+        const matchesCpf = c.cpf ? c.cpf.replace(/\D/g, "").includes(q.replace(/\D/g, "")) || c.cpf.includes(q) : false;
+
+        if (searchField === "name") return matchesName;
+        if (searchField === "email") return matchesEmail;
+        if (searchField === "cpf") return matchesCpf;
+        return matchesName || matchesEmail || matchesCpf;
+      });
+    }
+
+    // 3. Submission Date Filter (createdAt)
+    if (dateStart) {
+      const start = new Date(dateStart).getTime();
+      result = result.filter(c => {
+        if (!c.createdAt) return false;
+        return new Date(c.createdAt).getTime() >= start;
+      });
+    }
+    if (dateEnd) {
+      // end of day
+      const end = new Date(dateEnd).getTime() + (24 * 60 * 60 * 1000 - 1);
+      result = result.filter(c => {
+        if (!c.createdAt) return false;
+        return new Date(c.createdAt).getTime() <= end;
+      });
+    }
+
+    // 4. Sorting
+    result.sort((a, b) => {
+      if (sortBy === "created_desc") {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      }
+      if (sortBy === "created_asc") {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeA - timeB;
+      }
+      if (sortBy === "name_asc") {
+        return a.name.localeCompare(b.name, "pt-BR");
+      }
+      if (sortBy === "name_desc") {
+        return b.name.localeCompare(a.name, "pt-BR");
+      }
+      return 0;
+    });
+
+    return result;
+  }, [collaborators, filterType, searchQuery, searchField, dateStart, dateEnd, sortBy]);
 
   return (
     <div className="bg-white dark:bg-[#0c1220]/90 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[6px_6px_0px_0px_#e2e8f0] dark:shadow-[6px_6px_0px_0px_#10b981]/20 transition-all duration-300" id="collaborator-management-panel">
@@ -667,10 +813,16 @@ export default function CollaboratorManager({
 
       {/* SUBTAB 1: COLLABORATORS LIST */}
       {activeTabSubList(
-        activeSubTab, filterType, setFilterType, filteredCollaborators, 
+        activeSubTab, filterType, setFilterType, filteredCollaborators, collaborators,
         sendEmailNotification, confirmStaff, refuseStaff, onDelete, handleStartEdit, 
         claId, onSimulatePublicRecruit, setDiagnoseCollab, () => setIsTransferModalOpen(true),
-        (data) => setLightboxData(data)
+        (data) => setLightboxData(data),
+        searchQuery, setSearchQuery,
+        searchField, setSearchField,
+        dateStart, setDateStart,
+        dateEnd, setDateEnd,
+        sortBy, setSortBy,
+        buildingName
       )}
 
       {/* SUBTAB 2: NETWORK RESERVES POOL (BANCO GERAL DE RESERVAS) */}
@@ -972,9 +1124,10 @@ export default function CollaboratorManager({
 
 function activeTabSubList(
   activeSubTab: string,
-  filterType: string,
-  setFilterType: any,
+  filterType: "todos" | "confirmados" | "pendentes" | "efetivos" | "reservas" | "recusados" | "com_erro",
+  setFilterType: (f: "todos" | "confirmados" | "pendentes" | "efetivos" | "reservas" | "recusados" | "com_erro") => void,
   filteredCollaborators: CollaboratorInfo[],
+  allCollaborators: CollaboratorInfo[],
   sendEmailNotification: any,
   confirmStaff: any,
   refuseStaff: any,
@@ -984,15 +1137,46 @@ function activeTabSubList(
   onSimulatePublicRecruit?: () => void,
   onOpenDiagnostic?: (c: CollaboratorInfo) => void,
   onOpenTransferRequests?: () => void,
-  onOpenPhotoLightbox?: (data: LightboxData) => void
+  onOpenPhotoLightbox?: (data: LightboxData) => void,
+  searchQuery: string = "",
+  setSearchQuery?: (q: string) => void,
+  searchField: "all" | "name" | "email" | "cpf" = "all",
+  setSearchField?: (f: "all" | "name" | "email" | "cpf") => void,
+  dateStart: string = "",
+  setDateStart?: (d: string) => void,
+  dateEnd: string = "",
+  setDateEnd?: (d: string) => void,
+  sortBy: "created_desc" | "created_asc" | "name_asc" | "name_desc" = "created_desc",
+  setSortBy?: (s: "created_desc" | "created_asc" | "name_asc" | "name_desc") => void,
+  buildingName: string = "Local de Aplicação"
 ) {
   if (activeSubTab !== "list") return null;
 
   // Track pending recruitment requests
-  const recruitmentRequestsCount = filteredCollaborators.filter(c => c.isExternalRecruit && c.status === "Pendente").length;
+  const recruitmentRequestsCount = allCollaborators.filter(c => c.isExternalRecruit && c.status === "Pendente").length;
+  const refusedCollabs = allCollaborators.filter(c => c.refusedRole || c.refusalTag || c.status === "Recusado" || c.attendanceStatus === "Recusado");
 
   return (
     <div className="space-y-4">
+      {/* Prominent Alert for Role Refusals */}
+      {refusedCollabs.length > 0 && (
+        <div className="p-4 bg-rose-500/10 border-2 border-rose-500/30 rounded-2xl flex items-center justify-between gap-3 shadow-xs animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                Aviso de Recusa de Função ({refusedCollabs.length})
+              </h4>
+              <p className="text-xs text-rose-900/80 dark:text-rose-200">
+                {refusedCollabs.length} colaborador(es) recusaram a função atribuída e retornaram à equipe de <strong>Reserva</strong> com TAG de recusa para nova designação. O cargo associado voltou a ficar vago.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 3D Glass Recruitment Link Info Card */}
       <div className="bg-gradient-to-r from-emerald-500/10 to-indigo-500/10 border-2 border-emerald-500/20 dark:border-indigo-500/20 rounded-2xl p-5 space-y-4 shadow-[#10b981]/5 shadow-lg animate-fade-in">
         <div className="space-y-1">
@@ -1051,17 +1235,142 @@ function activeTabSubList(
         </div>
       )}
 
-      {/* List Filters */}
-      <div className="flex gap-2 border-b-2 dark:border-slate-800 pb-3">
-        {(["todos", "efetivos", "reservas", "com_erro"] as const).map(f => (
+      {/* ADVANCED FILTER & SEARCH TOOLBAR */}
+      <div className="bg-slate-50 dark:bg-[#070b13]/60 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3.5">
+        
+        {/* Top line: Search Input + Field Selector + CSV Export */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search Box */}
+          <div className="flex items-center gap-2 flex-1">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery?.(e.target.value)}
+                placeholder="Pesquisar fiscais..."
+                className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:outline-emerald-500"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery?.("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Search Field Dropdown */}
+            <select
+              value={searchField}
+              onChange={(e) => setSearchField?.(e.target.value as any)}
+              className="bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold rounded-xl text-slate-700 dark:text-slate-300 cursor-pointer focus:outline-emerald-500"
+            >
+              <option value="all">Todos os Campos</option>
+              <option value="name">Por Nome</option>
+              <option value="email">Por E-mail</option>
+              <option value="cpf">Por CPF</option>
+            </select>
+          </div>
+
+          {/* Export CSV Button */}
           <button
-            key={f}
-            onClick={() => setFilterType(f)}
-            className={`px-3 py-1.5 rounded-full text-xs font-extrabold cursor-pointer transition capitalize active:scale-95 ${filterType === f ? "bg-slate-900 dark:bg-emerald-600 dark:text-white text-white shadow-xs" : "bg-slate-100 dark:bg-[#101726]/80 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"}`}
+            type="button"
+            onClick={() => exportCollaboratorsToCSV(filteredCollaborators, `fiscais_${buildingName.replace(/\s+/g, "_").toLowerCase()}`)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer shadow-xs shrink-0"
+            title="Exportar dados filtrados para planilha Excel/CSV"
           >
-            {f === "todos" ? "Todos Fiscais" : f === "efetivos" ? "Efetivos" : f === "reservas" ? "Reservas" : "⚠ Inconsistência (Orion)"}
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Exportar CSV ({filteredCollaborators.length})</span>
           </button>
-        ))}
+        </div>
+
+        {/* Second line: Date Range Filter + Sorting */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+          
+          {/* Submission Date Range */}
+          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 dark:text-slate-400">
+            <span className="font-bold flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Data de Submissão:</span>
+            </span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={dateStart}
+                onChange={(e) => setDateStart?.(e.target.value)}
+                className="bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 px-2 py-1 text-xs rounded-lg font-mono text-slate-800 dark:text-slate-200"
+              />
+              <span className="text-slate-400">até</span>
+              <input
+                type="date"
+                value={dateEnd}
+                onChange={(e) => setDateEnd?.(e.target.value)}
+                className="bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 px-2 py-1 text-xs rounded-lg font-mono text-slate-800 dark:text-slate-200"
+              />
+              {(dateStart || dateEnd) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateStart?.("");
+                    setDateEnd?.("");
+                  }}
+                  className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
+                  title="Limpar filtro de data"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Sort Order Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1">
+              <ArrowUpDown className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Ordenar por:</span>
+            </span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy?.(e.target.value as any)}
+              className="bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-bold rounded-lg text-slate-800 dark:text-slate-200 cursor-pointer focus:outline-emerald-500"
+            >
+              <option value="created_desc">Mais Recentes Primeiro</option>
+              <option value="created_asc">Mais Antigos Primeiro</option>
+              <option value="name_asc">Nome (A - Z)</option>
+              <option value="name_desc">Nome (Z - A)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Third line: Status Filter Pills */}
+        <div className="flex gap-1.5 flex-wrap pt-2 border-t border-slate-200 dark:border-slate-800">
+          {[
+            { id: "todos", label: `Todos (${allCollaborators.length})` },
+            { id: "confirmados", label: `Confirmados (${allCollaborators.filter(c => c.status === "Confirmado").length})` },
+            { id: "pendentes", label: `Pendentes (${allCollaborators.filter(c => c.status === "Pendente").length})` },
+            { id: "efetivos", label: `Efetivos c/ Sala (${allCollaborators.filter(c => !c.isReserve && c.status === "Confirmado").length})` },
+            { id: "reservas", label: `Reservas (${allCollaborators.filter(c => c.isReserve && c.status === "Confirmado").length})` },
+            { id: "recusados", label: `Recusados (${refusedCollabs.length})` },
+            { id: "com_erro", label: `⚠ Inconsistência (${allCollaborators.filter(c => c.orionStatus === "Erro").length})` }
+          ].map(f => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilterType(f.id as any)}
+              className={`px-3 py-1 rounded-full text-xs font-black cursor-pointer transition capitalize active:scale-95 ${
+                filterType === f.id
+                  ? "bg-slate-900 dark:bg-emerald-600 dark:text-white text-white shadow-xs"
+                  : "bg-white dark:bg-[#101726]/80 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
       </div>
 
       {filteredCollaborators.length === 0 ? (
@@ -1126,6 +1435,13 @@ function activeTabSubList(
                             <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
                             <span>CLA: {originName}</span>
                           </span>
+
+                          {(c.refusedRole || c.refusalTag) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30" title={`Recusa: ${c.refusalTag || c.refusedRole}`}>
+                              <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />
+                              <span>{c.refusalTag || `Recusa de trabalho na função ${c.refusedRole}`}</span>
+                            </span>
+                          )}
 
                           {c.status === "Pendente" ? (
                             <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/30 flex items-center gap-1">
@@ -1223,9 +1539,25 @@ function activeTabSubList(
 
                   {/* Confirmation status */}
                   <td className="p-4">
-                    <span className={`font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full ${c.status === "Confirmado" ? "bg-emerald-600 text-white" : c.status === "Recusado" ? "bg-rose-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"}`}>
-                      {c.status}
-                    </span>
+                    {c.attendanceStatus === "Confirmado" ? (
+                      <span className="bg-emerald-600 text-white font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit shadow-xs">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        <span>Presença Confirmada</span>
+                      </span>
+                    ) : (c.attendanceStatus === "Recusado" || c.refusedRole) ? (
+                      <span className="bg-rose-600 text-white font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit shadow-xs" title={c.refusalTag || `Recusou: ${c.refusedRole}`}>
+                        <X className="w-3 h-3 stroke-[3]" />
+                        <span>Recusou Função</span>
+                      </span>
+                    ) : c.assignedRole ? (
+                      <span className="bg-amber-500/20 text-amber-800 dark:text-amber-300 font-extrabold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit border border-amber-500/30">
+                        <span>⏳ Aguardando Fiscal</span>
+                      </span>
+                    ) : (
+                      <span className={`font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full ${c.status === "Confirmado" ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30" : c.status === "Recusado" ? "bg-rose-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"}`}>
+                        {c.status === "Confirmado" ? "Cad. Autorizado" : c.status}
+                      </span>
+                    )}
                   </td>
 
                   {/* Quick trigger Actions */}

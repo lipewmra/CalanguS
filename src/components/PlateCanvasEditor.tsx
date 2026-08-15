@@ -754,6 +754,23 @@ export default function PlateCanvasEditor({
     setTimeout(() => setSaveSuccessMsg(""), 3000);
   };
 
+  // Move element layer up/down
+  const moveLayer = (id: string, direction: "up" | "down") => {
+    const idx = elements.findIndex(el => el.id === id);
+    if (idx === -1) return;
+    const newElements = [...elements];
+    if (direction === "up" && idx < newElements.length - 1) {
+      const temp = newElements[idx];
+      newElements[idx] = newElements[idx + 1];
+      newElements[idx + 1] = temp;
+    } else if (direction === "down" && idx > 0) {
+      const temp = newElements[idx];
+      newElements[idx] = newElements[idx - 1];
+      newElements[idx - 1] = temp;
+    }
+    setElements(newElements);
+  };
+
   // Delete custom template
   const handleDeleteCustomTemplate = (tplId: string) => {
     const updated = customTemplates.filter(t => t.id !== tplId);

@@ -20,6 +20,40 @@ export interface RoomDetails {
   details?: string;
 }
 
+export interface CollaboratorScheduleItem {
+  id?: string;
+  time: string;
+  title: string;
+  desc: string;
+}
+
+export interface ClaCustomRole {
+  id: string;
+  name: string;
+  desc: string;
+  hidden?: boolean;
+  targetQuantity?: number;
+  remuneration?: number;
+  isDefault?: boolean;
+}
+
+export interface CalangusMessage {
+  id: string;
+  senderClaId: string;
+  senderName: string;
+  targetType: "all" | "associated" | "reserve" | "pending_attendance" | "confirmed_attendance" | "role" | "individual";
+  targetRoleId?: string;
+  targetRoleName?: string;
+  targetCollaboratorId?: string;
+  targetCollaboratorName?: string;
+  targetCollaboratorEmail?: string;
+  targetCollaboratorPhone?: string;
+  title: string;
+  content: string;
+  sentAt: string;
+  channels: Array<"calangus" | "email" | "whatsapp">;
+}
+
 export interface BuildingInfo {
   id?: string;
   claId: string;
@@ -36,6 +70,10 @@ export interface BuildingInfo {
   specialRooms?: RoomDetails[];
   extraRooms?: RoomDetails[];
   rolesTargetQuantities?: Record<string, number>;
+  collaboratorSchedule?: CollaboratorScheduleItem[];
+  collaboratorInstructions?: string;
+  customRoles?: ClaCustomRole[];
+  messages?: CalangusMessage[];
 }
 
 export interface PastEdition {
@@ -96,6 +134,12 @@ export interface CollaboratorInfo {
     date: string;
     approvedBy?: string;
   }>;
+  attendanceStatus?: "Pendente" | "Confirmado" | "Recusado";
+  refusedRole?: string;
+  refusedRoleDate?: string;
+  refusalTag?: string;
+  attendanceConfirmedAt?: string;
+  createdAt?: string; // Form submission/registration ISO date
 }
 
 export interface Quote {

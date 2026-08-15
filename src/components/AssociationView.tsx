@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { CollaboratorInfo, BuildingInfo } from "../types";
 import { 
-  Users, UserCheck, Search, Filter, Sparkles, CheckCircle, 
+  Users, UserCheck, Search, Filter, Sparkles, CheckCircle, Check,
   HelpCircle, ShieldAlert, ArrowRight, RotateCcw, AlertCircle,
   Save, ChevronDown, ChevronUp, Plus, Minus
 } from "lucide-react";
@@ -33,6 +33,20 @@ export default function AssociationView({
   // Collapse state for target quantities
   const [showTargetQuantitiesForm, setShowTargetQuantitiesForm] = useState(false);
 
+  // Dynamic active roles from building configuration or fallback to standard ENEM_ROLES
+  const activeRoles = React.useMemo(() => {
+    if (building?.customRoles && building.customRoles.length > 0) {
+      return building.customRoles.filter(r => !r.hidden);
+    }
+    return ENEM_ROLES.map((r, i) => ({
+      id: `default-${i}`,
+      name: r.name,
+      desc: r.desc,
+      hidden: false,
+      targetQuantity: building?.rolesTargetQuantities?.[r.name] || 0
+    }));
+  }, [building]);
+
   // Target quantities for each role
   const [targetQuantities, setTargetQuantities] = useState<Record<string, number>>({});
   const [savingTargets, setSavingTargets] = useState(false);
@@ -40,11 +54,11 @@ export default function AssociationView({
   // Initialize target quantities from building data
   useEffect(() => {
     const initial: Record<string, number> = {};
-    ENEM_ROLES.forEach(r => {
-      initial[r.name] = building?.rolesTargetQuantities?.[r.name] || 0;
+    activeRoles.forEach(r => {
+      initial[r.name] = (r.targetQuantity !== undefined ? r.targetQuantity : (building?.rolesTargetQuantities?.[r.name] || 0));
     });
     setTargetQuantities(initial);
-  }, [building]);
+  }, [building, activeRoles]);
 
   // Handle safe input changes
   const handleQuantityChange = (roleName: string, value: number) => {
@@ -84,7 +98,7 @@ export default function AssociationView({
   const unassociatedCollabs = approvedCollaborators.filter(c => !c.assignedRole || c.assignedRole === "");
 
   // Counting for each role
-  const roleCounts = ENEM_ROLES.reduce((acc, current) => {
+  const roleCounts = activeRoles.reduce((acc, current) => {
     acc[current.name] = approvedCollaborators.filter(c => c.assignedRole === current.name).length;
     return acc;
   }, {} as Record<string, number>);
@@ -99,6 +113,10 @@ export default function AssociationView({
         await onUpdate(collabId, {
           assignedRole: roleName,
           isReserve,
+          // When a new role is assigned by the CLA, reset attendanceStatus to "Pendente" so collaborator can confirm presence for this new role
+          attendanceStatus: roleName !== "" ? "Pendente" : undefined,
+          // Clear any previous refusal tags when assigning a new role
+          ...(roleName !== "" ? { refusalTag: undefined, refusedRole: undefined, refusedRoleDate: undefined } : {}),
           // If moving to reserve or different role, let's also preserve their classroom unless they are unallocated
           assignedRoom: isReserve ? "" : (collab.assignedRoom || "")
         });
@@ -243,11 +261,11 @@ export default function AssociationView({
             )}
             
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-              {ENEM_ROLES.map((role) => {
+              {activeRoles.map((role) => {
                 const currentQty = targetQuantities[role.name] || 0;
                 return (
                   <div 
-                    key={role.name} 
+                    key={role.id || role.name} 
                     className="p-3 bg-slate-50 dark:bg-[#070b13]/40 border border-slate-150 dark:border-slate-850 rounded-xl space-y-2 flex flex-col justify-between"
                   >
                     <div>
@@ -316,7 +334,7 @@ export default function AssociationView({
         </summary>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3 mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 cursor-default">
-          {ENEM_ROLES.map(role => {
+          {activeRoles.map(role => {
             const count = roleCounts[role.name] || 0;
             const target = targetQuantities[role.name] || 0;
             const pct = target > 0 ? Math.min(Math.round((count / target) * 105), 100) : 0;
@@ -325,7 +343,7 @@ export default function AssociationView({
 
             return (
               <div 
-                key={role.name} 
+                key={role.id || role.name} 
                 className={`p-3 rounded-xl border-2 text-center transition flex flex-col justify-between ${
                   isComplete 
                     ? "bg-emerald-500/5 border-emerald-500/30" 
@@ -337,7 +355,7 @@ export default function AssociationView({
                 }`}
               >
                 <div>
-                  <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-300 truncate" title={role.name}>
+                  <h4 className="text-[10px] font-black text-slate-850 dark:text-slate-300 truncate" title={role.name}>
                     {role.name}
                   </h4>
                   <div className="text-xl font-black mt-1 font-mono text-slate-900 dark:text-white">
@@ -495,6 +513,34 @@ export default function AssociationView({
                           </span>
                         </div>
                       )}
+
+                      {/* Refusal Tag Display */}
+                      {(collab.refusedRole || collab.refusalTag) && (
+                        <div className="mt-1 p-2 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-1.5 text-rose-800 dark:text-rose-300 font-extrabold text-[9.5px]">
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                          <span>{collab.refusalTag || `Recusa de trabalho na função ${collab.refusedRole}`}</span>
+                        </div>
+                      )}
+
+                      {/* Presence Confirmation Status for Assigned Collaborators */}
+                      {isAssigned && (
+                        <div className="mt-1 pt-1.5 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between font-bold text-[9.5px]">
+                          <span className="text-slate-400">Presença Fiscal:</span>
+                          {collab.attendanceStatus === "Confirmado" ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-black flex items-center gap-1">
+                              <Check className="w-3 h-3 stroke-[3]" /> Confirmado
+                            </span>
+                          ) : (collab.attendanceStatus === "Recusado" || collab.refusedRole) ? (
+                            <span className="text-rose-600 dark:text-rose-400 font-black flex items-center gap-1">
+                              <RotateCcw className="w-3 h-3" /> Recusou Função
+                            </span>
+                          ) : (
+                            <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
+                              ⏳ Aguardando Fiscal
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -511,8 +557,8 @@ export default function AssociationView({
                         className="flex-1 bg-white dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-xl p-2 text-xs font-bold text-slate-800 dark:text-white cursor-pointer focus:outline-hidden disabled:bg-slate-100 disabled:cursor-not-allowed text-ellipsis"
                       >
                         <option value="">-- Mover p/ Reserva --</option>
-                        {ENEM_ROLES.map(role => (
-                          <option key={role.name} value={role.name}>{role.name}</option>
+                        {activeRoles.map(role => (
+                          <option key={role.id || role.name} value={role.name}>{role.name}</option>
                         ))}
                       </select>
 

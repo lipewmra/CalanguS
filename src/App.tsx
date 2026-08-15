@@ -57,12 +57,14 @@ import CombinedPrintExportView from "./components/CombinedPrintExportView";
 import PublicRegisterForm from "./components/PublicRegisterForm";
 import SettingsModal, { FontSizeOption, ColorThemeOption } from "./components/SettingsModal";
 import FiscalAvatar from "./components/FiscalAvatar";
+import CollaboratorSettingsView from "./components/CollaboratorSettingsView";
+import MessagingCenter from "./components/MessagingCenter";
 
 import { 
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
   Printer, Sun, Moon, Sparkles, HelpCircle, MapPin,
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
-  ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet,
+  ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
   Activity, Calendar, PlusCircle, Trash2, Settings
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
@@ -607,19 +609,49 @@ export default function App() {
   useEffect(() => {
     if (effectiveUser && effectiveUser.role === "Colaborador" && collaborators.length > 0) {
       const rec = collaborators.find(c => c.email === effectiveUser.email);
-      if (rec && rec.status && rec.status !== individualConfirmationStatus) {
-        setIndividualConfirmationStatus(rec.status as any);
+      if (rec) {
+        const actualStatus = rec.attendanceStatus || (rec.status === "Confirmado" && rec.assignedRole ? "Confirmado" : rec.status);
+        if (actualStatus !== individualConfirmationStatus) {
+          setIndividualConfirmationStatus(actualStatus as any);
+        }
       }
     }
   }, [effectiveUser?.role, effectiveUser?.email, collaborators, individualConfirmationStatus]);
 
   // Handler to update individual confirmation status
-  const handleUpdateConfirmationStatus = async (status: "Pendente" | "Confirmado" | "Recusado") => {
+  const handleUpdateConfirmationStatus = async (status: "Pendente" | "Confirmado" | "Recusado", roleNameToRefuse?: string) => {
     if (!currentUser) return;
     setIndividualConfirmationStatus(status);
     const rec = collaborators.find(c => c.email === currentUser.email);
     if (rec?.id) {
-      await updateCollaborator(rec.id, { status });
+      if (status === "Recusado") {
+        const refusedRoleName = roleNameToRefuse || rec.assignedRole || "Função Designada";
+        const dateStr = new Date().toLocaleDateString("pt-BR") + " às " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        await updateCollaborator(rec.id, {
+          assignedRole: "",
+          assignedRoom: "",
+          isReserve: true,
+          status: "Confirmado", // keeps registration authorized so they remain an active collaborator in reserve pool
+          attendanceStatus: "Recusado",
+          refusedRole: refusedRoleName,
+          refusalTag: `Recusa de trabalho na função ${refusedRoleName}`,
+          refusedRoleDate: dateStr
+        });
+      } else if (status === "Confirmado") {
+        await updateCollaborator(rec.id, {
+          status: "Confirmado",
+          attendanceStatus: "Confirmado",
+          attendanceConfirmedAt: new Date().toISOString(),
+          // Clear any previous refusal since the collaborator accepted this role
+          refusedRole: "",
+          refusalTag: "",
+          refusedRoleDate: ""
+        });
+      } else {
+        await updateCollaborator(rec.id, {
+          attendanceStatus: "Pendente"
+        });
+      }
     }
   };
 
@@ -889,7 +921,7 @@ export default function App() {
                     name={effectiveUser?.name || currentUser?.name}
                     role={effectiveRole}
                     size="md"
-                    className="border-2 border-emerald-500/50 shadow-sm group-hover:scale-105 transition-transform"
+                    className="shadow-sm group-hover:scale-105 transition-transform"
                   />
                   <div className="hidden md:block text-right">
                     <span className="text-sm font-extrabold block leading-none text-slate-800 dark:text-white group-hover:text-emerald-500 transition">{effectiveUser?.name}</span>
@@ -1102,7 +1134,9 @@ export default function App() {
                 { id: "team", label: "5. Gestão de Equipe", badge: "TEAM", icon: Users, iconColor: "text-emerald-450" },
                 { id: "catering", label: "6. Alimentação", badge: "CATER", icon: Coffee, iconColor: "text-amber-400" },
                 { id: "plates", label: "7. Impressão", badge: "PRINT", icon: Printer, iconColor: "text-pink-400" },
-                { id: "activities", label: "8. Atividades do CLA", badge: "TASK", icon: CheckSquare, iconColor: "text-emerald-450" }
+                { id: "activities", label: "8. Atividades do CLA", badge: "TASK", icon: CheckSquare, iconColor: "text-emerald-450" },
+                { id: "collab-settings", label: "9. Dados Colaboradores", badge: "DADOS", icon: Calendar, iconColor: "text-emerald-400" },
+                { id: "messages", label: "10. Mensagens & Comunicação", badge: "MSG", icon: MessageSquare, iconColor: "text-teal-400" }
               ];
 
               const renderTabContent = (tabId: string) => {
@@ -1259,6 +1293,27 @@ export default function App() {
                           activeClaId={effectiveRole === "ALA" ? (effectiveUser?.claId || effectiveUser?.uid || currentUser.uid) : (effectiveUser?.uid || currentUser.uid)} 
                           activities={claActivities} 
                           readOnly={effectiveRole === "ALA"}
+                        />
+                      </div>
+                    );
+                  case "collab-settings":
+                    return (
+                      <div className="animate-fade-in">
+                        <CollaboratorSettingsView 
+                          building={building} 
+                          onSaveBuilding={saveBuilding} 
+                          readOnly={effectiveRole === "ALA"}
+                        />
+                      </div>
+                    );
+                  case "messages":
+                    return (
+                      <div className="animate-fade-in">
+                        <MessagingCenter 
+                          collaborators={collaborators}
+                          building={building}
+                          currentUserName={effectiveUser?.name || currentUser.name}
+                          currentUserRole={effectiveRole || "CLA"}
                         />
                       </div>
                     );
