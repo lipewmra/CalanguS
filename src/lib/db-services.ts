@@ -5,6 +5,7 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc, 
+  deleteField,
   getDoc, 
   getDocs, 
   query, 
@@ -344,10 +345,25 @@ export async function addCollaborator(collab: Omit<CollaboratorInfo, "id">): Pro
   }
 }
 
+function sanitizeFirestoreUpdates(updates: Record<string, any>): Record<string, any> {
+  const sanitized: Record<string, any> = {};
+  for (const [key, val] of Object.entries(updates)) {
+    if (val === undefined) {
+      sanitized[key] = deleteField();
+    } else if (val !== null && typeof val === "object" && !Array.isArray(val) && !(val instanceof Date)) {
+      sanitized[key] = sanitizeFirestoreUpdates(val);
+    } else {
+      sanitized[key] = val;
+    }
+  }
+  return sanitized;
+}
+
 export async function updateCollaborator(id: string, updates: Partial<CollaboratorInfo>): Promise<void> {
   const path = `collaborators/${id}`;
   try {
-    await updateDoc(doc(db, "collaborators", id), updates);
+    const sanitizedUpdates = sanitizeFirestoreUpdates(updates as Record<string, any>);
+    await updateDoc(doc(db, "collaborators", id), sanitizedUpdates);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }

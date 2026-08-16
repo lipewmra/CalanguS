@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { CollaboratorInfo, RoomDetails, BuildingInfo } from "../types";
+import FiscalAvatar from "./FiscalAvatar";
+import ImageLightboxModal, { LightboxData } from "./ImageLightboxModal";
 import { 
   Download, Printer, Clipboard, Search, CheckCircle, 
   AlertTriangle, Building, Users, Phone, FileSpreadsheet,
@@ -17,6 +19,7 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
   const [filterRole, setFilterRole] = useState<string>("all");
   const [copiedStatus, setCopiedStatus] = useState(false);
   const [copiedRoomId, setCopiedRoomId] = useState<string | null>(null);
+  const [lightboxData, setLightboxData] = useState<LightboxData | null>(null);
 
   // Compute stats
   const totalRooms = rooms.length;
@@ -447,16 +450,31 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
                           className="p-3 bg-slate-50/75 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/60 text-xs shadow-2xs"
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="font-extrabold text-slate-800 dark:text-slate-100 select-all leading-tight">
-                                {person.name}
-                              </p>
-                              <p className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500 mt-0.5 select-all">
-                                CPF: {formatCPF(person.cpf)}
-                              </p>
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <FiscalAvatar 
+                                photoUrl={person.photoUrl} 
+                                name={person.name} 
+                                size="xs"
+                                onClick={() => setLightboxData({
+                                  imageUrl: person.photoUrl || '',
+                                  name: person.name,
+                                  role: person.assignedRole || 'Fiscal',
+                                  cpf: person.cpf,
+                                  claName: person.originalClaName || person.claName,
+                                  specialRole: person.specialRole
+                                })}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="font-extrabold text-slate-800 dark:text-slate-100 select-all leading-tight truncate" title={person.name}>
+                                  {person.name}
+                                </p>
+                                <p className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500 mt-0.5 select-all">
+                                  CPF: {formatCPF(person.cpf)}
+                                </p>
+                              </div>
                             </div>
 
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black tracking-tight uppercase bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black tracking-tight uppercase bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 whitespace-nowrap shrink-0">
                               {person.assignedRole || "Fiscal"}
                             </span>
                           </div>
@@ -532,17 +550,34 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
                 className="p-3.5 bg-slate-50/60 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70 rounded-xl space-y-2 hover:border-amber-500/25 transition shadow-2xs"
               >
                 <div>
-                  <div className="flex items-start justify-between gap-1.5">
-                    <p className="font-extrabold text-slate-850 dark:text-slate-150 text-xs truncate leading-snug">
-                      {p.name}
-                    </p>
-                    <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-450 uppercase tracking-tight whitespace-nowrap">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <FiscalAvatar 
+                        photoUrl={p.photoUrl} 
+                        name={p.name} 
+                        size="xs"
+                        onClick={() => setLightboxData({
+                          imageUrl: p.photoUrl || '',
+                          name: p.name,
+                          role: p.assignedRole || 'RESERVA',
+                          cpf: p.cpf,
+                          claName: p.originalClaName || p.claName,
+                          specialRole: p.specialRole
+                        })}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-extrabold text-slate-850 dark:text-slate-150 text-xs truncate leading-snug" title={p.name}>
+                          {p.name}
+                        </p>
+                        <p className="text-[9px] font-mono font-extrabold text-slate-400 mt-0.5">
+                          CPF: {formatCPF(p.cpf)}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-450 uppercase tracking-tight whitespace-nowrap shrink-0">
                       {p.assignedRole || "RESERVA"}
                     </span>
                   </div>
-                  <p className="text-[9px] font-mono font-extrabold text-slate-400 mt-0.5">
-                    CPF: {formatCPF(p.cpf)}
-                  </p>
                 </div>
 
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800/40 flex items-center justify-between text-[9px] text-slate-450 dark:text-slate-400 font-bold">
@@ -564,6 +599,11 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
         )}
       </div>
 
+      {/* IMAGE LIGHTBOX MODAL */}
+      <ImageLightboxModal
+        data={lightboxData}
+        onClose={() => setLightboxData(null)}
+      />
     </div>
   );
 }

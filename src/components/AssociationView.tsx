@@ -115,12 +115,14 @@ export default function AssociationView({
           isReserve,
           // When a new role is assigned by the CLA, reset attendanceStatus to "Pendente" so collaborator can confirm presence for this new role
           attendanceStatus: roleName !== "" ? "Pendente" : undefined,
-          // Clear any previous refusal tags when assigning a new role
-          ...(roleName !== "" ? { refusalTag: undefined, refusedRole: undefined, refusedRoleDate: undefined } : {}),
-          // If moving to reserve or different role, let's also preserve their classroom unless they are unallocated
+          // Clear any previous refusal tags when assigning a new role or moving
+          refusalTag: undefined,
+          refusedRole: undefined,
+          refusedRoleDate: undefined,
+          // If moving to reserve, clear room; otherwise preserve room if already set
           assignedRoom: isReserve ? "" : (collab.assignedRoom || "")
         });
-        setSuccessMsg(`Função de ${collab.name} atualizada com sucesso!`);
+        setSuccessMsg(roleName !== "" ? `Função de ${collab.name} associada para "${roleName}" com sucesso!` : `${collab.name} movido(a) para a equipe de Reserva com sucesso!`);
         setTimeout(() => setSuccessMsg(null), 3000);
       }
     } catch (err) {

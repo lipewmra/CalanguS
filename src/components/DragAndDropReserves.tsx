@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { CollaboratorInfo, RoomDetails } from "../types";
 import CollaboratorFailureModal from "./CollaboratorFailureModal";
+import FiscalAvatar from "./FiscalAvatar";
+import ImageLightboxModal, { LightboxData } from "./ImageLightboxModal";
 import { 
   Users, ShieldAlert, BadgeInfo, HelpCircle, CornerDownRight, 
   Check, MoveRight, ArrowRight, UserCheck, Inbox, RefreshCw, Building2, AlertCircle 
@@ -19,6 +21,7 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
   // Track active function filter on the mobile fast assignment or selector if needed
   const [showRoleInfo, setShowRoleInfo] = useState<string | null>(null);
   const [diagnoseCollab, setDiagnoseCollab] = useState<CollaboratorInfo | null>(null);
+  const [lightboxData, setLightboxData] = useState<LightboxData | null>(null);
 
   // Computations
   // Only approved collaborators can be allocated in classrooms or function lanes
@@ -211,19 +214,34 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
                       onDragEnd={handleDragEnd}
                       className={`p-3 bg-white dark:bg-[#101726]/80 border-2 border-slate-200 dark:border-slate-800 rounded-xl shadow-xs hover:border-amber-500 dark:hover:border-amber-400 transition cursor-grab active:cursor-grabbing relative ${draggedId === collab.id ? 'opacity-45' : ''}`}
                     >
-                      <div className="flex items-start justify-between gap-1.5">
-                        <div className="truncate">
-                          <h5 className="font-extrabold text-slate-800 dark:text-white text-xs truncate">{collab.name}</h5>
-                          <p className="text-[9px] text-slate-400 font-mono font-bold mt-0.5">{collab.cpf}</p>
-                          <div className="mt-1">
-                            <span className="inline-flex items-center gap-1 text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
-                              <Building2 className="w-2.5 h-2.5 text-indigo-500" />
-                              <span>CLA: {collab.originalClaName || collab.claName || "Local"}</span>
-                            </span>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <FiscalAvatar 
+                            photoUrl={collab.photoUrl} 
+                            name={collab.name} 
+                            size="xs"
+                            onClick={() => setLightboxData({
+                              imageUrl: collab.photoUrl || '',
+                              name: collab.name,
+                              role: collab.assignedRole || 'Reserva Geral',
+                              cpf: collab.cpf,
+                              claName: collab.originalClaName || collab.claName,
+                              specialRole: collab.specialRole
+                            })}
+                          />
+                          <div className="truncate min-w-0 flex-1">
+                            <h5 className="font-extrabold text-slate-800 dark:text-white text-xs truncate" title={collab.name}>{collab.name}</h5>
+                            <p className="text-[9px] text-slate-400 font-mono font-bold mt-0.5">{collab.cpf}</p>
+                            <div className="mt-1">
+                              <span className="inline-flex items-center gap-1 text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
+                                <Building2 className="w-2.5 h-2.5 text-indigo-500" />
+                                <span>CLA: {collab.originalClaName || collab.claName || "Local"}</span>
+                              </span>
+                            </div>
                           </div>
                         </div>
                         {collab.specialRole && collab.specialRole !== "Nenhuma" && (
-                          <span className="bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 text-[8px] font-black px-1.5 py-0.2 rounded border border-indigo-500/10">
+                          <span className="bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 text-[8px] font-black px-1.5 py-0.2 rounded border border-indigo-500/10 shrink-0">
                             {collab.specialRole}
                           </span>
                         )}
@@ -302,15 +320,30 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
                           onDragEnd={handleDragEnd}
                           className={`p-3 bg-white dark:bg-[#101726]/80 border-2 border-slate-200 dark:border-slate-800 rounded-xl shadow-xs hover:border-emerald-500 dark:hover:border-emerald-400 transition cursor-grab active:cursor-grabbing relative ${draggedId === collab.id ? 'opacity-45' : ''}`}
                         >
-                          <div className="flex items-start justify-between gap-1.5">
-                            <div className="truncate">
-                              <h5 className="font-extrabold text-slate-805 dark:text-white text-xs truncate">{collab.name}</h5>
-                              <p className="text-[9px] text-slate-400 font-mono font-bold mt-0.5">{collab.cpf}</p>
-                              <div className="mt-1">
-                                <span className="inline-flex items-center gap-1 text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
-                                  <Building2 className="w-2.5 h-2.5 text-indigo-500" />
-                                  <span>CLA: {collab.originalClaName || collab.claName || "Local"}</span>
-                                </span>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <FiscalAvatar 
+                                photoUrl={collab.photoUrl} 
+                                name={collab.name} 
+                                size="xs"
+                                onClick={() => setLightboxData({
+                                  imageUrl: collab.photoUrl || '',
+                                  name: collab.name,
+                                  role: collab.assignedRole || lane.roleName,
+                                  cpf: collab.cpf,
+                                  claName: collab.originalClaName || collab.claName,
+                                  specialRole: collab.specialRole
+                                })}
+                              />
+                              <div className="truncate min-w-0 flex-1">
+                                <h5 className="font-extrabold text-slate-805 dark:text-white text-xs truncate" title={collab.name}>{collab.name}</h5>
+                                <p className="text-[9px] text-slate-400 font-mono font-bold mt-0.5">{collab.cpf}</p>
+                                <div className="mt-1">
+                                  <span className="inline-flex items-center gap-1 text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
+                                    <Building2 className="w-2.5 h-2.5 text-indigo-500" />
+                                    <span>CLA: {collab.originalClaName || collab.claName || "Local"}</span>
+                                  </span>
+                                </div>
                               </div>
                             </div>
                             
@@ -413,27 +446,42 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
                             onDragEnd={handleDragEnd}
                             className="bg-white dark:bg-[#101726]/80 border-2 border-slate-100 dark:border-slate-800 rounded-xl p-2.5 flex items-center justify-between hover:border-emerald-300 dark:hover:border-emerald-500/20 transition shadow-xs pr-3 text-xs font-bold gap-2 cursor-grab active:cursor-grabbing"
                           >
-                            <div className="truncate pr-1 flex-1">
-                              <span className="font-extrabold text-slate-805 dark:text-white block truncate text-xs">{collab.name}</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                <span className="inline-flex items-center gap-1 text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
-                                  <Building2 className="w-2.5 h-2.5 text-indigo-500" />
-                                  <span>CLA: {collab.originalClaName || collab.claName || "Local"}</span>
-                                </span>
-                                {collab.assignedRole ? (
-                                  <span className="text-[8px] font-black bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 px-1 rounded truncate max-w-[100px]" title={collab.assignedRole}>
-                                    {collab.assignedRole}
+                            <div className="flex items-center gap-2 min-w-0 flex-1 pr-1">
+                              <FiscalAvatar 
+                                photoUrl={collab.photoUrl} 
+                                name={collab.name} 
+                                size="xs"
+                                onClick={() => setLightboxData({
+                                  imageUrl: collab.photoUrl || '',
+                                  name: collab.name,
+                                  role: collab.assignedRole || 'Fiscal de Sala',
+                                  cpf: collab.cpf,
+                                  claName: collab.originalClaName || collab.claName,
+                                  specialRole: collab.specialRole
+                                })}
+                              />
+                              <div className="truncate min-w-0 flex-1">
+                                <span className="font-extrabold text-slate-805 dark:text-white block truncate text-xs" title={collab.name}>{collab.name}</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  <span className="inline-flex items-center gap-1 text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
+                                    <Building2 className="w-2.5 h-2.5 text-indigo-500" />
+                                    <span>CLA: {collab.originalClaName || collab.claName || "Local"}</span>
                                   </span>
-                                ) : (
-                                  <span className="text-[8px] font-black bg-amber-500/10 text-amber-700 dark:text-amber-400 px-1 rounded">
-                                    Reserva
-                                  </span>
-                                )}
-                                {collab.specialRole && collab.specialRole !== "Nenhuma" && (
-                                  <span className="text-[8px] font-black bg-slate-100 text-slate-650 px-1 rounded">
-                                    {collab.specialRole}
-                                  </span>
-                                )}
+                                  {collab.assignedRole ? (
+                                    <span className="text-[8px] font-black bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 px-1 rounded truncate max-w-[100px]" title={collab.assignedRole}>
+                                      {collab.assignedRole}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[8px] font-black bg-amber-500/10 text-amber-700 dark:text-amber-400 px-1 rounded">
+                                      Reserva
+                                    </span>
+                                  )}
+                                  {collab.specialRole && collab.specialRole !== "Nenhuma" && (
+                                    <span className="text-[8px] font-black bg-slate-100 text-slate-650 px-1 rounded">
+                                      {collab.specialRole}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             
@@ -502,6 +550,12 @@ export default function DragAndDropReserves({ collaborators, rooms, onMove }: Dr
         isOpen={!!diagnoseCollab}
         collaborator={diagnoseCollab}
         onClose={() => setDiagnoseCollab(null)}
+      />
+
+      {/* IMAGE LIGHTBOX MODAL */}
+      <ImageLightboxModal
+        data={lightboxData}
+        onClose={() => setLightboxData(null)}
       />
     </div>
   );
