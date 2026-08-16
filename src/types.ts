@@ -58,6 +58,44 @@ export interface CalangusTemplate {
   isCustom?: boolean;
 }
 
+export interface MessageReadReceipt {
+  collaboratorId: string;
+  collaboratorName?: string;
+  collaboratorCpf?: string;
+  collaboratorEmail?: string;
+  collaboratorPhone?: string;
+  collaboratorRole?: string;
+  readAt: string;
+}
+
+export interface MessagePollOption {
+  id: string;
+  text: string;
+}
+
+export interface MessagePoll {
+  id: string;
+  question: string;
+  type: "single_choice" | "multiple_choice" | "text_input" | "confirmation_yes_no";
+  options?: MessagePollOption[];
+  allowCustomText?: boolean;
+  required?: boolean;
+  helpText?: string;
+}
+
+export interface MessageCollaboratorResponse {
+  collaboratorId: string;
+  collaboratorName?: string;
+  collaboratorCpf?: string;
+  collaboratorEmail?: string;
+  collaboratorPhone?: string;
+  collaboratorRole?: string;
+  selectedOptionIds?: string[];
+  selectedOptionTexts?: string[];
+  textAnswer?: string;
+  answeredAt: string;
+}
+
 export interface CalangusMessage {
   id: string;
   senderClaId: string;
@@ -71,12 +109,16 @@ export interface CalangusMessage {
   targetCollaboratorEmail?: string;
   targetCollaboratorPhone?: string;
   targetSummary?: string;
+  targetRecipientIds?: string[];
   title: string;
   content: string;
   sentAt: string;
   channels: Array<"calangus" | "email" | "whatsapp" | "sms">;
   channel?: "calangus" | "email" | "whatsapp" | "sms";
   readBy?: string[]; // IDs/CPFs/Emails of collaborators who read this message
+  readReceipts?: MessageReadReceipt[]; // Detailed read receipts with timestamp & collaborator info
+  poll?: MessagePoll; // Interactive question/poll/inquiry created by the CLA
+  responses?: MessageCollaboratorResponse[]; // Answers submitted by collaborators
 }
 
 export interface BuildingInfo {

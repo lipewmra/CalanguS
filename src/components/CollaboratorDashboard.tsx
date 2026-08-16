@@ -23,9 +23,16 @@ import {
   ChevronDown,
   MessageSquare,
   Inbox,
-  Copy
+  Copy,
+  Vote,
+  Send,
+  CheckCircle2,
+  Clock,
+  HelpCircle,
+  ThumbsUp,
+  Edit2
 } from "lucide-react";
-import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage } from "../types";
+import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage, MessageReadReceipt, MessageCollaboratorResponse } from "../types";
 import PhotoUploader from "./PhotoUploader";
 import { DEFAULT_ENEM_SCHEDULE } from "./CollaboratorSettingsView";
 
@@ -208,6 +215,8 @@ export default function CollaboratorDashboard({
   const [messageFilter, setMessageFilter] = useState<"all" | "unread" | "read">("all");
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [receiptSuccessMsg, setReceiptSuccessMsg] = useState<string>("");
+  const [pollSelections, setPollSelections] = useState<Record<string, { optionIds: string[]; texts: string[]; customText: string }>>({});
+  const [editingPollMsgId, setEditingPollMsgId] = useState<string | null>(null);
 
   const myCollabId = collaboratorRecord?.id || "";
   const myEmail = currentUser?.email || "";
@@ -238,6 +247,9 @@ export default function CollaboratorDashboard({
     // Filter messages directed to this collaborator or their role / group
     const myMsgs = allMsgs.filter(msg => {
       if (msg.targetType === "all") return true;
+      if (msg.targetRecipientIds && msg.targetRecipientIds.length > 0) {
+        return msg.targetRecipientIds.includes(myCollabId) || msg.targetRecipientIds.includes(myIdentifier);
+      }
       if (msg.targetType === "individual") {
         return (
           (msg.targetCollaboratorId && msg.targetCollaboratorId === myCollabId) ||
@@ -268,56 +280,160 @@ export default function CollaboratorDashboard({
 
     const handleMsgSent = () => reloadMessages();
     window.addEventListener("calangus_message_sent", handleMsgSent);
+    window.addEventListener("calangus_response_submitted", handleMsgSent);
     window.addEventListener("storage", handleMsgSent);
     return () => {
       window.removeEventListener("calangus_message_sent", handleMsgSent);
+      window.removeEventListener("calangus_response_submitted", handleMsgSent);
       window.removeEventListener("storage", handleMsgSent);
     };
   }, [building, collaboratorRecord, currentUser]);
 
   const handleMarkAsRead = (msgId: string) => {
-    const updated = internalMessages.map(m => {
+    const now = new Date().toISOString();
+    const readReceipt: MessageReadReceipt = {
+      collaboratorId: myCollabId || myIdentifier,
+      collaboratorName: collaboratorRecord?.name || currentUser?.name || "Colaborador",
+      collaboratorCpf: collaboratorRecord?.cpf || myCpf || "",
+      collaboratorEmail: currentUser?.email || collaboratorRecord?.email || myEmail || "",
+      collaboratorPhone: collaboratorRecord?.whatsapp || "",
+      collaboratorRole: collaboratorRecord?.assignedRole || collaboratorRecord?.specialRole || (isMyReserve ? "Fiscal de Reserva" : "Colaborador"),
+      readAt: now
+    };
+
+    const updateMsgObject = (m: CalangusMessage): CalangusMessage => {
       if (m.id === msgId) {
         const currentReads = m.readBy || [];
-        if (!currentReads.includes(myIdentifier)) {
-          return { ...m, readBy: [...currentReads, myIdentifier] };
-        }
+        const newReads = currentReads.includes(myIdentifier) ? currentReads : [...currentReads, myIdentifier];
+        const existingReceipts = (m.readReceipts || []).filter(r => r.collaboratorId !== myIdentifier && r.collaboratorId !== myCollabId);
+        return {
+          ...m,
+          readBy: newReads,
+          readReceipts: [...existingReceipts, readReceipt]
+        };
       }
       return m;
-    });
+    };
+
+    const updated = internalMessages.map(updateMsgObject);
     setInternalMessages(updated);
 
     try {
       const localStored: CalangusMessage[] = JSON.parse(localStorage.getItem("enem_internal_messages") || "[]");
-      const updatedLocal = localStored.map(m => {
-        if (m.id === msgId) {
-          const currentReads = m.readBy || [];
-          if (!currentReads.includes(myIdentifier)) {
-            return { ...m, readBy: [...currentReads, myIdentifier] };
-          }
-        }
-        return m;
-      });
+      const updatedLocal = localStored.map(updateMsgObject);
       localStorage.setItem("enem_internal_messages", JSON.stringify(updatedLocal));
+      window.dispatchEvent(new CustomEvent("calangus_message_sent", { detail: { messageId: msgId } }));
     } catch (e) {
       console.error(e);
     }
 
     if (building && onSaveBuilding) {
-      const updatedBuildingMsgs = (building.messages || []).map(m => {
-        if (m.id === msgId) {
-          const currentReads = m.readBy || [];
-          if (!currentReads.includes(myIdentifier)) {
-            return { ...m, readBy: [...currentReads, myIdentifier] };
-          }
-        }
-        return m;
-      });
+      const updatedBuildingMsgs = (building.messages || []).map(updateMsgObject);
       onSaveBuilding({ ...building, messages: updatedBuildingMsgs });
     }
 
-    setReceiptSuccessMsg("Recebimento e leitura da mensagem confirmados com sucesso!");
+    setReceiptSuccessMsg("✓ Recebimento e leitura da mensagem confirmados com sucesso!");
     setTimeout(() => setReceiptSuccessMsg(""), 3500);
+  };
+
+  const handleSelectOption = (msgId: string, optId: string, optText: string, isMultiple = false) => {
+    setPollSelections(prev => {
+      const current = prev[msgId] || { optionIds: [], texts: [], customText: "" };
+      if (isMultiple) {
+        const exists = current.optionIds.includes(optId);
+        const newIds = exists ? current.optionIds.filter(id => id !== optId) : [...current.optionIds, optId];
+        const newTexts = exists ? current.texts.filter(t => t !== optText) : [...current.texts, optText];
+        return { ...prev, [msgId]: { ...current, optionIds: newIds, texts: newTexts } };
+      } else {
+        return { ...prev, [msgId]: { ...current, optionIds: [optId], texts: [optText] } };
+      }
+    });
+  };
+
+  const handleCustomTextChange = (msgId: string, text: string) => {
+    setPollSelections(prev => {
+      const current = prev[msgId] || { optionIds: [], texts: [], customText: "" };
+      return { ...prev, [msgId]: { ...current, customText: text } };
+    });
+  };
+
+  const handleSubmitPollResponse = (msg: CalangusMessage) => {
+    const currentSelection = pollSelections[msg.id] || { optionIds: [], texts: [], customText: "" };
+    
+    if (msg.poll?.type === "text_input") {
+      if (!currentSelection.customText.trim()) {
+        alert("Por favor, digite sua resposta no campo de texto.");
+        return;
+      }
+    } else {
+      if (currentSelection.optionIds.length === 0 && !currentSelection.customText.trim()) {
+        alert("Por favor, selecione uma opção para enviar.");
+        return;
+      }
+    }
+
+    const now = new Date().toISOString();
+    const readReceipt: MessageReadReceipt = {
+      collaboratorId: myCollabId || myIdentifier,
+      collaboratorName: collaboratorRecord?.name || currentUser?.name || "Colaborador",
+      collaboratorCpf: collaboratorRecord?.cpf || myCpf || "",
+      collaboratorEmail: currentUser?.email || collaboratorRecord?.email || myEmail || "",
+      collaboratorPhone: collaboratorRecord?.whatsapp || "",
+      collaboratorRole: collaboratorRecord?.assignedRole || collaboratorRecord?.specialRole || (isMyReserve ? "Fiscal de Reserva" : "Colaborador"),
+      readAt: now
+    };
+
+    const newResponse: MessageCollaboratorResponse = {
+      collaboratorId: myCollabId || myIdentifier,
+      collaboratorName: collaboratorRecord?.name || currentUser?.name || "Colaborador",
+      collaboratorCpf: collaboratorRecord?.cpf || myCpf || "",
+      collaboratorEmail: currentUser?.email || collaboratorRecord?.email || myEmail || "",
+      collaboratorPhone: collaboratorRecord?.whatsapp || "",
+      collaboratorRole: collaboratorRecord?.assignedRole || collaboratorRecord?.specialRole || (isMyReserve ? "Fiscal de Reserva" : "Colaborador"),
+      selectedOptionIds: currentSelection.optionIds,
+      selectedOptionTexts: currentSelection.texts,
+      textAnswer: currentSelection.customText.trim() || undefined,
+      answeredAt: now
+    };
+
+    const updateMsgWithPoll = (m: CalangusMessage): CalangusMessage => {
+      if (m.id === msg.id) {
+        const existingReceipts = (m.readReceipts || []).filter(r => r.collaboratorId !== myIdentifier && r.collaboratorId !== myCollabId);
+        const existingResponses = (m.responses || []).filter(r => r.collaboratorId !== myIdentifier && r.collaboratorId !== myCollabId);
+        const currentReads = m.readBy || [];
+        const newReads = currentReads.includes(myIdentifier) ? currentReads : [...currentReads, myIdentifier];
+
+        return {
+          ...m,
+          readBy: newReads,
+          readReceipts: [...existingReceipts, readReceipt],
+          responses: [...existingResponses, newResponse]
+        };
+      }
+      return m;
+    };
+
+    const updated = internalMessages.map(updateMsgWithPoll);
+    setInternalMessages(updated);
+
+    try {
+      const localStored: CalangusMessage[] = JSON.parse(localStorage.getItem("enem_internal_messages") || "[]");
+      const updatedLocal = localStored.map(updateMsgWithPoll);
+      localStorage.setItem("enem_internal_messages", JSON.stringify(updatedLocal));
+      window.dispatchEvent(new CustomEvent("calangus_response_submitted", { detail: { messageId: msg.id, response: newResponse } }));
+      window.dispatchEvent(new CustomEvent("calangus_message_sent", { detail: { messageId: msg.id } }));
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (building && onSaveBuilding) {
+      const updatedBuildingMsgs = (building.messages || []).map(updateMsgWithPoll);
+      onSaveBuilding({ ...building, messages: updatedBuildingMsgs });
+    }
+
+    setEditingPollMsgId(null);
+    setReceiptSuccessMsg("✓ Resposta gravada e confirmação de leitura enviadas ao CLA!");
+    setTimeout(() => setReceiptSuccessMsg(""), 4000);
   };
 
   const unreadMessagesCount = internalMessages.filter(m => !m.readBy || !m.readBy.includes(myIdentifier)).length;
@@ -1277,6 +1393,164 @@ export default function CollaboratorDashboard({
                       <div className="p-3 bg-white dark:bg-[#0c1220] rounded-xl text-xs text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 font-sans leading-relaxed whitespace-pre-wrap">
                         {msg.content}
                       </div>
+
+                      {/* QUESTIONÁRIO / ENQUETE INTERATIVA DO CLA */}
+                      {msg.poll && (
+                        <div className="mt-3 p-4 rounded-xl bg-purple-50/70 dark:bg-purple-950/20 border-2 border-purple-200 dark:border-purple-800/60 space-y-3">
+                          <div className="flex items-center justify-between gap-2 border-b border-purple-200/60 dark:border-purple-800/40 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="p-1 rounded-lg bg-purple-600 text-white shadow-xs">
+                                <Vote className="w-3.5 h-3.5" />
+                              </span>
+                              <div>
+                                <span className="text-[10px] uppercase font-black tracking-wider text-purple-700 dark:text-purple-300 block">
+                                  Questionamento da Coordenação (CLA)
+                                </span>
+                                <h5 className="text-xs font-bold text-slate-900 dark:text-white">
+                                  {msg.poll.question}
+                                </h5>
+                              </div>
+                            </div>
+                            {msg.poll.required && (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
+                                Obrigatório
+                              </span>
+                            )}
+                          </div>
+
+                          {(() => {
+                            const myExistingResponse = (msg.responses || []).find(
+                              r => r.collaboratorId === myIdentifier || r.collaboratorId === myCollabId
+                            );
+                            const isEditing = editingPollMsgId === msg.id;
+
+                            if (myExistingResponse && !isEditing) {
+                              return (
+                                <div className="p-3 bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-500/30 rounded-xl space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                      <span>Sua resposta foi gravada e enviada com sucesso!</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingPollMsgId(msg.id);
+                                        setPollSelections(prev => ({
+                                          ...prev,
+                                          [msg.id]: {
+                                            optionIds: myExistingResponse.selectedOptionIds || [],
+                                            texts: myExistingResponse.selectedOptionTexts || [],
+                                            customText: myExistingResponse.textAnswer || ""
+                                          }
+                                        }));
+                                      }}
+                                      className="text-[11px] font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Edit2 className="w-3 h-3" />
+                                      <span>Alterar Resposta</span>
+                                    </button>
+                                  </div>
+
+                                  <div className="pl-5 space-y-1 text-xs text-slate-700 dark:text-slate-200 font-medium">
+                                    {myExistingResponse.selectedOptionTexts && myExistingResponse.selectedOptionTexts.length > 0 && (
+                                      <div>
+                                        Opção escolhida:{" "}
+                                        <strong className="text-emerald-700 dark:text-emerald-300 font-bold">
+                                          {myExistingResponse.selectedOptionTexts.join(", ")}
+                                        </strong>
+                                      </div>
+                                    )}
+                                    {myExistingResponse.textAnswer && (
+                                      <div>
+                                        Resposta escrita:{" "}
+                                        <span className="italic text-slate-800 dark:text-slate-100">
+                                          "{myExistingResponse.textAnswer}"
+                                        </span>
+                                      </div>
+                                    )}
+                                    {myExistingResponse.answeredAt && (
+                                      <div className="text-[10px] text-slate-400">
+                                        Respondido em: {new Date(myExistingResponse.answeredAt).toLocaleString("pt-BR")}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            const currentSel = pollSelections[msg.id] || { optionIds: [], texts: [], customText: "" };
+                            const isMultiple = msg.poll.type === "multiple_choice";
+
+                            return (
+                              <div className="space-y-3">
+                                {msg.poll.type !== "text_input" && (
+                                  <div className="space-y-1.5">
+                                    {msg.poll.options?.map((opt) => {
+                                      const isSelected = currentSel.optionIds.includes(opt.id);
+                                      return (
+                                        <button
+                                          key={opt.id}
+                                          type="button"
+                                          onClick={() => handleSelectOption(msg.id, opt.id, opt.text, isMultiple)}
+                                          className={`w-full text-left p-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between cursor-pointer border ${
+                                            isSelected
+                                              ? "bg-purple-600 text-white border-purple-700 shadow-sm"
+                                              : "bg-white dark:bg-[#101726] text-slate-800 dark:text-slate-200 hover:bg-purple-100/50 dark:hover:bg-purple-900/30 border-purple-200 dark:border-purple-800/80"
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2.5">
+                                            <span className={`w-4 h-4 rounded-${isMultiple ? "md" : "full"} border flex items-center justify-center shrink-0 ${
+                                              isSelected
+                                                ? "bg-white text-purple-700 border-white font-black text-[10px]"
+                                                : "border-slate-300 dark:border-slate-600"
+                                            }`}>
+                                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                            </span>
+                                            <span>{opt.text}</span>
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {(msg.poll.type === "text_input" || msg.poll.type === "confirmation_yes_no") && (
+                                  <div>
+                                    <textarea
+                                      rows={2}
+                                      value={currentSel.customText}
+                                      onChange={(e) => handleCustomTextChange(msg.id, e.target.value)}
+                                      placeholder="Digite aqui sua resposta ou observação para a coordenação..."
+                                      className="w-full p-2.5 bg-white dark:bg-[#101726] border border-purple-300 dark:border-purple-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-purple-500"
+                                    />
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-end gap-2 pt-1">
+                                  {isEditing && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingPollMsgId(null)}
+                                      className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSubmitPollResponse(msg)}
+                                    className="btn-3d py-2 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                  >
+                                    <Send className="w-3.5 h-3.5" />
+                                    <span>Enviar Resposta ao CLA</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
 
                       {/* ACTIONS */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-3">

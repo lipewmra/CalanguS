@@ -389,43 +389,20 @@ app.post(["/api/pingram/send-email", "/api/pingram-send-email"], async (req, res
     </div>
   `;
 
-  const recipientId = String(to).replace(/[^a-zA-Z0-9_-]/g, "_") || "destinatario";
+  const cleanTo = String(to || "").trim();
   const notifType = "enem_convocacao_email";
 
   const payload = {
     type: notifType,
     notificationType: notifType,
-    notification_type: notifType,
     notificationId: notifType,
-    to: {
-      id: recipientId,
-      email: to,
-    },
-    user: {
-      id: recipientId,
-      email: to,
-      name: collaboratorName || undefined,
-    },
-    recipient: to,
-    email: {
-      subject,
-      html: htmlBody,
-      text: body,
-    },
+    to: cleanTo,
     subject,
-    body,
-    text: body,
     html: htmlBody,
+    text: body,
+    body,
     from: senderEmail || process.env.PINGRAM_SENDER_EMAIL || "comunicados@calangus.enem2026.br",
     senderName: senderName || "Coordenação ENEM 2026",
-    parameters: {
-      subject,
-      body,
-      collaboratorName: collaboratorName || "",
-      senderName: senderName || "Coordenação ENEM 2026",
-      claId: claId || "",
-      sentAt: new Date().toISOString(),
-    },
     metadata: { claId, collaboratorName, sentAt: new Date().toISOString() },
   };
 
@@ -434,7 +411,7 @@ app.post(["/api/pingram/send-email", "/api/pingram-send-email"], async (req, res
       const pingramRes = await dispatchPingramRequest("email", keyToUse.trim(), payload);
       res.json({
         success: true,
-        message: `E-mail enviado com sucesso para ${to} via Pingram!`,
+        message: `E-mail enviado com sucesso para ${cleanTo} via Pingram!`,
         data: pingramRes.data,
         sentAt: new Date().toISOString(),
       });
@@ -453,7 +430,7 @@ app.post(["/api/pingram/send-email", "/api/pingram-send-email"], async (req, res
   // Fallback log execution
   res.json({
     success: true,
-    message: `E-mail processado com sucesso para ${to}!`,
+    message: `E-mail processado com sucesso para ${cleanTo}!`,
     sentAt: new Date().toISOString(),
     simulated: !keyToUse,
   });
@@ -472,37 +449,17 @@ app.post(["/api/pingram/send-sms", "/api/pingram-send-sms"], async (req, res) =>
   const formattedPhone = formatE164(to);
   console.log(`[Vercel CalanguS Pingram] Enviando SMS para: ${formattedPhone} (${collaboratorName || "Colaborador"})`);
 
-  const recipientId = formattedPhone.replace(/[^\d]/g, "") || "destinatario_sms";
   const notifType = "enem_convocacao_sms";
 
   const payload = {
     type: notifType,
     notificationType: notifType,
-    notification_type: notifType,
     notificationId: notifType,
-    to: {
-      id: recipientId,
-      number: formattedPhone,
-    },
-    user: {
-      id: recipientId,
-      number: formattedPhone,
-      name: collaboratorName || undefined,
-    },
-    recipient: formattedPhone,
-    sms: {
-      message,
-    },
+    to: formattedPhone,
     message,
     text: message,
     body: message,
     from: senderPhone || process.env.PINGRAM_SENDER_PHONE || "ENEM2026",
-    parameters: {
-      message,
-      collaboratorName: collaboratorName || "",
-      claId: claId || "",
-      sentAt: new Date().toISOString(),
-    },
     metadata: { claId, collaboratorName, sentAt: new Date().toISOString() },
   };
 
@@ -570,38 +527,19 @@ app.post(["/api/pingram/dispatch-batch", "/api/pingram-batch"], async (req, res)
 
     try {
       if (channel === "email") {
-        const recipientId = String(item.email).replace(/[^a-zA-Z0-9_-]/g, "_") || "destinatario";
+        const cleanTo = String(item.email || "").trim();
         const notifType = "enem_convocacao_email";
         const payload = {
           type: notifType,
           notificationType: notifType,
-          notification_type: notifType,
           notificationId: notifType,
-          to: {
-            id: recipientId,
-            email: item.email,
-          },
-          user: {
-            id: recipientId,
-            email: item.email,
-            name: item.name || undefined,
-          },
-          recipient: item.email,
-          email: {
-            subject: item.subject || "Comunicado ENEM 2026",
-            text: item.body,
-            html: `<div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;">${item.body}</div>`,
-          },
+          to: cleanTo,
           subject: item.subject || "Comunicado ENEM 2026",
-          body: item.body,
+          html: `<div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;">${item.body}</div>`,
           text: item.body,
+          body: item.body,
           from: senderEmail || "comunicados@calangus.enem2026.br",
           senderName: senderName || "Coordenação ENEM 2026",
-          parameters: {
-            subject: item.subject || "Comunicado ENEM 2026",
-            body: item.body,
-            name: item.name,
-          },
         };
 
         if (keyToUse && keyToUse.trim()) {
@@ -609,33 +547,16 @@ app.post(["/api/pingram/dispatch-batch", "/api/pingram-batch"], async (req, res)
         }
       } else {
         const formattedPhone = formatE164(item.phone || "");
-        const recipientId = formattedPhone.replace(/[^\d]/g, "") || "destinatario_sms";
         const notifType = "enem_convocacao_sms";
         const payload = {
           type: notifType,
           notificationType: notifType,
-          notification_type: notifType,
           notificationId: notifType,
-          to: {
-            id: recipientId,
-            number: formattedPhone,
-          },
-          user: {
-            id: recipientId,
-            number: formattedPhone,
-            name: item.name || undefined,
-          },
-          recipient: formattedPhone,
-          sms: {
-            message: item.body,
-          },
+          to: formattedPhone,
           message: item.body,
           text: item.body,
+          body: item.body,
           from: senderPhone || "ENEM2026",
-          parameters: {
-            message: item.body,
-            name: item.name,
-          },
         };
 
         if (keyToUse && keyToUse.trim()) {

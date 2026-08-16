@@ -4,10 +4,12 @@ import {
   Users, UserCheck, AlertTriangle, Sparkles, Copy, Check, 
   Search, Filter, ExternalLink, RefreshCw, Layers, ShieldCheck, 
   FileText, ArrowRight, MessageCircle, Info, Plus, Edit2, Trash2,
-  HelpCircle, Smartphone, Inbox, Radio, X
+  HelpCircle, Smartphone, Inbox, Radio, X, Vote, Eye, BarChart3,
+  HelpCircle as QuestionIcon, ThumbsUp, PlusCircle
 } from "lucide-react";
-import { BuildingInfo, CollaboratorInfo, CalangusMessage, CalangusTemplate, PingramConfig } from "../types";
+import { BuildingInfo, CollaboratorInfo, CalangusMessage, CalangusTemplate, PingramConfig, MessagePoll } from "../types";
 import PingramConfigModal from "./PingramConfigModal";
+import MessageReceiptsAndPollsView from "./MessageReceiptsAndPollsView";
 import {
   getPingramConfig,
   sendEmailViaPingram,
@@ -93,7 +95,7 @@ export default function MessagingCenter({
   onSaveBuilding
 }: MessagingCenterProps) {
   // Navigation tabs inside Messaging
-  const [activeTab, setActiveTab] = useState<"compose" | "templates" | "history" | "direct_info">("compose");
+  const [activeTab, setActiveTab] = useState<"compose" | "templates" | "history" | "confirmations" | "direct_info">("compose");
 
   // Composition State
   const [channel, setChannel] = useState<"whatsapp" | "email" | "calangus" | "sms">("whatsapp");
@@ -114,6 +116,128 @@ export default function MessagingCenter({
   const [messageBody, setMessageBody] = useState<string>(
     "Olá, {nome}! Informamos que você foi selecionado para atuar no ENEM no prédio {predio}. Sua função prevista é {funcao}. Solicitamos que confirme sua presença no aplicativo CalanguS até as 18h."
   );
+
+  // CLA Interactive Poll / Questionnaire Builder State
+  const [includePoll, setIncludePoll] = useState<boolean>(false);
+  const [pollQuestion, setPollQuestion] = useState<string>("");
+  const [pollType, setPollType] = useState<"single_choice" | "multiple_choice" | "text_input" | "confirmation_yes_no">("single_choice");
+  const [pollOptions, setPollOptions] = useState<Array<{ id: string; text: string }>>([
+    { id: "opt-1", text: "Sim, confirmo presença" },
+    { id: "opt-2", text: "Não poderei comparecer" }
+  ]);
+  const [pollRequired, setPollRequired] = useState<boolean>(true);
+
+  // Synchronized Internal Messages State for Real-Time Read Receipts & Poll Responses
+  const [internalMessages, setInternalMessages] = useState<CalangusMessage[]>(() => {
+    let msgs: CalangusMessage[] = building?.messages ? [...building.messages] : [];
+    try {
+      const saved = JSON.parse(localStorage.getItem("enem_internal_messages") || "[]");
+      const ids = new Set(msgs.map(m => m.id));
+      saved.forEach((m: CalangusMessage) => {
+        if (!ids.has(m.id)) {
+          msgs.push(m);
+          ids.add(m.id);
+        }
+      });
+    } catch (e) {
+      console.error(e);
+    }
+    return msgs;
+  });
+
+  const reloadInternalMessages = () => {
+    let msgs: CalangusMessage[] = building?.messages ? [...building.messages] : [];
+    try {
+      const saved = JSON.parse(localStorage.getItem("enem_internal_messages") || "[]");
+      const ids = new Set(msgs.map(m => m.id));
+      saved.forEach((m: CalangusMessage) => {
+        if (!ids.has(m.id)) {
+          msgs.push(m);
+          ids.add(m.id);
+        }
+      });
+    } catch (e) {
+      console.error(e);
+    }
+    setInternalMessages(msgs);
+  };
+
+  useEffect(() => {
+    reloadInternalMessages();
+    const handleUpdate = () => reloadInternalMessages();
+    window.addEventListener("calangus_message_sent", handleUpdate);
+    window.addEventListener("calangus_response_submitted", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("calangus_message_sent", handleUpdate);
+      window.removeEventListener("calangus_response_submitted", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, [building]);
+
+  const handleAddPollOption = () => {
+    setPollOptions(prev => [...prev, { id: `opt-${Date.now()}`, text: "" }]);
+  };
+
+  const handleRemovePollOption = (id: string) => {
+    setPollOptions(prev => prev.filter(o => o.id !== id));
+  };
+
+  const handlePollOptionChange = (id: string, text: string) => {
+    setPollOptions(prev => prev.map(o => o.id === id ? { ...o, text } : o));
+  };
+
+  const applyPollPreset = (presetKey: string) => {
+    setIncludePoll(true);
+    if (presetKey === "treinamento") {
+      setSubject("Convocação: Treinamento Presencial da Equipe");
+      setMessageBody("Prezado(a) {nome}, você foi convocado(a) para o treinamento presencial preparatório do ENEM no prédio {predio}. Por favor, confirme sua presença respondendo ao questionamento abaixo.");
+      setPollQuestion("Você confirma sua presença no treinamento presencial dos fiscais?");
+      setPollType("single_choice");
+      setPollOptions([
+        { id: "opt-1", text: "Sim, estarei presente pontualmente" },
+        { id: "opt-2", text: "Não poderei comparecer (justificar)" },
+        { id: "opt-3", text: "Desejo receber o material digital complementar" }
+      ]);
+    } else if (presetKey === "transporte") {
+      setSubject("Logística: Necessidade de Transporte para o Dia da Prova");
+      setMessageBody("Olá {nome}, estamos organizando a logística de transporte para o prédio {predio}. Precisamos saber se você necessitará do transporte da coordenação.");
+      setPollQuestion("Você necessita de transporte/van da coordenação para o dia da aplicação?");
+      setPollType("single_choice");
+      setPollOptions([
+        { id: "opt-1", text: "Sim, preciso do transporte da coordenação" },
+        { id: "opt-2", text: "Não, irei em condução própria" },
+        { id: "opt-3", text: "Irei de carona com colega da equipe" }
+      ]);
+    } else if (presetKey === "camiseta") {
+      setSubject("Uniforme Oficial: Escolha do Tamanho de Camiseta/Colete");
+      setMessageBody("Olá {nome}, para a identificação da equipe durante a aplicação no {predio}, solicitamos que informe o tamanho do seu colete/camiseta oficial.");
+      setPollQuestion("Qual o seu tamanho de camiseta/colete para a aplicação?");
+      setPollType("single_choice");
+      setPollOptions([
+        { id: "opt-p", text: "Tamanho P" },
+        { id: "opt-m", text: "Tamanho M" },
+        { id: "opt-g", text: "Tamanho G" },
+        { id: "opt-gg", text: "Tamanho GG" },
+        { id: "opt-xg", text: "Tamanho XG" }
+      ]);
+    } else if (presetKey === "alimentacao") {
+      setSubject("Kit Lanche: Preferências e Restrições Alimentares");
+      setMessageBody("Olá {nome}, a coordenação está definindo a distribuição dos kits de alimentação. Por favor, assinale se possui alguma restrição alimentar.");
+      setPollQuestion("Você possui alguma restrição alimentar para o kit lanche?");
+      setPollType("single_choice");
+      setPollOptions([
+        { id: "opt-1", text: "Sem restrição alimentar (padrão)" },
+        { id: "opt-2", text: "Vegetariano / Vegano" },
+        { id: "opt-3", text: "Celíaco (Sem Glúten)" },
+        { id: "opt-4", text: "Intolerante a Lactose" }
+      ]);
+    } else if (presetKey === "texto_livre") {
+      setPollQuestion("Informe suas observações, dúvidas ou necessidades especiais para a escala:");
+      setPollType("text_input");
+      setPollOptions([]);
+    }
+  };
 
   // Template Management States
   const [templates, setTemplates] = useState<CalangusTemplate[]>(() => {
@@ -409,6 +533,14 @@ export default function MessagingCenter({
     localStorage.setItem("enem_sent_messages_log", JSON.stringify(updatedLogs));
 
     // 2. ALWAYS dispatch internal Calangus message so collaborators receive in their personal inbox!
+    const pollData: MessagePoll | undefined = (includePoll && pollQuestion.trim()) ? {
+      id: `poll-${Date.now()}`,
+      question: pollQuestion.trim(),
+      type: pollType,
+      options: pollType !== "text_input" ? pollOptions.filter(o => o.text.trim()) : [],
+      required: pollRequired
+    } : undefined;
+
     const newInternalMessage: CalangusMessage = {
       id: `cmsg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       senderClaId: claId || building?.claId || "cla-coord",
@@ -436,8 +568,12 @@ export default function MessagingCenter({
       targetCollaboratorName: targetType === "individual" ? targetedRecipients[0]?.name : undefined,
       targetCollaboratorEmail: targetType === "individual" ? targetedRecipients[0]?.email : undefined,
       targetCollaboratorPhone: targetType === "individual" ? targetedRecipients[0]?.whatsapp : undefined,
+      targetRecipientIds: targetedRecipients.map(r => r.id!).filter(Boolean),
       targetSummary: summaryTarget,
-      readBy: []
+      readBy: [],
+      readReceipts: [],
+      poll: pollData,
+      responses: []
     };
 
     // Save to building messages
@@ -705,6 +841,27 @@ export default function MessagingCenter({
             >
               <Send className="w-3.5 h-3.5 text-sky-500" />
               <span>Nova Mensagem</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("confirmations")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "confirmations"
+                  ? "bg-purple-600 text-white shadow-xs font-black"
+                  : "text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 font-bold"
+              }`}
+              title="Acompanhar confirmações de leitura e respostas a questionamentos dos colaboradores em tempo real"
+            >
+              <Vote className="w-3.5 h-3.5 text-purple-400" />
+              <span>Monitor de Leitura & Enquetes</span>
+              {internalMessages.length > 0 && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  activeTab === "confirmations" ? "bg-white text-purple-700" : "bg-purple-600 text-white"
+                }`}>
+                  {internalMessages.length}
+                </span>
+              )}
             </button>
 
             <button
@@ -1122,6 +1279,158 @@ export default function MessagingCenter({
               />
             </div>
 
+            {/* INTERACTIVE QUESTIONNAIRE / POLL BUILDER FOR CALANGUS INBOX */}
+            <div className="p-4 rounded-2xl bg-purple-50/60 dark:bg-purple-950/20 border-2 border-purple-200 dark:border-purple-800/60 space-y-3.5 text-left">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-purple-600 text-white shadow-xs">
+                    <Vote className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>Questionamento Interativo do CLA</span>
+                      <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-purple-200 dark:bg-purple-900/80 text-purple-800 dark:text-purple-200">
+                        Caixa CalanguS
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      Solicite que o colaborador escolha uma opção ou responda a uma pergunta diretamente na mensagem.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={includePoll}
+                    onChange={(e) => setIncludePoll(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
+              {includePoll && (
+                <div className="pt-2 border-t border-purple-200/60 dark:border-purple-800/40 space-y-3 animate-fade-in text-left">
+                  {/* PRESET CHIPS */}
+                  <div>
+                    <span className="text-[9px] font-black uppercase text-purple-700 dark:text-purple-300 block mb-1">
+                      Modelos de Questionamentos Prontos:
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[
+                        { key: "treinamento", label: "🎓 Presença no Treinamento" },
+                        { key: "transporte", label: "🚌 Van / Transporte" },
+                        { key: "camiseta", label: "👕 Tamanho Uniforme" },
+                        { key: "alimentacao", label: "🥗 Restrição Alimentar" },
+                        { key: "texto_livre", label: "✏️ Campo Aberto / Obs" }
+                      ].map((p) => (
+                        <button
+                          key={p.key}
+                          type="button"
+                          onClick={() => applyPollPreset(p.key)}
+                          className="px-2.5 py-1 bg-white dark:bg-purple-900/40 hover:bg-purple-100 dark:hover:bg-purple-800/60 text-purple-800 dark:text-purple-200 rounded-lg text-[10px] font-bold border border-purple-200 dark:border-purple-700 transition cursor-pointer shadow-2xs"
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* QUESTION INPUT */}
+                  <div>
+                    <label className="block text-[10px] uppercase font-black tracking-wider text-slate-500 mb-1">
+                      Pergunta / Solicitação da Coordenação *
+                    </label>
+                    <input
+                      type="text"
+                      value={pollQuestion}
+                      onChange={(e) => setPollQuestion(e.target.value)}
+                      placeholder="Ex: Você confirma sua presença no treinamento presencial dos fiscais?"
+                      className="w-full border-2 border-purple-200 dark:border-purple-800 rounded-xl px-3 py-2 bg-white dark:bg-[#101726] text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+
+                  {/* RESPONSE TYPE SELECTOR */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] uppercase font-black tracking-wider text-slate-500 mb-1">
+                        Formato da Resposta
+                      </label>
+                      <select
+                        value={pollType}
+                        onChange={(e: any) => setPollType(e.target.value)}
+                        className="w-full border border-purple-200 dark:border-purple-800 rounded-xl p-2 bg-white dark:bg-[#101726] text-slate-900 dark:text-white text-xs font-bold"
+                      >
+                        <option value="single_choice">Escolha Única (Opção Exclusiva)</option>
+                        <option value="multiple_choice">Múltipla Escolha (Várias Opções)</option>
+                        <option value="text_input">Texto Livre (Colaborador digita)</option>
+                        <option value="confirmation_yes_no">Sim / Não com Observação</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center pt-4">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={pollRequired}
+                          onChange={(e) => setPollRequired(e.target.checked)}
+                          className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4"
+                        />
+                        <span>Resposta Obrigatória para o Colaborador</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* OPTIONS LIST (IF NOT TEXT ONLY) */}
+                  {pollType !== "text_input" && (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] uppercase font-black tracking-wider text-slate-500">
+                          Opções de Resposta para Escolha
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleAddPollOption}
+                          className="text-[10px] font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 flex items-center gap-1 cursor-pointer"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                          <span>Adicionar Opção</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {pollOptions.map((opt, idx) => (
+                          <div key={opt.id} className="flex items-center gap-2">
+                            <span className="w-5 text-[11px] font-mono font-bold text-slate-400 text-center">
+                              {idx + 1}.
+                            </span>
+                            <input
+                              type="text"
+                              value={opt.text}
+                              onChange={(e) => handlePollOptionChange(opt.id, e.target.value)}
+                              placeholder={`Texto da opção ${idx + 1}...`}
+                              className="flex-1 border border-purple-200 dark:border-purple-800/80 rounded-lg px-2.5 py-1.5 bg-white dark:bg-[#101726] text-xs text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-purple-500"
+                            />
+                            {pollOptions.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePollOption(opt.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition cursor-pointer"
+                                title="Remover esta opção"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* ACTION DISPATCH BUTTONS */}
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
               <div className="text-xs text-slate-500 dark:text-slate-400 font-medium text-left">
@@ -1356,6 +1665,31 @@ export default function MessagingCenter({
           </div>
 
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: CONFIRMATIONS & POLLS MONITOR (RECEIPTS & RESPONSES) */}
+      {/* ========================================================================= */}
+      {activeTab === "confirmations" && (
+        <MessageReceiptsAndPollsView
+          messages={internalMessages}
+          collaborators={collaborators}
+          building={building}
+          currentUserName={currentUserName}
+          claId={claId}
+          onSaveBuilding={onSaveBuilding}
+          onComposeNewWithTarget={(ids, defaultSubj, defaultBdy) => {
+            if (ids.length === 1) {
+              setTargetType("individual");
+              setSelectedCollabId(ids[0]);
+            } else {
+              setTargetType("group");
+            }
+            if (defaultSubj) setSubject(defaultSubj);
+            if (defaultBdy) setMessageBody(defaultBdy);
+            setActiveTab("compose");
+          }}
+        />
       )}
 
       {/* ========================================================================= */}

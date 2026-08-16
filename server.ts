@@ -273,13 +273,12 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
   // Helper to dispatch through Pingram REST API
   const dispatchPingramRequest = async (endpoint: string, apiKey: string, payload: any) => {
     const urls = [
-      "https://api.pingram.io/send",
-      "https://api.pingram.io/v1/send",
       `https://api.pingram.io/${endpoint}`,
       `https://api.pingram.io/v1/${endpoint}`,
-      "https://api.notificationapi.com/send",
-      "https://api.notificationapi.com/v1/send",
+      "https://api.pingram.io/send",
+      "https://api.pingram.io/v1/send",
       `https://api.notificationapi.com/${endpoint}`,
+      "https://api.notificationapi.com/send",
     ];
 
     let lastError: any = null;
@@ -416,42 +415,19 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
       </div>
     `;
 
-    const recipientId = String(to).replace(/[^a-zA-Z0-9_-]/g, "_") || "destinatario";
+    const cleanTo = String(to || "").trim();
     const notifType = "enem_convocacao_email";
     const payload = {
       type: notifType,
       notificationType: notifType,
-      notification_type: notifType,
       notificationId: notifType,
-      to: {
-        id: recipientId,
-        email: to,
-      },
-      user: {
-        id: recipientId,
-        email: to,
-        name: collaboratorName || undefined,
-      },
-      recipient: to,
-      email: {
-        subject,
-        html: htmlBody,
-        text: body,
-      },
+      to: cleanTo,
       subject,
-      body,
-      text: body,
       html: htmlBody,
+      text: body,
+      body,
       from: senderEmail || process.env.PINGRAM_SENDER_EMAIL || "comunicados@calangus.enem2026.br",
       senderName: senderName || "Coordenação ENEM 2026",
-      parameters: {
-        subject,
-        body,
-        collaboratorName: collaboratorName || "",
-        senderName: senderName || "Coordenação ENEM 2026",
-        claId: claId || "",
-        sentAt: new Date().toISOString(),
-      },
       metadata: { claId, collaboratorName, sentAt: new Date().toISOString() },
     };
 
@@ -460,13 +436,19 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
         const pingramRes = await dispatchPingramRequest("email", keyToUse.trim(), payload);
         res.json({
           success: true,
-          message: `E-mail enviado com sucesso para ${to} via Pingram!`,
+          message: `E-mail enviado com sucesso para ${cleanTo} via Pingram!`,
           data: pingramRes.data,
           sentAt: new Date().toISOString(),
         });
         return;
       } catch (err: any) {
-        console.warn(`[CalanguS Pingram] API externa retornou aviso: ${err.message}. Registrado no log.`);
+        console.warn(`[CalanguS Pingram] Erro no envio de e-mail via API externa: ${err.message}`);
+        res.status(502).json({
+          success: false,
+          error: `Pingram retornou erro: ${err.message}`,
+          message: `Erro no servidor do Pingram: ${err.message}`,
+        });
+        return;
       }
     }
 
@@ -493,36 +475,16 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
     const formattedPhone = formatE164(to);
     console.log(`[CalanguS Pingram] Enviando SMS para: ${formattedPhone} (${collaboratorName || "Colaborador"})`);
 
-    const recipientId = formattedPhone.replace(/[^\d]/g, "") || "destinatario_sms";
     const notifType = "enem_convocacao_sms";
     const payload = {
       type: notifType,
       notificationType: notifType,
-      notification_type: notifType,
       notificationId: notifType,
-      to: {
-        id: recipientId,
-        number: formattedPhone,
-      },
-      user: {
-        id: recipientId,
-        number: formattedPhone,
-        name: collaboratorName || undefined,
-      },
-      recipient: formattedPhone,
-      sms: {
-        message,
-      },
+      to: formattedPhone,
       message,
       text: message,
       body: message,
       from: senderPhone || process.env.PINGRAM_SENDER_PHONE || "ENEM2026",
-      parameters: {
-        message,
-        collaboratorName: collaboratorName || "",
-        claId: claId || "",
-        sentAt: new Date().toISOString(),
-      },
       metadata: { claId, collaboratorName, sentAt: new Date().toISOString() },
     };
 
@@ -537,7 +499,13 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
         });
         return;
       } catch (err: any) {
-        console.warn(`[CalanguS Pingram SMS] Aviso da API externa: ${err.message}. Registrado no log.`);
+        console.warn(`[CalanguS Pingram SMS] Erro no envio de SMS via API externa: ${err.message}`);
+        res.status(502).json({
+          success: false,
+          error: `Pingram retornou erro: ${err.message}`,
+          message: `Erro no servidor do Pingram: ${err.message}`,
+        });
+        return;
       }
     }
 
@@ -584,76 +552,40 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
 
       try {
         if (channel === "email") {
-          const recipientId = String(item.email).replace(/[^a-zA-Z0-9_-]/g, "_") || "destinatario";
+          const cleanTo = String(item.email || "").trim();
           const notifType = "enem_convocacao_email";
           const payload = {
             type: notifType,
             notificationType: notifType,
-            notification_type: notifType,
             notificationId: notifType,
-            to: {
-              id: recipientId,
-              email: item.email,
-            },
-            user: {
-              id: recipientId,
-              email: item.email,
-              name: item.name || undefined,
-            },
-            recipient: item.email,
-            email: {
-              subject: item.subject || "Comunicado ENEM 2026",
-              text: item.body,
-              html: `<div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;">${item.body}</div>`,
-            },
+            to: cleanTo,
             subject: item.subject || "Comunicado ENEM 2026",
-            body: item.body,
+            html: `<div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;">${item.body}</div>`,
             text: item.body,
+            body: item.body,
             from: senderEmail || "comunicados@calangus.enem2026.br",
             senderName: senderName || "Coordenação ENEM 2026",
-            parameters: {
-              subject: item.subject || "Comunicado ENEM 2026",
-              body: item.body,
-              name: item.name,
-            },
           };
 
           if (keyToUse && keyToUse.trim()) {
-            await dispatchPingramRequest("email", keyToUse.trim(), payload).catch(() => null);
+            await dispatchPingramRequest("email", keyToUse.trim(), payload);
           }
         } else {
           const formattedPhone = formatE164(item.phone || "");
-          const recipientId = formattedPhone.replace(/[^\d]/g, "") || "destinatario_sms";
           const notifType = "enem_convocacao_sms";
           const payload = {
             type: notifType,
             notificationType: notifType,
-            notification_type: notifType,
             notificationId: notifType,
-            to: {
-              id: recipientId,
-              number: formattedPhone,
-            },
-            user: {
-              id: recipientId,
-              number: formattedPhone,
-              name: item.name || undefined,
-            },
-            recipient: formattedPhone,
-            sms: {
-              message: item.body,
-            },
+            to: formattedPhone,
             message: item.body,
             text: item.body,
+            body: item.body,
             from: senderPhone || "ENEM2026",
-            parameters: {
-              message: item.body,
-              name: item.name,
-            },
           };
 
           if (keyToUse && keyToUse.trim()) {
-            await dispatchPingramRequest("sms", keyToUse.trim(), payload).catch(() => null);
+            await dispatchPingramRequest("sms", keyToUse.trim(), payload);
           }
         }
 
