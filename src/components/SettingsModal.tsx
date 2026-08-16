@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Settings, X, Type, Palette, Sun, Moon, Check, Sparkles, RefreshCw, Camera, User } from "lucide-react";
+import { Settings, X, Type, Palette, Sun, Moon, Check, Sparkles, RefreshCw, Camera, User, Key, ShieldCheck, ExternalLink, HelpCircle } from "lucide-react";
 import { UserProfile } from "../types";
 import PhotoUploader from "./PhotoUploader";
+import GeminiKeyModal from "./GeminiKeyModal";
+import { getGeminiApiKey, maskApiKey } from "../utils/geminiApiKey";
 
 export type FontSizeOption = "5pt" | "8pt" | "12pt" | "14pt" | "18pt" | "24pt";
 export type ColorThemeOption = "emerald" | "ocean" | "amethyst" | "amber" | "crimson" | "monochrome";
@@ -115,6 +117,18 @@ export default function SettingsModal({
   const [photoUrl, setPhotoUrl] = useState(currentUser?.photoUrl || "");
   const [isSavingPhoto, setIsSavingPhoto] = useState(false);
   const [photoSavedMsg, setPhotoSavedMsg] = useState("");
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [activeApiKey, setActiveApiKey] = useState<string>(getGeminiApiKey());
+
+  useEffect(() => {
+    const handleKeyChange = (e: any) => {
+      setActiveApiKey(e.detail?.apiKey || getGeminiApiKey());
+    };
+    window.addEventListener("calangus_api_key_changed", handleKeyChange);
+    return () => {
+      window.removeEventListener("calangus_api_key_changed", handleKeyChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (currentUser?.photoUrl !== undefined) {
@@ -363,6 +377,50 @@ export default function SettingsModal({
             </div>
           </div>
 
+          <div className="border-t border-slate-200 dark:border-slate-800" />
+
+          {/* SECTION 4: GOOGLE GEMINI API KEY & OCR */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-slate-800 dark:text-white font-extrabold text-sm uppercase tracking-wider">
+                <Key className="w-4 h-4 text-emerald-500" />
+                <span>4. Inteligência Artificial & OCR (Google Gemini)</span>
+              </div>
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-full">
+                Sessão do Usuário
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              Configure sua chave de API gratuita do Google Gemini para realizar leitura óptica (OCR) de documentos de ensalamento e extração de salas.
+            </p>
+
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl text-white ${activeApiKey ? "bg-emerald-500" : "bg-amber-500"}`}>
+                  {activeApiKey ? <ShieldCheck className="w-5 h-5" /> : <Key className="w-5 h-5" />}
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">
+                    {activeApiKey ? "Chave de API Configurada" : "Nenhuma Chave Pessoal Configurada"}
+                  </p>
+                  <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                    {activeApiKey ? maskApiKey(activeApiKey) : "Usará chave padrão do sistema se disponível"}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsKeyModalOpen(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-xs flex items-center gap-1.5 transition cursor-pointer self-stretch sm:self-auto justify-center"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{activeApiKey ? "Gerenciar Chave / Tutorial" : "Configurar Chave & Tutorial"}</span>
+              </button>
+            </div>
+          </div>
+
         </div>
 
         {/* Footer */}
@@ -383,6 +441,13 @@ export default function SettingsModal({
           </button>
         </div>
       </div>
+
+      {/* Tutorial & Key Management Modal */}
+      <GeminiKeyModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        onKeySaved={(k) => setActiveApiKey(k)}
+      />
     </div>
   );
 }

@@ -17,10 +17,52 @@ async function startServer() {
     res.json({ status: "ok", app: "CalanguS" });
   });
 
+  // API route to test a provided Google Gemini API key
+  app.post("/api/test-gemini-key", async (req, res) => {
+    try {
+      const apiKey = req.body?.apiKey || req.headers["x-goog-api-key"] || process.env.GEMINI_API_KEY;
+      if (!apiKey || !apiKey.trim()) {
+        res.status(400).json({ success: false, error: "Nenhuma chave de API foi informada para teste." });
+        return;
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey.trim(),
+        httpOptions: { headers: { "User-Agent": "aistudio-build" } }
+      });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.7-flash",
+        contents: "Responda apenas com a palavra OK se esta chave de API estiver funcionando.",
+      });
+
+      if (response && response.text) {
+        res.json({
+          success: true,
+          message: "Chave Google Gemini validada com sucesso! O OCR e os recursos de IA estão prontos para uso.",
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          error: "O Google Gemini não retornou uma resposta válida para esta chave.",
+        });
+      }
+    } catch (err: any) {
+      console.error("Erro ao validar chave Gemini:", err);
+      const errMsg = err?.message || "Falha na comunicação com a API do Google Gemini.";
+      res.status(400).json({
+        success: false,
+        error: errMsg.includes("API_KEY_INVALID") || errMsg.includes("invalid API key")
+          ? "Chave de API inválida. Verifique os caracteres e gere uma nova chave no Google AI Studio."
+          : errMsg
+      });
+    }
+  });
+
   // OCR Ensalamento analysis via Gemini API
   app.post("/api/parse-ensalamento", async (req, res) => {
     try {
-      const { fileData, mimeType } = req.body;
+      const { fileData, mimeType, apiKey: userProvidedKey } = req.body;
       let base64Data = fileData;
       let type = mimeType || "application/pdf";
 
@@ -45,14 +87,17 @@ async function startServer() {
         }
       }
 
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        res.status(500).json({ error: "Chave GEMINI_API_KEY não configurada no servidor." });
+      const apiKey = userProvidedKey || req.headers["x-goog-api-key"] || process.env.GEMINI_API_KEY;
+      if (!apiKey || !apiKey.trim()) {
+        res.status(400).json({
+          error: "Chave de API do Google Gemini não encontrada. Por favor, insira sua chave gratuita nas configurações de OCR ou do sistema.",
+          requiresApiKey: true
+        });
         return;
       }
 
       const ai = new GoogleGenAI({
-        apiKey,
+        apiKey: apiKey.trim(),
         httpOptions: { headers: { "User-Agent": "aistudio-build" } }
       });
 
@@ -86,7 +131,7 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-3.7-flash",
         contents: [
           {
             inlineData: {

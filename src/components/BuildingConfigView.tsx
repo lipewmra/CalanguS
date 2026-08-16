@@ -1,6 +1,31 @@
 import React, { useState, useEffect } from "react";
 import { BuildingInfo, RoomDetails } from "../types";
-import { Landmark, Save, MapPin, Calculator, BookOpen, AlertCircle, Check, FileUp, FileText, Download, Sparkles, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import {
+  Landmark,
+  Save,
+  MapPin,
+  Calculator,
+  BookOpen,
+  AlertCircle,
+  Check,
+  FileUp,
+  FileText,
+  Download,
+  Sparkles,
+  Loader2,
+  CheckCircle2,
+  AlertTriangle,
+  Key,
+  HelpCircle,
+  ShieldCheck,
+  Settings,
+} from "lucide-react";
+import GeminiKeyModal from "./GeminiKeyModal";
+import {
+  getGeminiApiKey,
+  maskApiKey,
+  hasGeminiApiKey,
+} from "../utils/geminiApiKey";
 
 export const FLOOR_OPTIONS = [
   "10º Andar",
@@ -54,6 +79,20 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
   const [ocrSuccessMsg, setOcrSuccessMsg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  // Gemini API Key & Tutorial states
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [activeApiKey, setActiveApiKey] = useState<string>(getGeminiApiKey());
+
+  useEffect(() => {
+    const handleKeyChange = (e: any) => {
+      setActiveApiKey(e.detail?.apiKey || getGeminiApiKey());
+    };
+    window.addEventListener("calangus_api_key_changed", handleKeyChange);
+    return () => {
+      window.removeEventListener("calangus_api_key_changed", handleKeyChange);
+    };
+  }, []);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
@@ -67,11 +106,15 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
     setOcrError(null);
     setOcrSuccessMsg(null);
 
+    const userKey = getGeminiApiKey();
+
     try {
-      let bodyData: any = {};
+      let bodyData: any = {
+        apiKey: userKey || undefined,
+      };
 
       if (useDefaultTemplate) {
-        bodyData = {};
+        // Keep bodyData with apiKey
       } else if (fileToUse || selectedFile) {
         const file = fileToUse || selectedFile;
         if (!file) {
@@ -84,11 +127,10 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
           reader.readAsDataURL(file);
         });
         bodyData = {
+          ...bodyData,
           fileData: base64,
           mimeType: file.type || "application/pdf"
         };
-      } else {
-        bodyData = {};
       }
 
       const res = await fetch("/api/parse-ensalamento", {
@@ -100,6 +142,9 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       const json = await res.json();
 
       if (!res.ok || !json.success) {
+        if (json.requiresApiKey) {
+          setIsKeyModalOpen(true);
+        }
         throw new Error(json.error || "Falha no processamento do OCR de ensalamento.");
       }
 
@@ -422,7 +467,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
 
       {/* MÓDULO OCR DE ENSALAMENTO */}
       <div className="mb-6 p-5 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 dark:from-emerald-950/40 dark:via-teal-950/40 dark:to-indigo-950/40 border-2 border-emerald-500/30 rounded-2xl shadow-xs relative overflow-hidden">
-        <div className="pb-3 border-b border-emerald-500/20">
+        <div className="pb-3 border-b border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-500 text-white rounded-xl shadow-md">
               <Sparkles className="w-5 h-5 animate-pulse" />
@@ -430,12 +475,39 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
             <div>
               <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                 <span>OCR & Envio do Ensalamento</span>
-                <span className="text-[9px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-mono font-black">GEMINI AI 3.6 VISION</span>
+                <span className="text-[9px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-mono font-black">GEMINI AI 3.7 VISION</span>
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
                 Envie o documento de ensalamento para extrair automaticamente salas de prova, capacidades, sala da coordenação e salas extras.
               </p>
             </div>
+          </div>
+
+          {/* Status da Chave de API do CLA */}
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {activeApiKey ? (
+              <button
+                type="button"
+                onClick={() => setIsKeyModalOpen(true)}
+                className="px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-850 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                title="Chave pessoal configurada. Clique para gerenciar ou testar."
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <span className="font-mono text-[11px]">{maskApiKey(activeApiKey)}</span>
+                <span className="text-[10px] uppercase font-extrabold bg-emerald-500 text-white px-1.5 py-0.5 rounded">Ativa</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsKeyModalOpen(true)}
+                className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-900 dark:text-amber-300 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition cursor-pointer animate-pulse"
+                title="Clique para ver o tutorial e inserir sua chave Google Gemini gratuita"
+              >
+                <Key className="w-4 h-4 text-amber-500" />
+                <span>Configurar Chave de API Grátis</span>
+                <HelpCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -475,9 +547,20 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
         </div>
 
         {ocrError && (
-          <div className="mt-3 p-3 bg-red-500/10 text-red-700 dark:text-red-400 text-xs font-bold rounded-xl flex items-center gap-2 border border-red-500/20">
-            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-            <span>{ocrError}</span>
+          <div className="mt-3 p-3 bg-red-500/10 text-red-700 dark:text-red-400 text-xs font-bold rounded-xl flex items-center justify-between gap-2 border border-red-500/20">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+              <span>{ocrError}</span>
+            </div>
+            {!activeApiKey && (
+              <button
+                type="button"
+                onClick={() => setIsKeyModalOpen(true)}
+                className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg shrink-0 cursor-pointer transition"
+              >
+                Adicionar Minha Chave
+              </button>
+            )}
           </div>
         )}
 
@@ -847,6 +930,16 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
           </div>
         )}
       </form>
+
+      {/* Modal de Tutorial e Configuração da Chave de API Google Gemini */}
+      <GeminiKeyModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        onKeySaved={(newKey) => {
+          setActiveApiKey(newKey);
+          setOcrError(null);
+        }}
+      />
     </div>
   );
 }

@@ -91,7 +91,7 @@ export default function MessagingCenter({
   
   // Group Target Filter
   const [groupFilter, setGroupFilter] = useState<
-    "all" | "confirmed_presence" | "pending_presence" | "reserves" | "with_errors" | "assigned"
+    "all" | "confirmed_presence" | "pending_presence" | "reserves" | "with_errors" | "assigned" | "pending_approval"
   >("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
 
@@ -226,15 +226,38 @@ export default function MessagingCenter({
     }
   };
 
-  // Extract distinct roles for filter
+  // Extract distinct roles for filter (only from CLA-approved collaborators)
+  const approvedCollaborators = useMemo(() => {
+    return collaborators.filter(c => c.status === "Confirmado");
+  }, [collaborators]);
+
+  const pendingApprovalCollaborators = useMemo(() => {
+    return collaborators.filter(c => c.status === "Pendente");
+  }, [collaborators]);
+
+  const statsCounts = useMemo(() => {
+    const approved = approvedCollaborators;
+    return {
+      totalAll: collaborators.length,
+      approvedTotal: approved.length,
+      confirmedPresence: approved.filter(c => c.attendanceStatus === "Confirmado").length,
+      pendingPresence: approved.filter(c => c.attendanceStatus !== "Confirmado" && !c.isReserve).length,
+      reserves: approved.filter(c => c.isReserve).length,
+      assigned: approved.filter(c => !c.isReserve && !!c.assignedRole).length,
+      withErrors: approved.filter(c => c.orionStatus === "Erro").length,
+      pendingApproval: pendingApprovalCollaborators.length,
+      rejected: collaborators.filter(c => c.status === "Recusado").length,
+    };
+  }, [collaborators, approvedCollaborators, pendingApprovalCollaborators]);
+
   const distinctRoles = useMemo(() => {
     const rolesSet = new Set<string>();
-    collaborators.forEach(c => {
+    approvedCollaborators.forEach(c => {
       if (c.assignedRole) rolesSet.add(c.assignedRole);
-      if (c.specialRole) rolesSet.add(c.specialRole);
+      if (c.specialRole && c.specialRole !== "Nenhuma") rolesSet.add(c.specialRole);
     });
     return Array.from(rolesSet);
-  }, [collaborators]);
+  }, [approvedCollaborators]);
 
   // Compute targeted recipients list
   const targetedRecipients = useMemo(() => {
@@ -243,9 +266,17 @@ export default function MessagingCenter({
       return single ? [single] : [];
     }
 
-    return collaborators.filter(c => {
-      if (c.status === "Recusado") return false;
+    if (groupFilter === "pending_approval") {
+      // Specifically target pending registrants in Menu 2
+      let list = pendingApprovalCollaborators;
+      if (roleFilter !== "all") {
+        list = list.filter(c => c.assignedRole === roleFilter || c.specialRole === roleFilter);
+      }
+      return list;
+    }
 
+    // For all standard groups: ONLY collaborators approved by the CLA in Menu 2 (c.status === "Confirmado")
+    return approvedCollaborators.filter(c => {
       // Group filter
       if (groupFilter === "confirmed_presence" && c.attendanceStatus !== "Confirmado") return false;
       if (groupFilter === "pending_presence" && (c.attendanceStatus === "Confirmado" || c.isReserve)) return false;
@@ -260,7 +291,7 @@ export default function MessagingCenter({
 
       return true;
     });
-  }, [collaborators, targetType, selectedCollabId, groupFilter, roleFilter]);
+  }, [collaborators, approvedCollaborators, pendingApprovalCollaborators, targetType, selectedCollabId, groupFilter, roleFilter]);
 
   // Helpers to replace placeholders in message
   const formatMessageForCollab = (template: string, collab: CollaboratorInfo) => {
@@ -311,9 +342,22 @@ export default function MessagingCenter({
     }
 
     const timestampStr = new Date().toLocaleString("pt-BR");
+    const getGroupFilterLabel = () => {
+      switch (groupFilter) {
+        case "all": return `Todos os Colaboradores Aprovados (${statsCounts.approvedTotal})`;
+        case "confirmed_presence": return `Presença Confirmada (${statsCounts.confirmedPresence})`;
+        case "pending_presence": return `Pendentes de Confirmar Presença (${statsCounts.pendingPresence})`;
+        case "reserves": return `Fiscais da Reserva (${statsCounts.reserves})`;
+        case "assigned": return `Fiscais c/ Sala & Função (${statsCounts.assigned})`;
+        case "with_errors": return `Com Inconsistência Orion (${statsCounts.withErrors})`;
+        case "pending_approval": return `Cadastros Pendentes no Menu 2 (${statsCounts.pendingApproval})`;
+        default: return groupFilter;
+      }
+    };
+
     const summaryTarget = targetType === "individual" 
       ? targetedRecipients[0]?.name || "Colaborador Individual"
-      : `Grupo: ${groupFilter === "all" ? "Todos os Fiscais" : groupFilter}${roleFilter !== "all" ? ` (${roleFilter})` : ""} (${targetedRecipients.length} pessoas)`;
+      : `Grupo: ${getGroupFilterLabel()}${roleFilter !== "all" ? ` (${roleFilter})` : ""} (${targetedRecipients.length} pessoas)`;
 
     // 1. Create Sent Log
     const newLog: SentMessageLog = {
@@ -344,7 +388,17 @@ export default function MessagingCenter({
       sentAt: timestampStr,
       channel: channel,
       channels: [channel],
-      targetType: targetType === "individual" ? "individual" : (groupFilter === "all" ? "all" : (groupFilter === "reserves" ? "reserve" : (groupFilter === "confirmed_presence" ? "confirmed_attendance" : (groupFilter === "pending_presence" ? "pending_attendance" : "role")))),
+      targetType: targetType === "individual" 
+        ? "individual" 
+        : (groupFilter === "all" 
+            ? "all" 
+            : (groupFilter === "reserves" 
+                ? "reserve" 
+                : (groupFilter === "confirmed_presence" 
+                    ? "confirmed_attendance" 
+                    : (groupFilter === "pending_presence" 
+                        ? "pending_attendance" 
+                        : (groupFilter === "assigned" ? "associated" : "role"))))),
       targetRoleId: roleFilter !== "all" ? roleFilter : undefined,
       targetRoleName: roleFilter !== "all" ? roleFilter : undefined,
       targetCollaboratorId: targetType === "individual" ? targetedRecipients[0]?.id : undefined,
@@ -519,6 +573,38 @@ export default function MessagingCenter({
           {/* LEFT 2 COLS: COMPOSITION WORKSPACE */}
           <div className="lg:col-span-2 space-y-5 bg-white dark:bg-[#0c1220]/90 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_#e2e8f0] dark:shadow-[4px_4px_0px_0px_#10b981]/20 text-left">
             
+            {/* REAL-TIME COLLABORATORS SYNC METRICS (CONGRUENCE WITH MENU 2) */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/80 rounded-2xl border-2 border-slate-200 dark:border-slate-800 space-y-2 text-left">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                    Sincronização de Cadastros (Menu 2 - Fiscais e Inscrições)
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                    {statsCounts.approvedTotal} Aprovados pelo CLA
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                    {statsCounts.assigned} Efetivos c/ Sala
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                    {statsCounts.reserves} Reserva
+                  </span>
+                  {statsCounts.pendingApproval > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                      {statsCounts.pendingApproval} Pendentes no Menu 2
+                    </span>
+                  )}
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                Os colaboradores aptos para atuação e disparos regulares são estritamente aqueles com <strong>cadastro aprovado pelo CLA no Menu 2</strong>. Colaboradores com cadastro pendente não ingressam como efetivos nem como reserva até sua aprovação.
+              </p>
+            </div>
+
             {/* CHANNEL SELECTOR */}
             <div>
               <label className="block text-[10px] uppercase font-black tracking-wider text-slate-400 mb-2 text-left">
@@ -633,12 +719,17 @@ export default function MessagingCenter({
                       onChange={(e) => setGroupFilter(e.target.value as any)}
                       className="w-full border-2 border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-[#101726] text-xs font-bold text-slate-800 dark:text-slate-200"
                     >
-                      <option value="all">Todos os Colaboradores Aprovados</option>
-                      <option value="confirmed_presence">Presença Confirmada (Efetivos)</option>
-                      <option value="pending_presence">Pendentes de Confirmar Presença</option>
-                      <option value="reserves">Fiscais da Reserva</option>
-                      <option value="assigned">Fiscais com Função e Sala Atribuídas</option>
-                      <option value="with_errors">Com Inconsistência Cadastral / Orion</option>
+                      <option value="all">Todos os Colaboradores Aprovados ({statsCounts.approvedTotal})</option>
+                      <option value="confirmed_presence">Presença Confirmada ({statsCounts.confirmedPresence})</option>
+                      <option value="pending_presence">Pendentes de Confirmar Presença ({statsCounts.pendingPresence})</option>
+                      <option value="reserves">Fiscais da Reserva - Aprovados ({statsCounts.reserves})</option>
+                      <option value="assigned">Fiscais c/ Função & Sala - Aprovados ({statsCounts.assigned})</option>
+                      <option value="with_errors">Com Inconsistência Orion - Aprovados ({statsCounts.withErrors})</option>
+                      {statsCounts.pendingApproval > 0 && (
+                        <option value="pending_approval" className="text-amber-600 font-bold">
+                          ⚠️ Cadastros Pendentes no Menu 2 ({statsCounts.pendingApproval})
+                        </option>
+                      )}
                     </select>
                   </div>
 
@@ -651,10 +742,13 @@ export default function MessagingCenter({
                       onChange={(e) => setRoleFilter(e.target.value)}
                       className="w-full border-2 border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-[#101726] text-xs font-bold text-slate-800 dark:text-slate-200"
                     >
-                      <option value="all">Todas as Funções</option>
-                      {distinctRoles.map(role => (
-                        <option key={role} value={role}>{role}</option>
-                      ))}
+                      <option value="all">Todas as Funções ({statsCounts.approvedTotal})</option>
+                      {distinctRoles.map(role => {
+                        const countInRole = approvedCollaborators.filter(c => c.assignedRole === role || c.specialRole === role).length;
+                        return (
+                          <option key={role} value={role}>{role} ({countInRole})</option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
@@ -662,7 +756,7 @@ export default function MessagingCenter({
 
               {/* INDIVIDUAL SELECTION */}
               {targetType === "individual" && (
-                <div className="space-y-2 p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 text-left">
+                <div className="space-y-2.5 p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 text-left">
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                     <input
@@ -674,7 +768,7 @@ export default function MessagingCenter({
                     />
                   </div>
 
-                  <div className="max-h-40 overflow-y-auto space-y-1 pr-1 text-left">
+                  <div className="max-h-48 overflow-y-auto space-y-1 pr-1 text-left">
                     {collaborators
                       .filter(c => {
                         if (!searchCollabText) return true;
@@ -682,32 +776,71 @@ export default function MessagingCenter({
                         return (
                           c.name.toLowerCase().includes(q) ||
                           c.cpf.includes(q) ||
-                          c.email.toLowerCase().includes(q)
+                          (c.email && c.email.toLowerCase().includes(q))
                         );
                       })
-                      .map(c => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setSelectedCollabId(c.id!)}
-                          className={`w-full text-left p-2 rounded-lg text-xs font-bold flex items-center justify-between transition cursor-pointer ${
-                            selectedCollabId === c.id
-                              ? "bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 border border-emerald-500/40"
-                              : "hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                          }`}
-                        >
-                          <div className="text-left">
-                            <div>{c.name}</div>
-                            <div className="text-[10px] text-slate-400 font-normal">
-                              {c.assignedRole || c.specialRole || "Sem Função"} • Tel: {c.whatsapp || "Sem tel"}
+                      .sort((a, b) => {
+                        const order: Record<string, number> = { "Confirmado": 1, "Pendente": 2, "Recusado": 3, "Cancelado": 4 };
+                        const orderA = order[a.status || ""] || 5;
+                        const orderB = order[b.status || ""] || 5;
+                        return orderA - orderB;
+                      })
+                      .map(c => {
+                        const isSelected = selectedCollabId === c.id;
+                        const isApproved = c.status === "Confirmado";
+                        const isPending = c.status === "Pendente";
+
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setSelectedCollabId(c.id!)}
+                            className={`w-full text-left p-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer border ${
+                              isSelected
+                                ? "bg-emerald-500/20 text-emerald-900 dark:text-emerald-100 border-emerald-500/50 shadow-xs"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200/60 dark:border-slate-800"
+                            }`}
+                          >
+                            <div className="text-left space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span>{c.name}</span>
+                                {isApproved && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                                    Aprovado {c.isReserve ? "(Reserva)" : (c.assignedRoom ? `(Sala ${c.assignedRoom})` : "")}
+                                  </span>
+                                )}
+                                {isPending && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                                    ⏳ Pendente Menu 2
+                                  </span>
+                                )}
+                                {c.status === "Recusado" && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-300">
+                                    Recusado
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-normal">
+                                {c.assignedRole || c.specialRole || "Sem Função"} • CPF: {c.cpf || "---"} • Tel: {c.whatsapp || "Sem tel"}
+                              </div>
                             </div>
-                          </div>
-                          {selectedCollabId === c.id && (
-                            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                          )}
-                        </button>
-                      ))}
+                            {isSelected && (
+                              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
                   </div>
+
+                  {/* Warning if selected collaborator is pending approval in Menu 2 */}
+                  {selectedCollabId && collaborators.find(c => c.id === selectedCollabId)?.status === "Pendente" && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>
+                        <strong>Aviso:</strong> O cadastro deste colaborador está <strong>Pendente de Aprovação no Menu 2</strong>. Para que ele possa atuar na aplicação de provas ou compor a reserva, aprove o cadastro no Menu 2 (Fiscais e Inscrições).
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -852,7 +985,13 @@ export default function MessagingCenter({
                               {collab.name}
                             </span>
                             <span className="text-[10px] text-slate-500 dark:text-slate-400 block text-left">
-                              {collab.assignedRole || collab.specialRole || (collab.isReserve ? "Reserva" : "Sem Função")} • Sala: {collab.assignedRoom || "Pendente"}
+                              {collab.status === "Confirmado" ? (
+                                `${collab.assignedRole || collab.specialRole || (collab.isReserve ? "Reserva Estratégica" : "Fiscal Efetivo")} • Sala: ${collab.assignedRoom || "A Definir"}`
+                              ) : (
+                                <span className="text-amber-600 dark:text-amber-400 font-bold">
+                                  {collab.status === "Pendente" ? "⏳ Cadastro Pendente no Menu 2" : `Status: ${collab.status}`}
+                                </span>
+                              )}
                             </span>
                           </div>
 
