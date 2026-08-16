@@ -293,7 +293,7 @@ export default function GeminiKeyModal({
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <span className="text-[10px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                    Chave inicia com: AIzaSy...
+                    Formato: AQ... ou AIzaSy...
                   </span>
                 </div>
               </div>
@@ -373,7 +373,7 @@ export default function GeminiKeyModal({
           {/* Form Input Area */}
           <div className="space-y-3">
             <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-              Cole sua Chave de API Google Gemini (AIzaSy...)
+              Cole sua Chave de API Google Gemini (AQ... ou AIzaSy...)
             </label>
 
             <div className="relative flex items-center">
@@ -384,7 +384,7 @@ export default function GeminiKeyModal({
                   setApiKeyInput(e.target.value);
                   setTestResult(null);
                 }}
-                placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+                placeholder="Ex: AQ.Ab... ou AIzaSy..."
                 className="w-full pl-4 pr-24 py-3 bg-slate-50 dark:bg-slate-800/80 border-2 border-slate-300 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 rounded-2xl text-xs sm:text-sm font-mono text-slate-900 dark:text-white outline-hidden transition"
               />
 
@@ -423,24 +423,35 @@ export default function GeminiKeyModal({
               className={`p-4 rounded-2xl border-2 flex items-start gap-3 animate-fade-in ${
                 testResult.success
                   ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-850 dark:text-emerald-300"
+                  : testResult.message.includes("503") || testResult.message.includes("alta demanda") || testResult.message.includes("high demand")
+                  ? "bg-amber-500/10 border-amber-500/30 text-amber-850 dark:text-amber-300"
                   : "bg-rose-500/10 border-rose-500/30 text-rose-850 dark:text-rose-300"
               }`}
             >
               {testResult.success ? (
                 <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+              ) : testResult.message.includes("503") || testResult.message.includes("alta demanda") || testResult.message.includes("high demand") ? (
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
               ) : (
                 <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
               )}
-              <div className="text-xs space-y-1">
+              <div className="text-xs space-y-1 text-left">
                 <p className="font-bold">
                   {testResult.success
-                    ? "✨ Sucesso!"
+                    ? "✨ Conexão Estabelecida com Sucesso!"
+                    : testResult.message.includes("503") || testResult.message.includes("alta demanda") || testResult.message.includes("high demand")
+                    ? "⚡ Alta Demanda Temporária nos Servidores do Google (Erro 503)"
                     : "⚠️ Não foi possível validar a chave"}
                 </p>
                 <p>{testResult.message}</p>
-                {!testResult.success && (
+                {!testResult.success && !testResult.message.includes("503") && !testResult.message.includes("alta demanda") && (
                   <p className="text-[11px] opacity-80">
-                    Certifique-se de copiar a chave completa (começando com <code>AIzaSy</code>) e de que o projeto esteja ativo no Google AI Studio.
+                    Certifique-se de copiar a chave completa (iniciando com <code>AQ...</code> ou <code>AIzaSy...</code>) e de que o projeto esteja ativo no Google AI Studio.
+                  </p>
+                )}
+                {(testResult.message.includes("503") || testResult.message.includes("alta demanda")) && (
+                  <p className="text-[11px] font-medium opacity-90">
+                    💡 <strong>Dica:</strong> Este erro ocorre diretamente nos clusters do Google durante picos de uso e costuma durar apenas alguns segundos. O CalanguS já possui contingência automática entre múltiplos modelos (Gemini 2.5 Flash, 3.7 Flash, Flash-Lite e Pro). Você pode clicar em <strong>"Salvar Direto"</strong> para utilizá-la normalmente.
                   </p>
                 )}
               </div>

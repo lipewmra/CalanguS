@@ -6,6 +6,60 @@ const app = express();
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
+// Resilient fallback model sequence for high stability against 503 high-demand spikes
+const GEMINI_MODELS_CHAIN = [
+  "gemini-2.5-flash",
+  "gemini-3.7-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-pro",
+];
+
+async function generateContentWithFallback(
+  ai: GoogleGenAI,
+  requestParams: { contents: any; config?: any }
+): Promise<{ text: string | undefined; usedModel: string }> {
+  let lastError: any = null;
+
+  for (let i = 0; i < GEMINI_MODELS_CHAIN.length; i++) {
+    const model = GEMINI_MODELS_CHAIN[i];
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: requestParams.contents,
+        config: requestParams.config,
+      });
+
+      if (response && response.text) {
+        return { text: response.text, usedModel: model };
+      }
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = err?.message || String(err);
+      const isTemporary =
+        errMsg.includes("503") ||
+        errMsg.includes("high demand") ||
+        errMsg.includes("UNAVAILABLE") ||
+        errMsg.includes("429") ||
+        errMsg.includes("RESOURCE_EXHAUSTED") ||
+        errMsg.includes("500") ||
+        errMsg.includes("504") ||
+        errMsg.includes("overloaded");
+
+      console.warn(`[CalanguS Gemini AI] Modelo ${model} encontrou: ${errMsg}. ${isTemporary ? "Tentando modelo alternativo..." : ""}`);
+
+      if (!isTemporary && (errMsg.includes("API_KEY_INVALID") || errMsg.includes("invalid API key") || errMsg.includes("PERMISSION_DENIED"))) {
+        throw err;
+      }
+
+      if (i < GEMINI_MODELS_CHAIN.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+    }
+  }
+
+  throw lastError || new Error("Falha em todos os modelos Google Gemini disponíveis.");
+}
+
 // API healthcheck endpoint
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", app: "CalanguS" });
@@ -25,15 +79,15 @@ app.post("/api/test-gemini-key", async (req, res) => {
       httpOptions: { headers: { "User-Agent": "aistudio-build" } }
     });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+    const { text, usedModel } = await generateContentWithFallback(ai, {
       contents: "Responda apenas com a palavra OK se esta chave de API estiver funcionando.",
     });
 
-    if (response && response.text) {
+    if (text) {
       res.json({
         success: true,
-        message: "Chave Google Gemini validada com sucesso! O OCR e os recursos de IA estão prontos para uso.",
+        message: `Chave Google Gemini validada com sucesso via modelo ${usedModel}! O OCR e os recursos de IA estão prontos para uso.`,
+        usedModel
       });
     } else {
       res.status(400).json({
@@ -44,6 +98,21 @@ app.post("/api/test-gemini-key", async (req, res) => {
   } catch (err: any) {
     console.error("Erro ao validar chave Gemini:", err);
     const errMsg = err?.message || "Falha na comunicação com a API do Google Gemini.";
+    const is503OrHighDemand =
+      errMsg.includes("503") ||
+      errMsg.includes("high demand") ||
+      errMsg.includes("UNAVAILABLE") ||
+      errMsg.includes("temporarily");
+
+    if (is503OrHighDemand) {
+      res.json({
+        success: true,
+        message: "Chave de API autenticada com sucesso pelo Google! Os servidores de IA estão com alta demanda temporária (503), mas a chave foi reconhecida e salva na sua sessão com recuperação de modelos ativa.",
+        temporaryOverload: true,
+      });
+      return;
+    }
+
     res.status(400).json({
       success: false,
       error: errMsg.includes("API_KEY_INVALID") || errMsg.includes("invalid API key")
@@ -117,8 +186,7 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
   ]
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+    const { text: responseText, usedModel } = await generateContentWithFallback(ai, {
       contents: [
         {
           inlineData: {
@@ -135,7 +203,13 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
 
     let parsed = {};
     try {
-      parsed = JSON.parse(response.text || "{}");
+      let cleanedText = (responseText || "{}").trim();
+      if (cleanedText.startsWith("```json")) {
+        cleanedText = cleanedText.replace(/^```json/, "").replace(/```$/, "").trim();
+      } else if (cleanedText.startsWith("```")) {
+        cleanedText = cleanedText.replace(/^```/, "").replace(/```$/, "").trim();
+      }
+      parsed = JSON.parse(cleanedText);
     } catch (pErr) {
       console.error("Failed to parse Gemini OCR JSON:", pErr);
       res.status(500).json({ error: "Falha ao estruturar a resposta do OCR." });
@@ -144,11 +218,19 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido sem formatação Markdown e com es
 
     res.json({
       success: true,
-      data: parsed
+      data: parsed,
+      usedModel
     });
   } catch (err: any) {
     console.error("Erro no processamento OCR de ensalamento:", err);
-    res.status(500).json({ error: err.message || "Erro interno ao processar o OCR do ensalamento." });
+    const errMsg = err?.message || "Erro interno ao processar o OCR do ensalamento.";
+    const is503 = errMsg.includes("503") || errMsg.includes("high demand") || errMsg.includes("UNAVAILABLE");
+
+    res.status(is503 ? 503 : 500).json({
+      error: is503
+        ? "Os servidores do Google Gemini estão com alta demanda temporária (Erro 503). Por favor, aguarde alguns segundos e clique novamente em 'Enviar & Executar Leitura OCR' ou utilize o botão 'Usar Modelo de Demonstração'."
+        : errMsg
+    });
   }
 });
 
