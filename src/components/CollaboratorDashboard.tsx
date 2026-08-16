@@ -20,9 +20,12 @@ import {
   BookOpen,
   ArrowRight,
   UserCheck,
-  ChevronDown
+  ChevronDown,
+  MessageSquare,
+  Inbox,
+  Copy
 } from "lucide-react";
-import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo } from "../types";
+import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage } from "../types";
 import PhotoUploader from "./PhotoUploader";
 import { DEFAULT_ENEM_SCHEDULE } from "./CollaboratorSettingsView";
 
@@ -34,6 +37,7 @@ interface CollaboratorDashboardProps {
   individualConfirmationStatus: "Pendente" | "Confirmado" | "Recusado";
   onUpdateConfirmationStatus: (status: "Pendente" | "Confirmado" | "Recusado", roleNameToRefuse?: string) => void;
   onUpdateProfile: (updates: Partial<CollaboratorInfo>) => Promise<void>;
+  onSaveBuilding?: (building: BuildingInfo) => Promise<void> | void;
 }
 
 export default function CollaboratorDashboard({
@@ -43,9 +47,10 @@ export default function CollaboratorDashboard({
   collaboratorRecord,
   individualConfirmationStatus,
   onUpdateConfirmationStatus,
-  onUpdateProfile
+  onUpdateProfile,
+  onSaveBuilding
 }: CollaboratorDashboardProps) {
-  const [activeMenuTab, setActiveMenuTab] = useState<string>("");
+  const [activeMenuTab, setActiveMenuTab] = useState<string>("messages");
   const [isRefusingModalOpen, setIsRefusingModalOpen] = useState(false);
   
   // Profile edit states
@@ -198,7 +203,133 @@ export default function CollaboratorDashboard({
   const checkedCount = checklistItems.filter(i => i.checked).length;
   const finalPercent = totalChecklist > 0 ? Math.round((checkedCount / totalChecklist) * 100) : 0;
 
-  const desktopMenuTab = activeMenuTab || "status";
+  // Internal Calangus messages state & reactivity
+  const [internalMessages, setInternalMessages] = useState<CalangusMessage[]>([]);
+  const [messageFilter, setMessageFilter] = useState<"all" | "unread" | "read">("all");
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [receiptSuccessMsg, setReceiptSuccessMsg] = useState<string>("");
+
+  const myCollabId = collaboratorRecord?.id || "";
+  const myEmail = currentUser?.email || "";
+  const myCpf = collaboratorRecord?.cpf || "";
+  const myRole = collaboratorRecord?.assignedRole || collaboratorRecord?.specialRole || "";
+  const isMyReserve = Boolean(collaboratorRecord?.isReserve);
+  const myAttendance = collaboratorRecord?.attendanceStatus;
+  const myIdentifier = myCollabId || myEmail || myCpf || "collab-user";
+
+  const reloadMessages = () => {
+    let allMsgs: CalangusMessage[] = [];
+    if (building?.messages && building.messages.length > 0) {
+      allMsgs = [...building.messages];
+    }
+    try {
+      const localStored: CalangusMessage[] = JSON.parse(localStorage.getItem("enem_internal_messages") || "[]");
+      const ids = new Set(allMsgs.map(m => m.id));
+      localStored.forEach(m => {
+        if (!ids.has(m.id)) {
+          allMsgs.push(m);
+          ids.add(m.id);
+        }
+      });
+    } catch (e) {
+      console.error(e);
+    }
+
+    // Filter messages directed to this collaborator or their role / group
+    const myMsgs = allMsgs.filter(msg => {
+      if (msg.targetType === "all") return true;
+      if (msg.targetType === "individual") {
+        return (
+          (msg.targetCollaboratorId && msg.targetCollaboratorId === myCollabId) ||
+          (msg.targetCollaboratorEmail && msg.targetCollaboratorEmail.toLowerCase() === myEmail.toLowerCase()) ||
+          (msg.targetCollaboratorPhone && collaboratorRecord?.whatsapp && msg.targetCollaboratorPhone.replace(/\D/g, "") === collaboratorRecord.whatsapp.replace(/\D/g, ""))
+        );
+      }
+      if (msg.targetType === "role") {
+        return msg.targetRoleId === myRole || msg.targetRoleName === myRole;
+      }
+      if (msg.targetType === "reserve") {
+        return isMyReserve;
+      }
+      if (msg.targetType === "confirmed_attendance") {
+        return myAttendance === "Confirmado";
+      }
+      if (msg.targetType === "pending_attendance") {
+        return myAttendance !== "Confirmado";
+      }
+      return true;
+    });
+
+    setInternalMessages(myMsgs);
+  };
+
+  useEffect(() => {
+    reloadMessages();
+
+    const handleMsgSent = () => reloadMessages();
+    window.addEventListener("calangus_message_sent", handleMsgSent);
+    window.addEventListener("storage", handleMsgSent);
+    return () => {
+      window.removeEventListener("calangus_message_sent", handleMsgSent);
+      window.removeEventListener("storage", handleMsgSent);
+    };
+  }, [building, collaboratorRecord, currentUser]);
+
+  const handleMarkAsRead = (msgId: string) => {
+    const updated = internalMessages.map(m => {
+      if (m.id === msgId) {
+        const currentReads = m.readBy || [];
+        if (!currentReads.includes(myIdentifier)) {
+          return { ...m, readBy: [...currentReads, myIdentifier] };
+        }
+      }
+      return m;
+    });
+    setInternalMessages(updated);
+
+    try {
+      const localStored: CalangusMessage[] = JSON.parse(localStorage.getItem("enem_internal_messages") || "[]");
+      const updatedLocal = localStored.map(m => {
+        if (m.id === msgId) {
+          const currentReads = m.readBy || [];
+          if (!currentReads.includes(myIdentifier)) {
+            return { ...m, readBy: [...currentReads, myIdentifier] };
+          }
+        }
+        return m;
+      });
+      localStorage.setItem("enem_internal_messages", JSON.stringify(updatedLocal));
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (building && onSaveBuilding) {
+      const updatedBuildingMsgs = (building.messages || []).map(m => {
+        if (m.id === msgId) {
+          const currentReads = m.readBy || [];
+          if (!currentReads.includes(myIdentifier)) {
+            return { ...m, readBy: [...currentReads, myIdentifier] };
+          }
+        }
+        return m;
+      });
+      onSaveBuilding({ ...building, messages: updatedBuildingMsgs });
+    }
+
+    setReceiptSuccessMsg("Recebimento e leitura da mensagem confirmados com sucesso!");
+    setTimeout(() => setReceiptSuccessMsg(""), 3500);
+  };
+
+  const unreadMessagesCount = internalMessages.filter(m => !m.readBy || !m.readBy.includes(myIdentifier)).length;
+
+  const filteredMessages = internalMessages.filter(m => {
+    const isRead = m.readBy && m.readBy.includes(myIdentifier);
+    if (messageFilter === "unread") return !isRead;
+    if (messageFilter === "read") return isRead;
+    return true;
+  });
+
+  const desktopMenuTab = activeMenuTab || "messages";
 
   return (
     <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-6 animate-fade-in text-sans">
@@ -241,10 +372,32 @@ export default function CollaboratorDashboard({
         </div>
 
         {/* Navigation Buttons - Toggle on click */}
+        {/* 1. MENSAGENS DO CLA (MENU INICIAL DO COLABORADOR) */}
+        <button
+          onClick={() => setActiveMenuTab((prev) => (prev === "messages" ? "" : "messages"))}
+          className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+            activeMenuTab === "messages"
+              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+          }`}
+        >
+          <span className="flex items-center gap-2.5 flex-1">
+            <MessageSquare className="w-4 h-4 text-sky-500" />
+            <span>Mensagens do CLA</span>
+          </span>
+          {unreadMessagesCount > 0 && (
+            <span className="text-[9px] bg-rose-500 text-white font-extrabold px-1.5 py-0.5 rounded-full animate-bounce">
+              {unreadMessagesCount} {unreadMessagesCount === 1 ? "nova" : "novas"}
+            </span>
+          )}
+          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "messages" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+        </button>
+
+        {/* 2. STATUS & LOCAL */}
         <button
           onClick={() => setActiveMenuTab((prev) => (prev === "status" ? "" : "status"))}
           className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
-            activeMenuTab === "status" || (activeMenuTab === "" && false)
+            activeMenuTab === "status"
               ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
               : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
           }`}
@@ -254,6 +407,7 @@ export default function CollaboratorDashboard({
           <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "status" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
         </button>
 
+        {/* 3. EDITAR PERFIL */}
         <button
           onClick={() => setActiveMenuTab((prev) => (prev === "profile" ? "" : "profile"))}
           className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
@@ -651,7 +805,7 @@ export default function CollaboratorDashboard({
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-sans text-slate-800 dark:text-white"
+                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-sans text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                   required
                 />
               </div>
@@ -663,7 +817,7 @@ export default function CollaboratorDashboard({
                   value={cpf}
                   onChange={(e) => setCpf(e.target.value)}
                   placeholder="Ex: 000.000.000-00"
-                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white"
+                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                   required
                 />
               </div>
@@ -675,7 +829,7 @@ export default function CollaboratorDashboard({
                   value={birthDate}
                   onChange={(e) => setBirthDate(e.target.value)}
                   placeholder="DD/MM/AAAA"
-                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white"
+                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                   required
                 />
               </div>
@@ -686,7 +840,8 @@ export default function CollaboratorDashboard({
                   type="text"
                   value={whatsapp}
                   onChange={(e) => setWhatsapp(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-[#070b13 ] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white"
+                  placeholder="(87) 98123-4567"
+                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                   required
                 />
               </div>
@@ -697,7 +852,7 @@ export default function CollaboratorDashboard({
                   type="email"
                   value={email}
                   disabled
-                  className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-850 p-2.5 text-xs rounded-xl font-bold text-slate-400 cursor-not-allowed"
+                  className="w-full bg-slate-100 dark:bg-[#0c1220] border border-slate-200 dark:border-slate-850 p-2.5 text-xs rounded-xl font-bold text-slate-400 cursor-not-allowed"
                 />
               </div>
 
@@ -706,7 +861,7 @@ export default function CollaboratorDashboard({
                 <select
                   value={education}
                   onChange={(e) => setEducation(e.target.value as any)}
-                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold text-slate-800 dark:text-white focus:outline-none"
+                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                 >
                   <option value="Ensino Fundamental (Alfabetizado)">Ensino Fundamental (Alfabetizado)</option>
                   <option value="Ensino Médio">Ensino Médio</option>
@@ -726,7 +881,7 @@ export default function CollaboratorDashboard({
                   value={referencePerson}
                   onChange={(e) => setReferencePerson(e.target.value)}
                   placeholder="Ex: MARIA"
-                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold text-slate-800 dark:text-white focus:outline-none"
+                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                 />
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 font-medium leading-relaxed">
                   Informe aqui o nome da pessoa (amigo, parente ou familiar) que lhe indicou para esse CLA. Exemplo: Minha amiga MARIA conversou com o CLA para me indicar para os trabalhos desse ano, então na referência eu digito MARIA.
@@ -993,6 +1148,178 @@ export default function CollaboratorDashboard({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* TAB: MENSAGENS DO CLA (CAIXA PESSOAL CALANGUS) */}
+        {desktopMenuTab === "messages" && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-slate-100 dark:border-slate-850 pb-3 text-left">
+              <div>
+                <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Inbox className="w-4 h-4 text-sky-500" />
+                  <span>Caixa de Entrada & Comunicados do CLA</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Mensagens, convocações e avisos oficiais enviados diretamente pela coordenação do seu local de aplicação.
+                </p>
+              </div>
+
+              {/* Filters */}
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setMessageFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    messageFilter === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs" : "text-slate-500"
+                  }`}
+                >
+                  Todas ({internalMessages.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMessageFilter("unread")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
+                    messageFilter === "unread" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs" : "text-slate-500"
+                  }`}
+                >
+                  <span>Não Lidas</span>
+                  {unreadMessagesCount > 0 && (
+                    <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMessageFilter("read")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    messageFilter === "read" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs" : "text-slate-500"
+                  }`}
+                >
+                  Lidas ({internalMessages.length - unreadMessagesCount})
+                </button>
+              </div>
+            </div>
+
+            {receiptSuccessMsg && (
+              <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold rounded-xl animate-fade-in flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-500" />
+                <span>{receiptSuccessMsg}</span>
+              </div>
+            )}
+
+            {filteredMessages.length === 0 ? (
+              <div className="p-12 text-center bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+                <Inbox className="w-8 h-8 text-slate-400 mx-auto" />
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">Nenhuma mensagem encontrada</h4>
+                <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                  {messageFilter === "unread"
+                    ? "Você não possui mensagens pendentes de leitura no momento."
+                    : "Você ainda não recebeu comunicados diretos da coordenação."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {filteredMessages.map((msg) => {
+                  const isRead = msg.readBy && msg.readBy.includes(myIdentifier);
+
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`p-4 rounded-2xl border-2 transition-all ${
+                        isRead
+                          ? "bg-slate-50/80 dark:bg-[#070b13]/60 border-slate-200 dark:border-slate-800"
+                          : "bg-white dark:bg-[#101726] border-emerald-500/40 shadow-sm"
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          {!isRead && (
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0 animate-pulse" title="Mensagem Nova" />
+                          )}
+                          <h4 className={`text-xs font-bold ${isRead ? "text-slate-700 dark:text-slate-300" : "text-slate-950 dark:text-white font-black"}`}>
+                            {msg.title || "Comunicado Oficial"}
+                          </h4>
+                          <span className={`text-[9px] uppercase font-mono font-bold px-2 py-0.5 rounded ${
+                            msg.channel === "whatsapp"
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                              : msg.channel === "email"
+                              ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20"
+                              : msg.channel === "sms"
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                              : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
+                          }`}>
+                            {msg.channel ? msg.channel.toUpperCase() : "CALANGUS"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                          <span>{msg.sentAt}</span>
+                          {isRead ? (
+                            <span className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
+                              Lida
+                            </span>
+                          ) : (
+                            <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded font-bold">
+                              Nova
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* SENDER INFO */}
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 py-1.5 flex items-center justify-between">
+                        <div>
+                          De: <strong className="text-slate-800 dark:text-slate-200">{msg.senderName} ({msg.senderRole || "CLA Coordenação"})</strong>
+                        </div>
+                      </div>
+
+                      {/* BODY CONTENT */}
+                      <div className="p-3 bg-white dark:bg-[#0c1220] rounded-xl text-xs text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 font-sans leading-relaxed whitespace-pre-wrap">
+                        {msg.content}
+                      </div>
+
+                      {/* ACTIONS */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(msg.content);
+                            setCopiedMsgId(msg.id);
+                            setTimeout(() => setCopiedMsgId(null), 2000);
+                          }}
+                          className="text-[11px] text-slate-500 hover:text-emerald-600 flex items-center gap-1 font-bold cursor-pointer"
+                        >
+                          {copiedMsgId === msg.id ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              <span className="text-emerald-600">Copiado</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copiar Texto</span>
+                            </>
+                          )}
+                        </button>
+
+                        <div className="flex items-center gap-2">
+                          {!isRead && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarkAsRead(msg.id)}
+                              className="btn-3d py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs"
+                            >
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              <span>Confirmar Leitura</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

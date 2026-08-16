@@ -8,6 +8,7 @@ import NetworkReservesPool from "./NetworkReservesPool";
 import FiscalAvatar from "./FiscalAvatar";
 import ImageLightboxModal, { LightboxData } from "./ImageLightboxModal";
 import PhotoUploader from "./PhotoUploader";
+import DuplicateCollaboratorsModal, { findDuplicateCollaborators } from "./DuplicateCollaboratorsModal";
 import { 
   Users, UserPlus, Upload, ShieldAlert, BadgeInfo, Trash, Mail, 
   MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
@@ -155,11 +156,19 @@ export default function CollaboratorManager({
   // Transfer requests modal state
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
+  // Duplicate finder modal state
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+
   // Edit State
   const [editingCollabId, setEditingCollabId] = useState<string | null>(null);
 
   // Diagnostic / Failure modal state
   const [diagnoseCollab, setDiagnoseCollab] = useState<CollaboratorInfo | null>(null);
+
+  // Identify duplicate groups in current CLA collaborators
+  const duplicateGroups = useMemo(() => {
+    return findDuplicateCollaborators(collaborators);
+  }, [collaborators]);
 
   // Count incoming pending release requests for current CLA
   const pendingIncomingCount = collaborators.filter(
@@ -758,6 +767,24 @@ export default function CollaboratorManager({
           </button>
 
           <button
+            onClick={() => setIsDuplicateModalOpen(true)}
+            className={`py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 border-2 ${
+              duplicateGroups.length > 0
+                ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 hover:bg-amber-500/25 shadow-xs"
+                : "bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700"
+            }`}
+            title="Localizar cadastros duplicados (CPF, e-mail, nome) e mesclar ou excluir mantendo fotos"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>🔍 Localizar Duplicados</span>
+            {duplicateGroups.length > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-bounce">
+                {duplicateGroups.length}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => { setActiveSubTab("add"); setParseStatus("idle"); setEditingCollabId(null); }}
             className={`btn-3d py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${activeSubTab === "add" ? "btn-3d-secondary" : "bg-slate-150 dark:bg-slate-800/80 text-slate-705 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"}`}
           >
@@ -822,7 +849,9 @@ export default function CollaboratorManager({
         dateStart, setDateStart,
         dateEnd, setDateEnd,
         sortBy, setSortBy,
-        buildingName
+        buildingName,
+        () => setIsDuplicateModalOpen(true),
+        duplicateGroups.length
       )}
 
       {/* SUBTAB 2: NETWORK RESERVES POOL (BANCO GERAL DE RESERVAS) */}
@@ -872,7 +901,7 @@ export default function CollaboratorManager({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Carlos Costa Neto"
-                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white text-xs font-semibold focus:outline-hidden"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                 required
               />
             </div>
@@ -884,7 +913,7 @@ export default function CollaboratorManager({
                 value={birthDate}
                 onChange={(e) => handleBirthDateChange(e.target.value)}
                 placeholder="DD/MM/AAAA"
-                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white text-xs font-semibold focus:outline-hidden"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                 required
               />
             </div>
@@ -896,7 +925,7 @@ export default function CollaboratorManager({
                 value={cpf}
                 onChange={(e) => handleCpfChange(e.target.value)}
                 placeholder="403.401.503-12"
-                className="w-full border-2 border-slate-100 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white font-mono text-xs font-bold focus:outline-hidden align-middle"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-mono text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden align-middle"
                 required
               />
             </div>
@@ -908,7 +937,7 @@ export default function CollaboratorManager({
                 value={whatsapp}
                 onChange={(e) => handlePhoneChange(e.target.value)}
                 placeholder="(87) 98123-4567"
-                className="w-full border-2 border-slate-105 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white font-mono text-xs font-bold focus:outline-hidden"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-mono text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                 required
               />
             </div>
@@ -920,7 +949,7 @@ export default function CollaboratorManager({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="carlos@email.com"
-                className="w-full border-2 border-slate-105 dark:border-slate-805 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white text-xs font-semibold focus:outline-hidden"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                 required
               />
             </div>
@@ -932,7 +961,7 @@ export default function CollaboratorManager({
                 value={pixKey}
                 onChange={(e) => setPixKey(e.target.value)}
                 placeholder="CPF ou e-mail"
-                className="w-full border-2 border-slate-105 dark:border-slate-805 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white text-xs font-mono font-bold focus:outline-hidden"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
               />
             </div>
 
@@ -943,7 +972,7 @@ export default function CollaboratorManager({
                 value={referencePerson}
                 onChange={(e) => setReferencePerson(e.target.value)}
                 placeholder="Ex: MARIA"
-                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white text-xs font-semibold focus:outline-hidden"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
               />
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 font-medium leading-relaxed">
                 Informe aqui o nome da pessoa (amigo, parente ou familiar) que lhe indicou para esse CLA. Exemplo: Minha amiga MARIA conversou com o CLA para me indicar para os trabalhos desse ano, então na referência eu digito MARIA.
@@ -955,7 +984,7 @@ export default function CollaboratorManager({
               <select
                 value={education}
                 onChange={(e) => setEducation(e.target.value as any)}
-                className="w-full border-2 border-slate-105 dark:border-slate-805 rounded-xl px-2 py-2.5 bg-white dark:bg-[#101726] text-slate-800 dark:text-slate-200 text-xs font-bold focus:outline-hidden"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-800 dark:text-slate-200 text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
               >
                 <option value="Ensino Fundamental (Alfabetizado)">Ensino Fundamental (Alfabetizado)</option>
                 <option value="Ensino Médio">Ensino Médio</option>
@@ -974,7 +1003,7 @@ export default function CollaboratorManager({
                 type="text"
                 value={disability}
                 onChange={(e) => setDisability(e.target.value)}
-                className="w-full border-2 border-slate-105 dark:border-slate-805 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white text-xs font-semibold focus:outline-hidden"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
               />
             </div>
 
@@ -1118,6 +1147,16 @@ export default function CollaboratorManager({
         data={lightboxData}
         onClose={() => setLightboxData(null)}
       />
+
+      {/* Duplicate Collaborators Finder & Merge Modal */}
+      <DuplicateCollaboratorsModal
+        isOpen={isDuplicateModalOpen}
+        onClose={() => setIsDuplicateModalOpen(false)}
+        collaborators={collaborators}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        onViewPhoto={(data) => setLightboxData(data)}
+      />
     </div>
   );
 }
@@ -1148,7 +1187,9 @@ function activeTabSubList(
   setDateEnd?: (d: string) => void,
   sortBy: "created_desc" | "created_asc" | "name_asc" | "name_desc" = "created_desc",
   setSortBy?: (s: "created_desc" | "created_asc" | "name_asc" | "name_desc") => void,
-  buildingName: string = "Local de Aplicação"
+  buildingName: string = "Local de Aplicação",
+  onOpenDuplicateFinder?: () => void,
+  duplicateGroupsCount: number = 0
 ) {
   if (activeSubTab !== "list") return null;
 
@@ -1158,6 +1199,35 @@ function activeTabSubList(
 
   return (
     <div className="space-y-4">
+      {/* Prominent Alert for Detected Duplicates */}
+      {duplicateGroupsCount > 0 && (
+        <div className="p-4 bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-amber-600 text-white rounded-xl shadow-xs">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                Cadastros Duplicados Detectados ({duplicateGroupsCount} grupos)
+              </h4>
+              <p className="text-xs text-amber-900/80 dark:text-amber-200">
+                Foram identificados registros com mesmo CPF, e-mail ou dados coincidentes. Você pode mesclar os registros ou excluir redundâncias preservando sempre todas as fotos.
+              </p>
+            </div>
+          </div>
+          {onOpenDuplicateFinder && (
+            <button
+              type="button"
+              onClick={onOpenDuplicateFinder}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-xl shadow-md transition cursor-pointer active:scale-95 shrink-0 flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Revisar e Mesclar ({duplicateGroupsCount}) ➔</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Prominent Alert for Role Refusals */}
       {refusedCollabs.length > 0 && (
         <div className="p-4 bg-rose-500/10 border-2 border-rose-500/30 rounded-2xl flex items-center justify-between gap-3 shadow-xs animate-fade-in">
@@ -1275,16 +1345,35 @@ function activeTabSubList(
             </select>
           </div>
 
-          {/* Export CSV Button */}
-          <button
-            type="button"
-            onClick={() => exportCollaboratorsToCSV(filteredCollaborators, `fiscais_${buildingName.replace(/\s+/g, "_").toLowerCase()}`)}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer shadow-xs shrink-0"
-            title="Exportar dados filtrados para planilha Excel/CSV"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Exportar CSV ({filteredCollaborators.length})</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Find Duplicates Button */}
+            {onOpenDuplicateFinder && (
+              <button
+                type="button"
+                onClick={onOpenDuplicateFinder}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs shrink-0 ${
+                  duplicateGroupsCount > 0
+                    ? "bg-amber-600 hover:bg-amber-700 text-white animate-pulse"
+                    : "bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+                }`}
+                title="Localizar dados duplicados e mesclar ou remover registros redundantes"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>Duplicados {duplicateGroupsCount > 0 ? `(${duplicateGroupsCount})` : ""}</span>
+              </button>
+            )}
+
+            {/* Export CSV Button */}
+            <button
+              type="button"
+              onClick={() => exportCollaboratorsToCSV(filteredCollaborators, `fiscais_${buildingName.replace(/\s+/g, "_").toLowerCase()}`)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer shadow-xs shrink-0"
+              title="Exportar dados filtrados para planilha Excel/CSV"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Exportar CSV ({filteredCollaborators.length})</span>
+            </button>
+          </div>
         </div>
 
         {/* Second line: Date Range Filter + Sorting */}
@@ -1687,7 +1776,7 @@ function activeTabSubAddForm(
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Ex: Carlos Costa Neto"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-semibold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-semibold"
             required
           />
         </div>
@@ -1699,7 +1788,7 @@ function activeTabSubAddForm(
             value={birthDate}
             onChange={(e) => handleBirthDateChange(e.target.value)}
             placeholder="DD/MM/AAAA"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-semibold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-semibold"
             required
           />
         </div>
@@ -1711,7 +1800,7 @@ function activeTabSubAddForm(
             value={cpf}
             onChange={(e) => handleCpfChange(e.target.value)}
             placeholder="Ex: 403.401.503-12"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-mono font-bold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-mono font-bold"
             required
           />
         </div>
@@ -1723,7 +1812,7 @@ function activeTabSubAddForm(
             value={whatsapp}
             onChange={(e) => handlePhoneChange(e.target.value)}
             placeholder="Ex: (87) 98123-4567"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-mono font-bold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-mono font-bold"
             required
           />
         </div>
@@ -1735,7 +1824,7 @@ function activeTabSubAddForm(
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Ex: carlos@email.com"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-semibold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-semibold"
             required
           />
         </div>
@@ -1747,7 +1836,7 @@ function activeTabSubAddForm(
             value={pixKey}
             onChange={(e) => setPixKey(e.target.value)}
             placeholder="Chave Pix para repasse Cebraspe"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-mono font-bold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-mono font-bold"
           />
         </div>
 
@@ -1758,7 +1847,7 @@ function activeTabSubAddForm(
             value={referencePerson}
             onChange={(e) => setReferencePerson(e.target.value)}
             placeholder="Ex: MARIA"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 text-xs font-semibold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-semibold"
           />
           <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 font-medium leading-relaxed">
             Informe aqui o nome da pessoa (amigo, parente ou familiar) que lhe indicou para esse CLA. Exemplo: Minha amiga MARIA conversou com o CLA para me indicar para os trabalhos desse ano, então na referência eu digito MARIA.
@@ -1770,7 +1859,7 @@ function activeTabSubAddForm(
           <select
             value={education}
             onChange={(e) => setEducation(e.target.value as any)}
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2 py-2.5 bg-white dark:bg-[#101726] text-slate-800 dark:text-slate-200 text-xs font-bold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-800 dark:text-slate-200 text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
           >
             <option value="Ensino Fundamental (Alfabetizado)">Ensino Fundamental (Alfabetizado)</option>
             <option value="Ensino Médio">Ensino Médio</option>
@@ -1790,7 +1879,7 @@ function activeTabSubAddForm(
             value={disability}
             onChange={(e) => setDisability(e.target.value)}
             placeholder="Escreva PCD ou Nenhuma"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-[#10b981]/40 text-xs font-semibold"
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-semibold"
           />
         </div>
 

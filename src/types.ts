@@ -37,10 +37,20 @@ export interface ClaCustomRole {
   isDefault?: boolean;
 }
 
+export interface CalangusTemplate {
+  id: string;
+  title: string;
+  channel: "whatsapp" | "email" | "calangus" | "sms";
+  subject: string;
+  body: string;
+  isCustom?: boolean;
+}
+
 export interface CalangusMessage {
   id: string;
   senderClaId: string;
   senderName: string;
+  senderRole?: string;
   targetType: "all" | "associated" | "reserve" | "pending_attendance" | "confirmed_attendance" | "role" | "individual";
   targetRoleId?: string;
   targetRoleName?: string;
@@ -48,10 +58,13 @@ export interface CalangusMessage {
   targetCollaboratorName?: string;
   targetCollaboratorEmail?: string;
   targetCollaboratorPhone?: string;
+  targetSummary?: string;
   title: string;
   content: string;
   sentAt: string;
-  channels: Array<"calangus" | "email" | "whatsapp">;
+  channels: Array<"calangus" | "email" | "whatsapp" | "sms">;
+  channel?: "calangus" | "email" | "whatsapp" | "sms";
+  readBy?: string[]; // IDs/CPFs/Emails of collaborators who read this message
 }
 
 export interface BuildingInfo {
@@ -74,6 +87,7 @@ export interface BuildingInfo {
   collaboratorInstructions?: string;
   customRoles?: ClaCustomRole[];
   messages?: CalangusMessage[];
+  customMessageTemplates?: CalangusTemplate[];
 }
 
 export interface PastEdition {

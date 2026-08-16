@@ -551,7 +551,7 @@ export default function PublicRegisterForm({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Ex: Carlos Costa Neto (use maiúsculas/minúsculas corretas)"
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-sm focus:outline-hidden"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                     required
                   />
                   <span className="text-[9px] text-slate-500 dark:text-slate-400 block mt-1 font-medium">⚠️ Não digite o nome completo inteiramente em MAIÚSCULAS para evitar descompasso com o Orion.</span>
@@ -565,7 +565,7 @@ export default function PublicRegisterForm({
                     onChange={handleBirthDateChange}
                     placeholder="DD/MM/AAAA"
                     maxLength={10}
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-sm focus:outline-hidden"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                     required
                   />
                 </div>
@@ -578,7 +578,7 @@ export default function PublicRegisterForm({
                     onChange={handleCpfChange}
                     placeholder="Ex: 403.401.503-12"
                     maxLength={14}
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-mono font-bold text-sm focus:outline-hidden"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-mono font-bold text-sm focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                     required
                   />
                 </div>
@@ -594,7 +594,7 @@ export default function PublicRegisterForm({
                     onChange={handlePhoneChange}
                     placeholder="Ex: (87) 98123-4567"
                     maxLength={15}
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-mono font-bold text-sm focus:outline-hidden"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-mono font-bold text-sm focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                     required
                   />
                 </div>
@@ -609,7 +609,7 @@ export default function PublicRegisterForm({
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Ex: carlos@email.com"
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-sm focus:outline-hidden"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                     required
                   />
                 </div>
@@ -621,7 +621,7 @@ export default function PublicRegisterForm({
                     value={pixKey}
                     onChange={(e) => setPixKey(e.target.value)}
                     placeholder="Padrão CPF ou digite outra chave"
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-sm focus:outline-hidden"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                   />
                   <span className="text-[9px] text-slate-500 dark:text-slate-400 block mt-1 font-medium">Caso em branco, utilizaremos o CPF.</span>
                 </div>
@@ -633,7 +633,7 @@ export default function PublicRegisterForm({
                     value={referencePerson}
                     onChange={(e) => setReferencePerson(e.target.value)}
                     placeholder="Ex: MARIA"
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-sm focus:outline-hidden"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                   />
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 font-medium leading-relaxed">
                     Informe aqui o nome da pessoa (amigo, parente ou familiar) que lhe indicou para esse CLA. Exemplo: Minha amiga MARIA conversou com o CLA para me indicar para os trabalhos desse ano, então na referência eu digito MARIA.
@@ -645,7 +645,7 @@ export default function PublicRegisterForm({
                   <select
                     value={education}
                     onChange={(e) => setEducation(e.target.value as any)}
-                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm font-bold shadow-inner"
+                    className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-slate-100 text-sm font-bold shadow-inner focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                   >
                     <option value="Ensino Fundamental (Alfabetizado)">Ensino Fundamental (Alfabetizado)</option>
                     <option value="Ensino Médio">Ensino Médio</option>

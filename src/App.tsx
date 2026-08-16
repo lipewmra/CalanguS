@@ -297,7 +297,13 @@ export default function App() {
     // 2. SuperAdmin hardcoded authorized emails
     const isSuperAdminEmail = email === "lipewmra@gmail.com" || email === "philippewagnermra@gmail.com";
     if (isSuperAdminEmail) {
-      let profile = await getCurrentUserProfile(user.uid);
+      let profile: UserProfile | null = null;
+      try {
+        profile = await getCurrentUserProfile(user.uid);
+      } catch (err) {
+        console.warn("Could not retrieve remote SuperAdmin profile, generating standard admin profile:", err);
+      }
+      
       if (!profile) {
         profile = {
           uid: user.uid,
@@ -307,7 +313,11 @@ export default function App() {
           roles: ["SuperAdmin"],
           hasAccessed: true,
         };
-        await saveUserProfile(profile);
+        try {
+          await saveUserProfile(profile);
+        } catch (err) {
+          console.warn("Could not save initial SuperAdmin profile to Firestore:", err);
+        }
       } else {
         const roles = profile.roles || [profile.role];
         if (!roles.includes("SuperAdmin") || profile.role !== "SuperAdmin" || !profile.hasAccessed) {
@@ -317,18 +327,31 @@ export default function App() {
             roles: Array.from(new Set([...roles, "SuperAdmin"])),
             hasAccessed: true,
           };
-          await saveUserProfile(profile);
+          try {
+            await saveUserProfile(profile);
+          } catch (err) {
+            console.warn("Could not update SuperAdmin profile to Firestore:", err);
+          }
         }
       }
       return profile;
     }
 
     // 3. Look up if there is a pre-registered profile by email in users collection
-    let profile = await claimProfileByEmail(email, user.uid);
+    let profile: UserProfile | null = null;
+    try {
+      profile = await claimProfileByEmail(email, user.uid);
+    } catch (err) {
+      console.warn("Error claiming profile by email:", err);
+    }
 
     // 4. Look up existing profile document in users/{uid}
     if (!profile) {
-      profile = await getCurrentUserProfile(user.uid);
+      try {
+        profile = await getCurrentUserProfile(user.uid);
+      } catch (err) {
+        console.warn("Error fetching profile by uid:", err);
+      }
     }
 
     // 5. If a profile was found in users collection, verify that it was legitimately registered
@@ -887,25 +910,27 @@ export default function App() {
         /* CASE C: REAL LOGGED-IN WORKSPACE */
         <>
           {/* PRIMARY REAL NAVBAR (GLOWING 3D GLASS DESIGN) */}
-          <header className={`no-print h-20 py-0 px-6 border-b-4 transition mb-2 flex items-center ${isDarkMode ? "bg-[#0c1220]/80 backdrop-blur-md border-slate-900 sticky top-0 z-40" : "bg-white border-slate-200 sticky top-0 z-40"}`}>
-            <div className="max-w-7xl mx-auto flex items-center justify-between w-full h-full">
-              <div className="flex items-center gap-3 h-full">
+          <header className={`no-print border-b-4 transition mb-2 py-3 px-4 md:py-0 md:px-6 md:h-20 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-0 ${isDarkMode ? "bg-[#0c1220]/80 backdrop-blur-md border-slate-900 sticky top-0 z-40" : "bg-white border-slate-200 sticky top-0 z-40"}`}>
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between w-full h-full gap-3 md:gap-4">
+              {/* ROW 1: CALANGUS LOGO & TITLE */}
+              <div className="flex items-center gap-3 shrink-0">
                 {/* CalanguS Program Logo Image */}
                 <img 
                   src="/CalanguS-logo-Noname.png" 
                   referrerPolicy="no-referrer"
                   alt="CalanguS" 
-                  className="h-full w-auto object-contain hover:scale-105 transition-transform duration-300"
+                  className="h-10 md:h-16 w-auto object-contain hover:scale-105 transition-transform duration-300 shrink-0"
                 />
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</span>
                   </div>
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block">TACTILE TEAM DISPATCHER</span>
+                  <span className="text-[8px] sm:text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block">TACTILE TEAM DISPATCHER</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 md:gap-4">
+              {/* ROW 2 (ON MOBILE): PHOTO & ACTION BUTTONS IN A LINE BELOW THE TITLE */}
+              <div className="flex items-center justify-between md:justify-end gap-2.5 sm:gap-4 w-full md:w-auto pt-2.5 md:pt-0 border-t border-slate-100 dark:border-slate-800/80 md:border-t-0">
                 {/* Active Profile Info & Avatar with direct photo click */}
                 <div 
                   onClick={() => {
@@ -913,7 +938,7 @@ export default function App() {
                       setIsSettingsOpen(true);
                     }
                   }}
-                  className={`flex items-center gap-2.5 ${effectiveRole !== "Colaborador" ? "cursor-pointer group hover:opacity-90" : ""}`}
+                  className={`flex items-center gap-2.5 min-w-0 ${effectiveRole !== "Colaborador" ? "cursor-pointer group hover:opacity-90" : ""}`}
                   title={effectiveRole !== "Colaborador" ? "Clique para gerenciar foto e configurações" : "Meu Perfil"}
                 >
                   <FiscalAvatar
@@ -921,43 +946,50 @@ export default function App() {
                     name={effectiveUser?.name || currentUser?.name}
                     role={effectiveRole}
                     size="md"
-                    className="shadow-sm group-hover:scale-105 transition-transform"
+                    className="shadow-sm group-hover:scale-105 transition-transform shrink-0"
                   />
-                  <div className="hidden md:block text-right">
-                    <span className="text-sm font-extrabold block leading-none text-slate-800 dark:text-white group-hover:text-emerald-500 transition">{effectiveUser?.name}</span>
-                    <span className="text-[9px] uppercase font-bold text-emerald-500 dark:text-emerald-400 tracking-wider">
+                  <div className="text-left md:text-right min-w-0 truncate">
+                    <span className="text-xs sm:text-sm font-extrabold block leading-tight text-slate-800 dark:text-white group-hover:text-emerald-500 transition truncate">
+                      {effectiveUser?.name}
+                    </span>
+                    <span className="text-[9px] uppercase font-bold text-emerald-500 dark:text-emerald-400 tracking-wider truncate block">
                       {effectiveRole}{(effectiveUser?.coordinationCode || building?.coordRoom) ? ` - Coord: ${effectiveUser?.coordinationCode || building?.coordRoom}` : ""}
                     </span>
                   </div>
                 </div>
 
-                {/* Configuration Settings Button */}
-                <button
-                  onClick={() => setIsSettingsOpen(true)}
-                  className={`p-2 px-3 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-y-[1px] active:translate-x-[1px] active:shadow-0 flex items-center gap-1.5 ${isDarkMode ? "bg-slate-900 border-slate-700 text-emerald-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-emerald-700 hover:bg-slate-200"}`}
-                  title="Abrir Configurações do Sistema"
-                >
-                  <Settings className="w-5 h-5" />
-                  <span className="hidden sm:inline text-xs font-black uppercase tracking-wider">Configuração</span>
-                </button>
+                {/* Action Buttons cluster */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  {/* Configuration Settings Button */}
+                  {effectiveRole !== "Colaborador" && (
+                    <button
+                      onClick={() => setIsSettingsOpen(true)}
+                      className={`p-2 sm:px-3 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-y-[1px] active:translate-x-[1px] active:shadow-0 flex items-center gap-1.5 ${isDarkMode ? "bg-slate-900 border-slate-700 text-emerald-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-emerald-700 hover:bg-slate-200"}`}
+                      title="Abrir Configurações do Sistema"
+                    >
+                      <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span className="hidden sm:inline text-xs font-black uppercase tracking-wider">Configuração</span>
+                    </button>
+                  )}
 
-                {/* Light / Dark Mode Toggle Button */}
-                <button
-                  onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-                  className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-y-[1px] active:translate-x-[1px] active:shadow-0 ${isDarkMode ? "bg-slate-900 border-slate-700 text-yellow-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"}`}
-                  title="Alternar Tema Claro/Escuro"
-                >
-                  {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                </button>
+                  {/* Light / Dark Mode Toggle Button */}
+                  <button
+                    onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+                    className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-y-[1px] active:translate-x-[1px] active:shadow-0 ${isDarkMode ? "bg-slate-900 border-slate-700 text-yellow-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"}`}
+                    title="Alternar Tema Claro/Escuro"
+                  >
+                    {isDarkMode ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  </button>
 
-                {/* Sair (Logout) Button */}
-                <button
-                  onClick={handleLogout}
-                  className="p-2 rounded-xl transition cursor-pointer border-2 bg-rose-500/10 border-rose-500/20 text-rose-500 hover:bg-rose-500/20 shadow-[2px_2px_0px_0px_rgba(244,63,94,0.1)] active:translate-y-[1px] active:translate-x-[1px]"
-                  title="Sair do CalanguS"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
+                  {/* Sair (Logout) Button */}
+                  <button
+                    onClick={handleLogout}
+                    className="p-2 rounded-xl transition cursor-pointer border-2 bg-rose-500/10 border-rose-500/20 text-rose-500 hover:bg-rose-500/20 shadow-[2px_2px_0px_0px_rgba(244,63,94,0.1)] active:translate-y-[1px] active:translate-x-[1px]"
+                    title="Sair do CalanguS"
+                  >
+                    <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                </div>
               </div>
             </div>
           </header>
@@ -965,16 +997,16 @@ export default function App() {
           {/* MULTI_PROFILE TOP BANNER DROPDOWN MENU */}
           {currentUser && (currentUser.roles || [currentUser.role]).includes("SuperAdmin") && (currentUser.roles || [currentUser.role]).includes("CLA") && (
             <div 
-              className="bg-slate-900 border-b-2 border-slate-800 text-white px-6 py-2 flex items-center justify-center gap-3 text-xs font-bold shadow-md no-print"
+              className="bg-slate-900 border-b-2 border-slate-800 text-white px-4 py-2 flex flex-wrap items-center justify-center gap-2 text-xs font-bold shadow-md no-print"
             >
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 font-medium mr-2">Operar Painel como:</span>
-                <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 animate-fade-in">
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <span className="text-slate-400 font-medium text-[11px] sm:text-xs">Operar Painel como:</span>
+                <div className="flex flex-wrap items-center justify-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 animate-fade-in">
                   {(currentUser.roles || [currentUser.role]).map((r) => (
                     <button
                       key={r}
                       onClick={() => setSelectedRole(r)}
-                      className={`px-4 py-1.5 rounded-lg transition-all duration-155 text-[10px] font-black font-mono border uppercase cursor-pointer ${
+                      className={`px-3 sm:px-4 py-1.5 rounded-lg transition-all duration-155 text-[10px] font-black font-mono border uppercase cursor-pointer ${
                         effectiveRole === r
                            ? "bg-emerald-500 text-slate-950 border-emerald-500 shadow-sm"
                            : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
@@ -1118,25 +1150,25 @@ export default function App() {
           ) : (
             (() => {
               const currentMenuItems = effectiveRole === "SuperAdmin" ? [
-                { id: "admin-dashboard", label: "0. Painel Operacional", badge: "STAT", icon: Activity, iconColor: "text-emerald-450" },
-                { id: "building", label: "1. Local de Aplicação", badge: "INFO", icon: Landmark, iconColor: "text-emerald-400" },
-                { id: "admin-directives", label: "2. Diretivas Gerais", badge: "PROP", icon: Calendar, iconColor: "text-sky-400" },
-                { id: "admin-profiles", label: "3. Gestão de Perfis", badge: "ROLE", icon: Users, iconColor: "text-indigo-400" },
-                { id: "admin-register", label: "4. Cadastrar CLA/Admin", badge: "NEW", icon: PlusCircle, iconColor: "text-amber-400" },
-                { id: "admin-reset", label: "5. Master Reset", badge: "KILL", icon: Trash2, iconColor: "text-rose-500", isDanger: true }
+                { id: "admin-dashboard", label: "0. Painel Operacional", icon: Activity, iconColor: "text-emerald-450" },
+                { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
+                { id: "admin-directives", label: "2. Diretivas Gerais", icon: Calendar, iconColor: "text-sky-400" },
+                { id: "admin-profiles", label: "3. Gestão de Perfis", icon: Users, iconColor: "text-indigo-400" },
+                { id: "admin-register", label: "4. Cadastrar CLA/Admin", icon: PlusCircle, iconColor: "text-amber-400" },
+                { id: "admin-reset", label: "5. Master Reset", icon: Trash2, iconColor: "text-rose-500", isDanger: true }
               ] : [
-                { id: "building", label: "1. Local de Aplicação", badge: "INFO", icon: Landmark, iconColor: "text-emerald-400" },
-                { id: "staff", label: "2. Fiscais e Inscrições", badge: "RECRU", icon: Users, iconColor: "text-sky-400" },
+                { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
+                { id: "staff", label: "2. Fiscais e Inscrições", icon: Users, iconColor: "text-sky-400" },
                 ...((effectiveRole === "CLA" || effectiveRole === "ALA") ? [
-                  { id: "association", label: "3. Associação de Função", badge: "ROLE", icon: UserCheck, iconColor: "text-emerald-450" },
-                  { id: "alloc", label: "4. Alocação e Reservas", badge: "DRAG", icon: Layers, iconColor: "text-indigo-400" }
+                  { id: "association", label: "3. Associação de Função", icon: UserCheck, iconColor: "text-emerald-450" },
+                  { id: "alloc", label: "4. Alocação e Reservas", icon: Layers, iconColor: "text-indigo-400" }
                 ] : []),
-                { id: "team", label: "5. Gestão de Equipe", badge: "TEAM", icon: Users, iconColor: "text-emerald-450" },
-                { id: "catering", label: "6. Alimentação", badge: "CATER", icon: Coffee, iconColor: "text-amber-400" },
-                { id: "plates", label: "7. Impressão", badge: "PRINT", icon: Printer, iconColor: "text-pink-400" },
-                { id: "activities", label: "8. Atividades do CLA", badge: "TASK", icon: CheckSquare, iconColor: "text-emerald-450" },
-                { id: "collab-settings", label: "9. Dados Colaboradores", badge: "DADOS", icon: Calendar, iconColor: "text-emerald-400" },
-                { id: "messages", label: "10. Mensagens & Comunicação", badge: "MSG", icon: MessageSquare, iconColor: "text-teal-400" }
+                { id: "team", label: "5. Gestão de Equipe", icon: Users, iconColor: "text-emerald-450" },
+                { id: "catering", label: "6. Alimentação", icon: Coffee, iconColor: "text-amber-400" },
+                { id: "plates", label: "7. Impressão", icon: Printer, iconColor: "text-pink-400" },
+                { id: "activities", label: "8. Atividades do CLA", icon: CheckSquare, iconColor: "text-emerald-450" },
+                { id: "collab-settings", label: "9. Dados Colaboradores", icon: Calendar, iconColor: "text-emerald-400" },
+                { id: "messages", label: "10. Mensagens & Comunicação", icon: MessageSquare, iconColor: "text-teal-400" }
               ];
 
               const renderTabContent = (tabId: string) => {
@@ -1314,6 +1346,7 @@ export default function App() {
                           building={building}
                           currentUserName={effectiveUser?.name || currentUser.name}
                           currentUserRole={effectiveRole || "CLA"}
+                          onSaveBuilding={saveBuilding}
                         />
                       </div>
                     );
@@ -1357,10 +1390,7 @@ export default function App() {
                               <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
                               <span>{item.label}</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">{item.badge}</span>
-                              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isActive ? "rotate-180 text-white" : "text-slate-400"}`} />
-                            </div>
+                            <ChevronDown className={`w-4 h-4 transition-transform duration-200 shrink-0 ${isActive ? "rotate-180 text-white" : "text-slate-400"}`} />
                           </button>
 
                           {isActive && (
@@ -1410,7 +1440,7 @@ export default function App() {
                                 key={item.id}
                                 onClick={() => setActiveTab(item.id)}
                                 title={item.label}
-                                className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-between px-4 py-3.5"} ${
+                                className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-start px-4 py-3.5"} ${
                                   isActive
                                     ? item.isDanger ? "bg-rose-600 text-white border-rose-805 shadow-[3px_3px_0px_0px_#9f1239] scale-[1.02]" : "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]"
                                     : isDarkMode
@@ -1422,9 +1452,6 @@ export default function App() {
                                   <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
                                   {!isSidebarCollapsed && <span>{item.label}</span>}
                                 </div>
-                                {!isSidebarCollapsed && (
-                                  <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">{item.badge}</span>
-                                )}
                               </button>
                             );
                           })}
@@ -1475,6 +1502,7 @@ export default function App() {
             individualConfirmationStatus={individualConfirmationStatus}
             onUpdateConfirmationStatus={handleUpdateConfirmationStatus}
             onUpdateProfile={handleUpdateCollaboratorProfile}
+            onSaveBuilding={saveBuilding}
           />
         )}
 

@@ -27,8 +27,13 @@ interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const isPermissionDenied = errMsg.toLowerCase().includes("missing or insufficient permissions") ||
+                             errMsg.toLowerCase().includes("permission-denied") ||
+                             errMsg.toLowerCase().includes("permission denied");
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -44,6 +49,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   };
   
-  console.error('[CALANGUS FIRESTORE ERROR REPORT]: ', JSON.stringify(errInfo, null, 2));
-  throw new Error(JSON.stringify(errInfo));
+  if (isPermissionDenied) {
+    console.error('[CALANGUS FIRESTORE ERROR REPORT]: ', JSON.stringify(errInfo, null, 2));
+    throw new Error(JSON.stringify(errInfo));
+  } else {
+    // Connection, offline or other transient error: log warning and continue without crashing app flow
+    console.warn(`[CALANGUS FIRESTORE ${operationType.toUpperCase()}]: ${errMsg} (path: ${path})`);
+  }
 }
