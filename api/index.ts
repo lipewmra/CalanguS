@@ -248,30 +248,56 @@ const formatE164 = (phone: string): string => {
 // Helper to dispatch through Pingram REST API
 const dispatchPingramRequest = async (endpoint: string, apiKey: string, payload: any) => {
   const urls = [
+    "https://api.pingram.io/send",
+    "https://api.pingram.io/v1/send",
     `https://api.pingram.io/${endpoint}`,
     `https://api.pingram.io/v1/${endpoint}`,
+    "https://api.notificationapi.com/send",
+    "https://api.notificationapi.com/v1/send",
     `https://api.notificationapi.com/${endpoint}`,
   ];
 
   let lastError: any = null;
   for (const url of urls) {
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "X-API-Key": apiKey,
+        "X-Pingram-Key": apiKey,
+        "notificationapi-key": apiKey,
+      };
+
+      if (apiKey.includes(":")) {
+        const basicAuth = Buffer.from(apiKey).toString("base64");
+        headers["Authorization"] = `Basic ${basicAuth}`;
+      }
+
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-          "X-API-Key": apiKey,
-        },
+        headers,
         body: JSON.stringify(payload),
       });
 
+      const resText = await response.text().catch(() => "");
+      let resData: any = null;
+      try {
+        resData = JSON.parse(resText);
+      } catch {
+        resData = { text: resText };
+      }
+
       if (response.ok) {
-        const resData = await response.json().catch(() => ({ status: "ok" }));
         return { success: true, data: resData, url };
       } else {
-        const errText = await response.text().catch(() => "");
-        lastError = new Error(`HTTP ${response.status}: ${errText}`);
+        const errMsg =
+          resData?.message ||
+          resData?.error ||
+          resData?.description ||
+          resText ||
+          `HTTP ${response.status}`;
+        lastError = new Error(errMsg);
+        console.warn(`[Vercel CalanguS Pingram] Endpoint ${url} retornou HTTP ${response.status}: ${errMsg}`);
       }
     } catch (err: any) {
       lastError = err;
@@ -298,6 +324,10 @@ app.post(["/api/pingram/test", "/api/pingram-test"], async (req, res) => {
 
     try {
       const pingResult = await dispatchPingramRequest("test", keyToUse.trim(), {
+        type: "enem_ping_test",
+        notificationType: "enem_ping_test",
+        notification_type: "enem_ping_test",
+        notificationId: "enem_ping_test",
         ping: true,
         timestamp: new Date().toISOString(),
         senderEmail: senderEmail || undefined,
@@ -359,14 +389,43 @@ app.post(["/api/pingram/send-email", "/api/pingram-send-email"], async (req, res
     </div>
   `;
 
+  const recipientId = String(to).replace(/[^a-zA-Z0-9_-]/g, "_") || "destinatario";
+  const notifType = "enem_convocacao_email";
+
   const payload = {
-    to,
+    type: notifType,
+    notificationType: notifType,
+    notification_type: notifType,
+    notificationId: notifType,
+    to: {
+      id: recipientId,
+      email: to,
+    },
+    user: {
+      id: recipientId,
+      email: to,
+      name: collaboratorName || undefined,
+    },
+    recipient: to,
+    email: {
+      subject,
+      html: htmlBody,
+      text: body,
+    },
     subject,
     body,
     text: body,
     html: htmlBody,
     from: senderEmail || process.env.PINGRAM_SENDER_EMAIL || "comunicados@calangus.enem2026.br",
     senderName: senderName || "Coordenação ENEM 2026",
+    parameters: {
+      subject,
+      body,
+      collaboratorName: collaboratorName || "",
+      senderName: senderName || "Coordenação ENEM 2026",
+      claId: claId || "",
+      sentAt: new Date().toISOString(),
+    },
     metadata: { claId, collaboratorName, sentAt: new Date().toISOString() },
   };
 
@@ -382,6 +441,12 @@ app.post(["/api/pingram/send-email", "/api/pingram-send-email"], async (req, res
       return;
     } catch (err: any) {
       console.warn(`[Vercel CalanguS Pingram] API externa retornou aviso: ${err.message}. Registrado no log.`);
+      res.status(502).json({
+        success: false,
+        error: `Pingram retornou erro: ${err.message}`,
+        message: `Erro no servidor do Pingram: ${err.message}`,
+      });
+      return;
     }
   }
 
@@ -407,11 +472,37 @@ app.post(["/api/pingram/send-sms", "/api/pingram-send-sms"], async (req, res) =>
   const formattedPhone = formatE164(to);
   console.log(`[Vercel CalanguS Pingram] Enviando SMS para: ${formattedPhone} (${collaboratorName || "Colaborador"})`);
 
+  const recipientId = formattedPhone.replace(/[^\d]/g, "") || "destinatario_sms";
+  const notifType = "enem_convocacao_sms";
+
   const payload = {
-    to: formattedPhone,
+    type: notifType,
+    notificationType: notifType,
+    notification_type: notifType,
+    notificationId: notifType,
+    to: {
+      id: recipientId,
+      number: formattedPhone,
+    },
+    user: {
+      id: recipientId,
+      number: formattedPhone,
+      name: collaboratorName || undefined,
+    },
+    recipient: formattedPhone,
+    sms: {
+      message,
+    },
     message,
     text: message,
+    body: message,
     from: senderPhone || process.env.PINGRAM_SENDER_PHONE || "ENEM2026",
+    parameters: {
+      message,
+      collaboratorName: collaboratorName || "",
+      claId: claId || "",
+      sentAt: new Date().toISOString(),
+    },
     metadata: { claId, collaboratorName, sentAt: new Date().toISOString() },
   };
 
@@ -427,6 +518,12 @@ app.post(["/api/pingram/send-sms", "/api/pingram-send-sms"], async (req, res) =>
       return;
     } catch (err: any) {
       console.warn(`[Vercel CalanguS Pingram SMS] Aviso da API externa: ${err.message}. Registrado no log.`);
+      res.status(502).json({
+        success: false,
+        error: `Pingram retornou erro: ${err.message}`,
+        message: `Erro no servidor do Pingram: ${err.message}`,
+      });
+      return;
     }
   }
 
@@ -473,29 +570,76 @@ app.post(["/api/pingram/dispatch-batch", "/api/pingram-batch"], async (req, res)
 
     try {
       if (channel === "email") {
+        const recipientId = String(item.email).replace(/[^a-zA-Z0-9_-]/g, "_") || "destinatario";
+        const notifType = "enem_convocacao_email";
         const payload = {
-          to: item.email,
+          type: notifType,
+          notificationType: notifType,
+          notification_type: notifType,
+          notificationId: notifType,
+          to: {
+            id: recipientId,
+            email: item.email,
+          },
+          user: {
+            id: recipientId,
+            email: item.email,
+            name: item.name || undefined,
+          },
+          recipient: item.email,
+          email: {
+            subject: item.subject || "Comunicado ENEM 2026",
+            text: item.body,
+            html: `<div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;">${item.body}</div>`,
+          },
           subject: item.subject || "Comunicado ENEM 2026",
           body: item.body,
           text: item.body,
           from: senderEmail || "comunicados@calangus.enem2026.br",
           senderName: senderName || "Coordenação ENEM 2026",
+          parameters: {
+            subject: item.subject || "Comunicado ENEM 2026",
+            body: item.body,
+            name: item.name,
+          },
         };
 
         if (keyToUse && keyToUse.trim()) {
-          await dispatchPingramRequest("email", keyToUse.trim(), payload).catch(() => null);
+          await dispatchPingramRequest("email", keyToUse.trim(), payload);
         }
       } else {
         const formattedPhone = formatE164(item.phone || "");
+        const recipientId = formattedPhone.replace(/[^\d]/g, "") || "destinatario_sms";
+        const notifType = "enem_convocacao_sms";
         const payload = {
-          to: formattedPhone,
+          type: notifType,
+          notificationType: notifType,
+          notification_type: notifType,
+          notificationId: notifType,
+          to: {
+            id: recipientId,
+            number: formattedPhone,
+          },
+          user: {
+            id: recipientId,
+            number: formattedPhone,
+            name: item.name || undefined,
+          },
+          recipient: formattedPhone,
+          sms: {
+            message: item.body,
+          },
           message: item.body,
           text: item.body,
           from: senderPhone || "ENEM2026",
+          parameters: {
+            message: item.body,
+            name: item.name,
+          },
         };
 
         if (keyToUse && keyToUse.trim()) {
-          await dispatchPingramRequest("sms", keyToUse.trim(), payload).catch(() => null);
+          await dispatchPingramRequest("sms", keyToUse.trim(), payload);
         }
       }
 
@@ -515,7 +659,7 @@ app.post(["/api/pingram/dispatch-batch", "/api/pingram-batch"], async (req, res)
         target,
         channel,
         success: false,
-        error: itemErr.message || "Erro no envio",
+        error: itemErr?.message || "Falha no envio via Pingram",
       });
       failCount++;
     }
