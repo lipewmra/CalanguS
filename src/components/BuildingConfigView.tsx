@@ -19,13 +19,20 @@ import {
   HelpCircle,
   ShieldCheck,
   Settings,
+  Radio,
 } from "lucide-react";
 import GeminiKeyModal from "./GeminiKeyModal";
+import PingramConfigModal from "./PingramConfigModal";
 import {
   getGeminiApiKey,
   maskApiKey,
   hasGeminiApiKey,
 } from "../utils/geminiApiKey";
+import {
+  getPingramConfig,
+  maskPingramApiKey as maskPingramKey,
+  hasPingramConfig,
+} from "../utils/pingramConfig";
 
 export const FLOOR_OPTIONS = [
   "10º Andar",
@@ -83,15 +90,25 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
   const [activeApiKey, setActiveApiKey] = useState<string>(getGeminiApiKey());
 
+  // Pingram API Key & Config states
+  const [isPingramModalOpen, setIsPingramModalOpen] = useState(false);
+  const [activePingramConfig, setActivePingramConfig] = useState(() => getPingramConfig(claId));
+
   useEffect(() => {
     const handleKeyChange = (e: any) => {
       setActiveApiKey(e.detail?.apiKey || getGeminiApiKey());
     };
+    const handlePingramChange = (e: any) => {
+      setActivePingramConfig(e.detail?.config || getPingramConfig(claId));
+    };
+
     window.addEventListener("calangus_api_key_changed", handleKeyChange);
+    window.addEventListener("calangus_pingram_config_changed", handlePingramChange);
     return () => {
       window.removeEventListener("calangus_api_key_changed", handleKeyChange);
+      window.removeEventListener("calangus_pingram_config_changed", handlePingramChange);
     };
-  }, []);
+  }, [claId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -572,6 +589,49 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
         )}
       </div>
 
+      {/* MÓDULO PINGRAM API (E-MAIL & SMS) PARA O CLA */}
+      <div className="mb-6 p-4 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-amber-500/10 dark:from-sky-950/40 dark:via-indigo-950/40 dark:to-amber-950/40 border-2 border-sky-500/30 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-md">
+            <Radio className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <span>Pingram API • E-mail & SMS do CLA</span>
+              <span className="text-[9px] bg-sky-600 text-white px-2 py-0.5 rounded-full font-mono font-black">VERCEL READY</span>
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+              Cada CLA pode conectar sua própria chave do Pingram para disparar e-mails e SMS automáticos para seus colaboradores.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          {activePingramConfig && activePingramConfig.apiKey ? (
+            <button
+              type="button"
+              onClick={() => setIsPingramModalOpen(true)}
+              className="px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-850 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              title="Pingram configurado para este CLA. Clique para alterar ou testar."
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span className="font-mono text-[11px]">{maskPingramKey(activePingramConfig.apiKey)}</span>
+              <span className="text-[10px] uppercase font-extrabold bg-emerald-500 text-white px-1.5 py-0.5 rounded">Ativo</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsPingramModalOpen(true)}
+              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition cursor-pointer"
+              title="Configurar chave de API do Pingram para envio de E-mail e SMS"
+            >
+              <Key className="w-4 h-4" />
+              <span>Configurar API Pingram</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Section 1: Endereço & Nome */}
@@ -938,6 +998,16 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
         onKeySaved={(newKey) => {
           setActiveApiKey(newKey);
           setOcrError(null);
+        }}
+      />
+
+      {/* Modal de Configuração da API Pingram (E-mail & SMS) do CLA */}
+      <PingramConfigModal
+        isOpen={isPingramModalOpen}
+        onClose={() => setIsPingramModalOpen(false)}
+        claId={claId}
+        onConfigSaved={(cfg) => {
+          setActivePingramConfig(cfg);
         }}
       />
     </div>

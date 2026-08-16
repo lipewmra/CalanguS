@@ -6,7 +6,17 @@ import {
   FileText, ArrowRight, MessageCircle, Info, Plus, Edit2, Trash2,
   HelpCircle, Smartphone, Inbox, Radio, X
 } from "lucide-react";
-import { BuildingInfo, CollaboratorInfo, CalangusMessage, CalangusTemplate } from "../types";
+import { BuildingInfo, CollaboratorInfo, CalangusMessage, CalangusTemplate, PingramConfig } from "../types";
+import PingramConfigModal from "./PingramConfigModal";
+import {
+  getPingramConfig,
+  sendEmailViaPingram,
+  sendSmsViaPingram,
+  dispatchPingramBatch,
+  hasPingramConfig,
+  formatBrazilianPhone,
+  maskPingramApiKey as maskPingramKey,
+} from "../utils/pingramConfig";
 
 export interface SentMessageLog {
   id: string;
@@ -139,6 +149,27 @@ export default function MessagingCenter({
 
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [successBanner, setSuccessBanner] = useState<string>("");
+
+  // Pingram API & Dispatch States
+  const [isPingramModalOpen, setIsPingramModalOpen] = useState(false);
+  const [pingramConfig, setPingramConfig] = useState<PingramConfig | null>(() => getPingramConfig(claId));
+  const [isSendingViaPingram, setIsSendingViaPingram] = useState(false);
+  const [pingramProgress, setPingramProgress] = useState<{
+    current: number;
+    total: number;
+    channel: string;
+    log: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    const handlePingramChange = (e: any) => {
+      setPingramConfig(e.detail?.config || getPingramConfig(claId));
+    };
+    window.addEventListener("calangus_pingram_config_changed", handlePingramChange);
+    return () => {
+      window.removeEventListener("calangus_pingram_config_changed", handlePingramChange);
+    };
+  }, [claId]);
 
   // Sync templates changes to building and localStorage
   const saveTemplates = (newTemplates: CalangusTemplate[]) => {
@@ -440,6 +471,10 @@ export default function MessagingCenter({
       const recipient = targetedRecipients[0];
       if (recipient.email) {
         const msgText = formatMessageForCollab(messageBody, recipient);
+        // If Pingram is configured, attempt Pingram dispatch in background
+        if (pingramConfig && pingramConfig.apiKey) {
+          sendEmailViaPingram(pingramConfig, recipient.email, subject, msgText, recipient.name).catch(() => null);
+        }
         const mailtoUrl = `mailto:${recipient.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(msgText)}`;
         window.open(mailtoUrl, "_blank");
       }
@@ -447,6 +482,9 @@ export default function MessagingCenter({
       const recipient = targetedRecipients[0];
       if (recipient.whatsapp) {
         const msgText = formatMessageForCollab(messageBody, recipient);
+        if (pingramConfig && pingramConfig.apiKey) {
+          sendSmsViaPingram(pingramConfig, recipient.whatsapp, msgText, recipient.name).catch(() => null);
+        }
         const smsUrl = getSmsUrl(recipient.whatsapp || "", msgText);
         window.open(smsUrl, "_blank");
       }
@@ -458,6 +496,135 @@ export default function MessagingCenter({
         : `Mensagem processada com sucesso e sincronizada na Caixa Interna do CalanguS para ${targetedRecipients.length} colaborador(es)!`
     );
     setTimeout(() => setSuccessBanner(""), 4500);
+  };
+
+  // Direct Pingram Batch Dispatch (Automatic Server & API Delivery)
+  const handleDispatchViaPingram = async () => {
+    if (!pingramConfig || !pingramConfig.apiKey) {
+      setIsPingramModalOpen(true);
+      return;
+    }
+
+    if (targetedRecipients.length === 0) {
+      alert("Nenhum colaborador selecionado como destinatário.");
+      return;
+    }
+
+    if (!messageBody.trim()) {
+      alert("Por favor, preencha o corpo da mensagem.");
+      return;
+    }
+
+    const currentChannel = channel === "sms" ? "sms" : "email";
+    setIsSendingViaPingram(true);
+    setPingramProgress({
+      current: 0,
+      total: targetedRecipients.length,
+      channel: currentChannel,
+      log: [`Iniciando envio via Pingram API (${currentChannel.toUpperCase()})...`],
+    });
+
+    const items = targetedRecipients.map((collab) => ({
+      id: collab.id,
+      name: collab.name,
+      email: collab.email,
+      phone: collab.whatsapp,
+      body: formatMessageForCollab(messageBody, collab),
+      subject: subject || "Comunicado ENEM 2026",
+      channel: currentChannel as "email" | "sms",
+    }));
+
+    try {
+      const batchResult = await dispatchPingramBatch(pingramConfig, items);
+
+      // Save Log
+      const timestampStr = new Date().toLocaleString("pt-BR");
+      const summaryTarget = targetType === "individual"
+        ? targetedRecipients[0]?.name || "Colaborador Individual"
+        : `Disparo Pingram (${currentChannel.toUpperCase()}): ${targetedRecipients.length} pessoas`;
+
+      const newLog: SentMessageLog = {
+        id: `pingram-${Date.now()}`,
+        sentAt: timestampStr,
+        senderName: `${currentUserName} (via Pingram)`,
+        senderRole: currentUserRole,
+        channel: currentChannel as "email" | "sms",
+        targetType: targetType,
+        targetSummary: summaryTarget,
+        recipientCount: batchResult.successCount,
+        subject: subject,
+        body: messageBody,
+      };
+
+      const updatedLogs = [newLog, ...sentLogs];
+      setSentLogs(updatedLogs);
+      localStorage.setItem("enem_sent_messages_log", JSON.stringify(updatedLogs));
+
+      // Also save internal notification message
+      const newInternalMessage: CalangusMessage = {
+        id: `cmsg-p-${Date.now()}`,
+        senderClaId: claId || building?.claId || "cla-coord",
+        senderName: `${currentUserName} (Pingram ${currentChannel.toUpperCase()})`,
+        senderRole: currentUserRole,
+        title: subject || "Comunicado Oficial ENEM",
+        content: messageBody,
+        sentAt: timestampStr,
+        channel: currentChannel as "email" | "sms",
+        channels: [currentChannel as "email" | "sms"],
+        targetType: "all",
+        targetSummary: summaryTarget,
+        readBy: [],
+      };
+
+      if (building && onSaveBuilding) {
+        onSaveBuilding({
+          ...building,
+          messages: [newInternalMessage, ...(building.messages || [])],
+        });
+      }
+
+      setSuccessBanner(
+        `✓ Disparo concluído via Pingram! ${batchResult.successCount} de ${items.length} mensagens entregues com sucesso.`
+      );
+      setTimeout(() => setSuccessBanner(""), 6000);
+    } catch (err: any) {
+      alert(`Erro no disparo Pingram: ${err.message || "Falha na conexão"}`);
+    } finally {
+      setIsSendingViaPingram(false);
+      setPingramProgress(null);
+    }
+  };
+
+  // Single Recipient Instant Pingram Trigger from Queue Card
+  const handleSinglePingramSend = async (collab: CollaboratorInfo) => {
+    if (!pingramConfig || !pingramConfig.apiKey) {
+      setIsPingramModalOpen(true);
+      return;
+    }
+
+    const currentChannel = channel === "sms" ? "sms" : "email";
+    const formattedText = formatMessageForCollab(messageBody, collab);
+
+    try {
+      if (currentChannel === "email") {
+        if (!collab.email) {
+          alert(`O colaborador ${collab.name} não possui e-mail cadastrado.`);
+          return;
+        }
+        await sendEmailViaPingram(pingramConfig, collab.email, subject, formattedText, collab.name);
+        setSuccessBanner(`✓ E-mail enviado com sucesso para ${collab.name} (${collab.email}) via Pingram!`);
+      } else {
+        if (!collab.whatsapp) {
+          alert(`O colaborador ${collab.name} não possui telefone/celular cadastrado.`);
+          return;
+        }
+        await sendSmsViaPingram(pingramConfig, collab.whatsapp, formattedText, collab.name);
+        setSuccessBanner(`✓ SMS enviado com sucesso para ${collab.name} (${collab.whatsapp}) via Pingram!`);
+      }
+      setTimeout(() => setSuccessBanner(""), 4500);
+    } catch (err: any) {
+      alert(`Falha no envio via Pingram para ${collab.name}: ${err.message}`);
+    }
   };
 
   // Copy rendered message for an individual in queue
@@ -500,59 +667,85 @@ export default function MessagingCenter({
           </div>
         </div>
 
-        {/* TABS SELECTOR */}
-        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 flex-wrap">
+        {/* TABS & PINGRAM SELECTOR */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* PINGRAM API STATUS BUTTON */}
           <button
             type="button"
-            onClick={() => setActiveTab("compose")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === "compose"
-                ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
-                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+            onClick={() => setIsPingramModalOpen(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border shadow-xs ${
+              pingramConfig && pingramConfig.apiKey
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/20"
+                : "bg-sky-500/10 border-sky-500/30 text-sky-800 dark:text-sky-300 hover:bg-sky-500/20"
             }`}
+            title="Configurar credenciais da API Pingram para este CLA (E-mail e SMS)"
           >
-            <Send className="w-3.5 h-3.5 text-sky-500" />
-            <span>Nova Mensagem</span>
+            <Radio className="w-3.5 h-3.5 text-sky-500 animate-pulse" />
+            <span>API Pingram:</span>
+            {pingramConfig && pingramConfig.apiKey ? (
+              <span className="text-[10px] font-black bg-emerald-500 text-white px-1.5 py-0.2 rounded font-mono">
+                {maskPingramKey(pingramConfig.apiKey)}
+              </span>
+            ) : (
+              <span className="text-[10px] font-black bg-sky-600 text-white px-1.5 py-0.2 rounded">
+                Configurar CLA
+              </span>
+            )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("templates")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === "templates"
-                ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
-                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Modelos Prontos ({templates.length})</span>
-          </button>
+          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveTab("compose")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "compose"
+                  ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <Send className="w-3.5 h-3.5 text-sky-500" />
+              <span>Nova Mensagem</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("history")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === "history"
-                ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
-                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-indigo-500" />
-            <span>Histórico ({sentLogs.length})</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("templates")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "templates"
+                  ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Modelos Prontos ({templates.length})</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("direct_info")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === "direct_info"
-                ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
-                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-            }`}
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
-            <span>E-mail & SMS Direto</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("history")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "history"
+                  ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Histórico ({sentLogs.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("direct_info")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "direct_info"
+                  ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
+              <span>Pingram & E-mail/SMS</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -646,33 +839,59 @@ export default function MessagingCenter({
                 <button
                   type="button"
                   onClick={() => setChannel("email")}
-                  className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-start gap-1 transition cursor-pointer text-left ${
+                  className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-start gap-1 transition cursor-pointer text-left relative ${
                     channel === "email"
                       ? "bg-sky-500/10 border-sky-500 text-sky-700 dark:text-sky-300 shadow-xs"
                       : "border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900"
                   }`}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <Mail className="w-4 h-4 text-sky-500 shrink-0" />
-                    <span>E-mail Oficial</span>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-1.5">
+                      <Mail className="w-4 h-4 text-sky-500 shrink-0" />
+                      <span>E-mail Oficial</span>
+                    </div>
+                    {pingramConfig?.apiKey ? (
+                      <span className="text-[8px] bg-emerald-500 text-white font-black px-1.5 py-0.2 rounded uppercase">
+                        Pingram API
+                      </span>
+                    ) : (
+                      <span className="text-[8px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold px-1 py-0.2 rounded">
+                        Mailto
+                      </span>
+                    )}
                   </div>
-                  <span className="text-[9px] font-normal text-sky-600 dark:text-sky-400 text-left">Template formal</span>
+                  <span className="text-[9px] font-normal text-sky-600 dark:text-sky-400 text-left">
+                    {pingramConfig?.apiKey ? "Envio automático via API" : "Template formal / Mailto"}
+                  </span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setChannel("sms")}
-                  className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-start gap-1 transition cursor-pointer text-left ${
+                  className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-start gap-1 transition cursor-pointer text-left relative ${
                     channel === "sms"
                       ? "bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-300 shadow-xs"
                       : "border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900"
                   }`}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <Smartphone className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span>SMS Celular</span>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>SMS Celular</span>
+                    </div>
+                    {pingramConfig?.apiKey ? (
+                      <span className="text-[8px] bg-emerald-500 text-white font-black px-1.5 py-0.2 rounded uppercase">
+                        Pingram API
+                      </span>
+                    ) : (
+                      <span className="text-[8px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold px-1 py-0.2 rounded">
+                        SMS Link
+                      </span>
+                    )}
                   </div>
-                  <span className="text-[9px] font-normal text-amber-600 dark:text-amber-400 text-left">Mensagem de texto</span>
+                  <span className="text-[9px] font-normal text-amber-600 dark:text-amber-400 text-left">
+                    {pingramConfig?.apiKey ? "Envio automático via API" : "Mensagem de texto / Celular"}
+                  </span>
                 </button>
               </div>
             </div>
@@ -909,7 +1128,7 @@ export default function MessagingCenter({
                 Destinatários na fila: <strong className="text-slate-850 dark:text-white font-bold">{targetedRecipients.length} colaborador(es)</strong>
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                 <button
                   type="button"
                   onClick={handleOpenCreateTemplate}
@@ -919,27 +1138,57 @@ export default function MessagingCenter({
                   <span>Salvar como Modelo</span>
                 </button>
 
+                {/* DIRECT PINGRAM BATCH DISPATCH BUTTON (FOR EMAIL & SMS) */}
+                {(channel === "email" || channel === "sms") && (
+                  <button
+                    type="button"
+                    onClick={handleDispatchViaPingram}
+                    disabled={targetedRecipients.length === 0 || isSendingViaPingram}
+                    className={`btn-3d py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer shadow-md text-white ${
+                      targetedRecipients.length === 0 || isSendingViaPingram
+                        ? "bg-slate-400 cursor-not-allowed opacity-60"
+                        : channel === "email"
+                        ? "bg-sky-600 hover:bg-sky-500 border border-sky-400/40"
+                        : "bg-amber-600 hover:bg-amber-500 border border-amber-400/40"
+                    }`}
+                    title={
+                      pingramConfig?.apiKey
+                        ? `Disparar ${channel.toUpperCase()} para todos os ${targetedRecipients.length} destinatários via API Pingram do CLA`
+                        : "Configurar chave Pingram para envio automático"
+                    }
+                  >
+                    <Radio className={`w-4 h-4 ${isSendingViaPingram ? "animate-spin" : "animate-pulse"}`} />
+                    <span>
+                      {isSendingViaPingram
+                        ? "Enviando via Pingram..."
+                        : pingramConfig?.apiKey
+                        ? `Disparar via Pingram API (${targetedRecipients.length})`
+                        : `Conectar Pingram CLA (${channel.toUpperCase()})`}
+                    </span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={handleDispatchMessage}
-                  disabled={targetedRecipients.length === 0}
-                  className={`btn-3d py-2.5 px-5 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer shadow-md text-white grow sm:grow-0 ${
-                    targetedRecipients.length === 0
+                  disabled={targetedRecipients.length === 0 || isSendingViaPingram}
+                  className={`btn-3d py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer shadow-md text-white grow sm:grow-0 ${
+                    targetedRecipients.length === 0 || isSendingViaPingram
                       ? "bg-slate-400 cursor-not-allowed opacity-60"
                       : channel === "whatsapp"
                       ? "bg-emerald-600 hover:bg-emerald-700"
                       : channel === "calangus"
                       ? "bg-indigo-600 hover:bg-indigo-700"
-                      : channel === "email"
-                      ? "bg-sky-600 hover:bg-sky-700"
-                      : "bg-amber-600 hover:bg-amber-700"
+                      : "bg-slate-700 hover:bg-slate-800"
                   }`}
                 >
                   <Send className="w-4 h-4" />
                   <span>
                     {channel === "calangus"
                       ? `Enviar na Caixa CalanguS (${targetedRecipients.length})`
-                      : `Disparar no ${channel.toUpperCase()} (${targetedRecipients.length})`}
+                      : channel === "whatsapp"
+                      ? `Disparar no WhatsApp (${targetedRecipients.length})`
+                      : `Disparo Local / Manual (${targetedRecipients.length})`}
                   </span>
                 </button>
               </div>
@@ -995,7 +1244,7 @@ export default function MessagingCenter({
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap justify-end">
                             {channel === "whatsapp" && waPhone && (
                               <a
                                 href={waUrl}
@@ -1009,28 +1258,48 @@ export default function MessagingCenter({
                               </a>
                             )}
                             {channel === "sms" && waPhone && (
-                              <a
-                                href={smsUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition shadow-xs"
-                                title="Abrir SMS no celular"
-                              >
-                                <Smartphone className="w-3.5 h-3.5" />
-                                <span>SMS</span>
-                              </a>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSinglePingramSend(collab)}
+                                  className="p-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-black flex items-center gap-1 transition shadow-xs cursor-pointer"
+                                  title="Enviar SMS via API Pingram deste CLA"
+                                >
+                                  <Radio className="w-3.5 h-3.5" />
+                                  <span>Pingram SMS</span>
+                                </button>
+                                <a
+                                  href={smsUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
+                                  title="Abrir SMS no celular"
+                                >
+                                  <Smartphone className="w-3.5 h-3.5" />
+                                </a>
+                              </>
                             )}
                             {channel === "email" && collab.email && (
-                              <a
-                                href={mailUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition shadow-xs"
-                                title="Abrir cliente de e-mail"
-                              >
-                                <Mail className="w-3.5 h-3.5" />
-                                <span>E-mail</span>
-                              </a>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSinglePingramSend(collab)}
+                                  className="p-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-[10px] font-black flex items-center gap-1 transition shadow-xs cursor-pointer"
+                                  title="Enviar E-mail via API Pingram deste CLA"
+                                >
+                                  <Radio className="w-3.5 h-3.5" />
+                                  <span>Pingram Mail</span>
+                                </button>
+                                <a
+                                  href={mailUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
+                                  title="Abrir cliente de e-mail local"
+                                >
+                                  <Mail className="w-3.5 h-3.5" />
+                                </a>
+                              </>
                             )}
                             {channel === "calangus" && (
                               <span className="p-1.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-[10px] font-bold flex items-center gap-1 border border-indigo-500/20">
@@ -1271,14 +1540,25 @@ export default function MessagingCenter({
       {activeTab === "direct_info" && (
         <div className="bg-white dark:bg-[#0c1220]/90 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_#e2e8f0] dark:shadow-[4px_4px_0px_0px_#10b981]/20 space-y-6 text-left">
           
-          <div className="border-b-2 border-slate-100 dark:border-slate-800 pb-3 text-left">
-            <h3 className="text-sm font-display font-black text-slate-850 dark:text-white uppercase tracking-wider flex items-center gap-2 text-left">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>Esclarecimento Técnico: Envio Direto de E-mails, SMS e Mensagens Internas</span>
-            </h3>
-            <p className="text-xs text-slate-500 font-medium text-left">
-              Entenda como funcionam as integrações de disparo direto no CalanguS sem depender de programas externos.
-            </p>
+          <div className="border-b-2 border-slate-100 dark:border-slate-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left">
+            <div>
+              <h3 className="text-sm font-display font-black text-slate-850 dark:text-white uppercase tracking-wider flex items-center gap-2 text-left">
+                <Radio className="w-4 h-4 text-sky-500" />
+                <span>Integração Pingram API • E-mail & SMS Direto do CLA</span>
+              </h3>
+              <p className="text-xs text-slate-500 font-medium text-left">
+                Cada CLA pode criar e cadastrar sua própria chave de API Pingram para disparar e-mails e SMS automáticos para seus colaboradores.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsPingramModalOpen(true)}
+              className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-md transition cursor-pointer self-start sm:self-auto"
+            >
+              <Radio className="w-3.5 h-3.5" />
+              <span>Configurar API Pingram</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-left">
@@ -1290,16 +1570,17 @@ export default function MessagingCenter({
                   <Mail className="w-5 h-5" />
                 </div>
                 <h4 className="font-display font-black text-sm text-slate-850 dark:text-white text-left">
-                  1. Envio Direto de E-mails
+                  1. Envio Direto de E-mails via Pingram
                 </h4>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed text-left">
-                <strong>Sim, é totalmente possível!</strong> Para disparar e-mails automáticos em lote sem que você precise abrir sua conta pessoal (Gmail/Outlook), utiliza-se um serviço de API SMTP ou mensageria transacional (como <em>Resend</em>, <em>SendGrid</em> ou <em>Amazon SES</em>).
+                <strong>Disparo em lote automatizado!</strong> Ao cadastrar sua chave API do Pingram, os e-mails são enviados diretamente pelos servidores sem que você precise abrir seu webmail pessoal.
               </p>
               <div className="p-3 bg-white dark:bg-[#0c1220] rounded-xl border border-sky-500/20 text-[11px] text-slate-600 dark:text-slate-400 space-y-1 text-left">
-                <div className="font-bold text-sky-700 dark:text-sky-300">Como o CalanguS opera:</div>
-                <div>• O sistema formata o template com tags oficiais Cebraspe.</div>
-                <div>• O link rápido <code>mailto:</code> permite envio imediato e seguro sem custo de servidor.</div>
+                <div className="font-bold text-sky-700 dark:text-sky-300">Como funciona:</div>
+                <div>• O sistema monta o template formatado com o nome e sala.</div>
+                <div>• O backend Node/Vercel conecta na sua API Pingram.</div>
+                <div>• O colaborador recebe com remetente configurado.</div>
               </div>
             </div>
 
@@ -1310,15 +1591,16 @@ export default function MessagingCenter({
                   <Smartphone className="w-5 h-5" />
                 </div>
                 <h4 className="font-display font-black text-sm text-slate-850 dark:text-white text-left">
-                  2. Envio Direto de SMS
+                  2. Envio Direto de SMS via Pingram
                 </h4>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed text-left">
-                <strong>Sim, é totalmente possível!</strong> O disparo de SMS em massa pode ser feito integrando uma API de Gateway SMS (como <em>Zenvia</em>, <em>Twilio</em> ou <em>Comtele</em>) ou utilizando o link nativo de SMS de alta compatibilidade com smartphones.
+                <strong>Notificações no bolso do colaborador!</strong> O SMS do Pingram alcança colaboradores mesmo sem internet ativa no celular, ideal para convocações urgentes e avisos de horário (11h).
               </p>
               <div className="p-3 bg-white dark:bg-[#0c1220] rounded-xl border border-amber-500/20 text-[11px] text-slate-600 dark:text-slate-400 space-y-1 text-left">
-                <div className="font-bold text-amber-700 dark:text-amber-300">Vantagem do SMS no CalanguS:</div>
-                <div>• O canal <strong>SMS Celular</strong> pré-preenche o número do fiscal e a mensagem no app nativo do seu celular com 1 toque.</div>
+                <div className="font-bold text-amber-700 dark:text-amber-300">Recursos de SMS:</div>
+                <div>• Formatação automática no padrão internacional (+55 E.164).</div>
+                <div>• Disparo individual com 1 clique ou em lote para toda a equipe.</div>
               </div>
             </div>
 
@@ -1358,6 +1640,53 @@ export default function MessagingCenter({
 
         </div>
       )}
+
+      {/* PINGRAM DISPATCH PROGRESS MODAL */}
+      {pingramProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-fade-in text-left">
+          <div className="bg-white dark:bg-[#0c1220] max-w-md w-full rounded-2xl border-2 border-sky-500/40 p-6 space-y-4 shadow-2xl animate-scale-up text-left">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-md animate-spin">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-base text-slate-900 dark:text-white">
+                  Disparando via Pingram API...
+                </h3>
+                <p className="text-xs text-slate-500 font-semibold">
+                  Enviando {pingramProgress.channel.toUpperCase()} para {pingramProgress.total} destinatário(s)
+                </p>
+              </div>
+            </div>
+
+            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+              <div className="bg-sky-500 h-full w-full animate-pulse" />
+            </div>
+
+            <div className="p-3 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300 font-mono space-y-1 max-h-32 overflow-y-auto">
+              {pingramProgress.log.map((line, idx) => (
+                <div key={idx}>• {line}</div>
+              ))}
+            </div>
+
+            <p className="text-[10px] text-slate-400 text-center font-medium">
+              Aguarde enquanto os servidores do Pingram concluem as entregas.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Configuração do Pingram do CLA */}
+      <PingramConfigModal
+        isOpen={isPingramModalOpen}
+        onClose={() => setIsPingramModalOpen(false)}
+        claId={claId}
+        onConfigSaved={(cfg) => {
+          setPingramConfig(cfg);
+          setSuccessBanner("Credenciais do Pingram salvas e validadas para este CLA!");
+          setTimeout(() => setSuccessBanner(""), 4000);
+        }}
+      />
 
       {/* ========================================================================= */}
       {/* MODAL: CREATE / EDIT MESSAGE TEMPLATE */}

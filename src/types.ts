@@ -1,5 +1,16 @@
 export type UserRole = "SuperAdmin" | "CLA" | "ALA" | "Colaborador";
 
+export interface PingramConfig {
+  apiKey: string;
+  senderEmail?: string;
+  senderName?: string;
+  senderPhone?: string;
+  enabled?: boolean;
+  lastTestedAt?: string;
+  lastTestStatus?: "success" | "error";
+  lastTestMessage?: string;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
@@ -11,6 +22,7 @@ export interface UserProfile {
   claId?: string;
   hasAccessed?: boolean;
   photoUrl?: string;
+  pingramConfig?: PingramConfig;
 }
 
 export interface RoomDetails {
@@ -88,6 +100,7 @@ export interface BuildingInfo {
   customRoles?: ClaCustomRole[];
   messages?: CalangusMessage[];
   customMessageTemplates?: CalangusTemplate[];
+  pingramConfig?: PingramConfig;
 }
 
 export interface PastEdition {

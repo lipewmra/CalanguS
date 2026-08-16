@@ -475,10 +475,10 @@ export default function CollaboratorManager({
         updates.originalClaId = claId;
       }
       if (!target.originalClaName) {
-        updates.originalClaName = currentUserName || buildingName || "CLA Mantenedor";
+        updates.originalClaName = currentUserName || buildingName || "CLA";
       }
       if (!target.claName) {
-        updates.claName = currentUserName || buildingName || "CLA Mantenedor";
+        updates.claName = currentUserName || buildingName || "CLA";
       }
       if (!target.assignedRoom) {
         updates.isReserve = true;
@@ -1482,7 +1482,7 @@ function activeTabSubList(
             </thead>
             <tbody className="divide-y-2 divide-slate-155 dark:divide-slate-800">
               {filteredCollaborators.map((c) => {
-                const originName = c.originalClaName || c.claName || "CLA Mantenedor";
+                const originName = c.originalClaName || c.claName || buildingName || "CLA";
                 return (
                 <tr key={c.id} className="hover:bg-slate-500/5 transition">
                   {/* Name detail */}

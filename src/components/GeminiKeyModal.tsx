@@ -451,7 +451,7 @@ export default function GeminiKeyModal({
                 )}
                 {(testResult.message.includes("503") || testResult.message.includes("alta demanda")) && (
                   <p className="text-[11px] font-medium opacity-90">
-                    💡 <strong>Dica:</strong> Este erro ocorre diretamente nos clusters do Google durante picos de uso e costuma durar apenas alguns segundos. O CalanguS já possui contingência automática entre múltiplos modelos (Gemini 2.5 Flash, 3.7 Flash, Flash-Lite e Pro). Você pode clicar em <strong>"Salvar Direto"</strong> para utilizá-la normalmente.
+                    💡 <strong>Dica:</strong> Este erro ocorre diretamente nos clusters do Google durante picos de uso e costuma durar apenas alguns segundos. O CalanguS já possui contingência automática entre múltiplos modelos oficiais (Gemini 3.7 Flash, Flash-Latest, 3.1 Flash-Lite e Pro). Você pode clicar em <strong>"Salvar Direto"</strong> para utilizá-la normalmente.
                   </p>
                 )}
               </div>
