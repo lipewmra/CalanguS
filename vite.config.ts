@@ -9,14 +9,14 @@ import {defineConfig} from 'vite';
 const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
 if (!fs.existsSync(configPath)) {
   fs.writeFileSync(configPath, JSON.stringify({
-    projectId: process.env.VITE_FIREBASE_PROJECT_ID || "",
-    appId: process.env.VITE_FIREBASE_APP_ID || "",
-    apiKey: process.env.VITE_FIREBASE_API_KEY || "",
-    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "",
-    firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "",
-    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "",
-    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-    measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID || ""
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || "variados-acc6e",
+    appId: process.env.VITE_FIREBASE_APP_ID || "1:303620257712:web:bffd557f6dd96f2ac2c875",
+    apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyCmOvcEszPS6Z73OhSav6ci9gEp1Hyfqs4",
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "variados-acc6e.firebaseapp.com",
+    firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "ai-studio-9fb2fb87-2fd8-45d7-af3f-c27c6bbb9d22",
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "variados-acc6e.firebasestorage.app",
+    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "303620257712",
+    measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID || "zvbS8ZUsR9itAJClihDP5Q"
   }, null, 2), 'utf-8');
 }
 
