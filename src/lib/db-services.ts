@@ -17,6 +17,7 @@ import { db, auth } from "../firebase";
 import { handleFirestoreError, OperationType } from "./firestore-error";
 import { 
   UserProfile, 
+  UserRole,
   BuildingInfo, 
   CollaboratorInfo, 
   TransferRequestInfo,
@@ -29,6 +30,22 @@ import {
 // ==========================================
 // 1. User Profiles & Simulated Auth Service
 // ==========================================
+
+export function cleanUndefined<T extends Record<string, any>>(obj: T): T {
+  if (!obj || typeof obj !== "object") return obj;
+  const result: any = Array.isArray(obj) ? [] : {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === undefined) {
+      continue;
+    }
+    if (val !== null && typeof val === "object" && !(val instanceof Date)) {
+      result[key] = cleanUndefined(val);
+    } else {
+      result[key] = val;
+    }
+  }
+  return result;
+}
 
 export async function getCurrentUserProfile(uid: string): Promise<UserProfile | null> {
   const path = `users/${uid}`;
@@ -60,7 +77,8 @@ export function subscribeToUserProfile(uid: string, onUpdate: (profile: UserProf
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
   const path = `users/${profile.uid}`;
   try {
-    await setDoc(doc(db, "users", profile.uid), profile);
+    const cleaned = cleanUndefined(profile);
+    await setDoc(doc(db, "users", profile.uid), cleaned);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -102,6 +120,47 @@ export async function updateUserRoles(uid: string, primaryRole: any, rolesList: 
   }
 }
 
+// Update user details (Name, Email, Emails list, Coordination Code) by SuperAdmin
+export async function updateUserDetails(
+  uid: string, 
+  details: { 
+    name: string; 
+    email: string; 
+    emails?: string[];
+    coordinationCode?: string;
+    role?: UserRole;
+    roles?: UserRole[];
+  }
+): Promise<void> {
+  const path = `users/${uid}`;
+  try {
+    const primary = details.email.trim().toLowerCase();
+    const allEmails = Array.from(new Set([
+      primary,
+      ...(details.emails || []).map(e => e.trim().toLowerCase())
+    ].filter(Boolean)));
+
+    const sanitized: Record<string, any> = {
+      name: details.name.trim(),
+      email: primary,
+      emails: allEmails,
+    };
+    if (details.coordinationCode !== undefined) {
+      sanitized.coordinationCode = details.coordinationCode.trim();
+    }
+    if (details.role !== undefined) {
+      sanitized.role = details.role;
+    }
+    if (details.roles !== undefined) {
+      sanitized.roles = details.roles;
+    }
+    await updateDoc(doc(db, "users", uid), sanitized);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    throw error;
+  }
+}
+
 // Delete user profile
 export async function deleteUserProfile(uid: string): Promise<void> {
   const path = `users/${uid}`;
@@ -112,15 +171,22 @@ export async function deleteUserProfile(uid: string): Promise<void> {
   }
 }
 
-// Find user profile by email
+// Find user profile by email (primary or secondary)
 export async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
   const path = "users";
+  const targetEmail = email.toLowerCase().trim();
   try {
-    const q = query(collection(db, "users"), where("email", "==", email.toLowerCase()));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const docVal = snap.docs[0];
-      return { ...docVal.data() } as UserProfile;
+    // 1. Check primary email
+    const q1 = query(collection(db, "users"), where("email", "==", targetEmail));
+    const snap1 = await getDocs(q1);
+    if (!snap1.empty) {
+      return { ...snap1.docs[0].data() } as UserProfile;
+    }
+    // 2. Check secondary emails array
+    const q2 = query(collection(db, "users"), where("emails", "array-contains", targetEmail));
+    const snap2 = await getDocs(q2);
+    if (!snap2.empty) {
+      return { ...snap2.docs[0].data() } as UserProfile;
     }
     return null;
   } catch (error) {
@@ -134,8 +200,20 @@ export async function createPreRegisteredUser(profile: Omit<UserProfile, "uid"> 
   const path = "users";
   try {
     const userRef = doc(collection(db, "users"));
-    const finalProfile = { ...profile, uid: userRef.id };
-    await setDoc(userRef, finalProfile);
+    const primary = (profile.email || "").toLowerCase().trim();
+    const allEmails = Array.from(new Set([
+      primary,
+      ...(profile.emails || []).map(e => (e || "").toLowerCase().trim())
+    ].filter(Boolean)));
+
+    const finalProfile: UserProfile = { 
+      ...profile, 
+      uid: userRef.id,
+      email: primary,
+      emails: allEmails
+    };
+    const cleaned = cleanUndefined(finalProfile);
+    await setDoc(userRef, cleaned);
     return userRef.id;
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -143,42 +221,235 @@ export async function createPreRegisteredUser(profile: Omit<UserProfile, "uid"> 
   }
 }
 
-// Claim draft profiles on Google Auth login
+// Claim draft profiles on Google Auth login (checks primary or secondary emails)
 export async function claimProfileByEmail(email: string, newUid: string): Promise<UserProfile | null> {
   const path = "users";
+  const targetEmail = email.toLowerCase().trim();
   try {
-    const q = query(collection(db, "users"), where("email", "==", email.toLowerCase()));
-    const snap = await getDocs(q);
+    let snap = await getDocs(query(collection(db, "users"), where("email", "==", targetEmail)));
+    if (snap.empty) {
+      snap = await getDocs(query(collection(db, "users"), where("emails", "array-contains", targetEmail)));
+    }
     if (!snap.empty) {
       const firstDoc = snap.docs[0];
       const data = firstDoc.data() as UserProfile;
       const oldUid = firstDoc.id;
       
-      // If the preregistered user doc has a different id from newUid, clean up the old one
+      // If the preregistered user doc has a different id from newUid, clean up the old one and migrate all CLA data
       if (oldUid !== newUid) {
         await deleteDoc(doc(db, "users", oldUid));
-        
-        // Update any building linked to the old pre-registered UID to the new authenticated Google UID
-        try {
-          const bQuery = query(collection(db, "buildings"), where("claId", "==", oldUid));
-          const bSnap = await getDocs(bQuery);
-          for (const bDoc of bSnap.docs) {
-            await updateDoc(doc(db, "buildings", bDoc.id), { claId: newUid });
-          }
-        } catch (bErr) {
-          console.error("Error migrating pre-registered building of claimed CLA:", bErr);
-        }
+        await migrateClaData(oldUid, newUid);
       }
       
-      const mergedProfile = { ...data, uid: newUid, hasAccessed: true };
-      await setDoc(doc(db, "users", newUid), mergedProfile);
-      return mergedProfile;
+      const allEmails = Array.from(new Set([
+        ...(data.emails || []),
+        data.email,
+        targetEmail
+      ].filter(Boolean)));
+
+      const mergedProfile: UserProfile = { 
+        ...data, 
+        uid: newUid, 
+        hasAccessed: true,
+        emails: allEmails
+      };
+      const cleaned = cleanUndefined(mergedProfile);
+      await setDoc(doc(db, "users", newUid), cleaned);
+      return cleaned;
     }
     return null;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
     return null;
   }
+}
+
+// Migrate all CLA data (buildings, collaborators, catering, photos, activities, team) from an old UID to a new UID
+export async function migrateClaData(oldClaId: string, newClaId: string): Promise<void> {
+  if (!oldClaId || !newClaId || oldClaId === newClaId) return;
+
+  // 1. Buildings
+  try {
+    const snap = await getDocs(query(collection(db, "buildings"), where("claId", "==", oldClaId)));
+    for (const d of snap.docs) {
+      await updateDoc(doc(db, "buildings", d.id), { claId: newClaId });
+    }
+  } catch (e) {
+    console.error("Error migrating buildings claId:", e);
+  }
+
+  // 2. Collaborators
+  try {
+    const snap = await getDocs(query(collection(db, "collaborators"), where("claId", "==", oldClaId)));
+    for (const d of snap.docs) {
+      await updateDoc(doc(db, "collaborators", d.id), { claId: newClaId });
+    }
+  } catch (e) {
+    console.error("Error migrating collaborators claId:", e);
+  }
+
+  // 3. Catering
+  try {
+    const snap = await getDocs(query(collection(db, "catering"), where("claId", "==", oldClaId)));
+    for (const d of snap.docs) {
+      await updateDoc(doc(db, "catering", d.id), { claId: newClaId });
+    }
+  } catch (e) {
+    console.error("Error migrating catering claId:", e);
+  }
+
+  // 4. Photos
+  try {
+    const snap = await getDocs(query(collection(db, "photos"), where("claId", "==", oldClaId)));
+    for (const d of snap.docs) {
+      await updateDoc(doc(db, "photos", d.id), { claId: newClaId });
+    }
+  } catch (e) {
+    console.error("Error migrating photos claId:", e);
+  }
+
+  // 5. ClaActivities
+  try {
+    const snap = await getDocs(query(collection(db, "claActivities"), where("claId", "==", oldClaId)));
+    for (const d of snap.docs) {
+      await updateDoc(doc(db, "claActivities", d.id), { claId: newClaId });
+    }
+  } catch (e) {
+    console.error("Error migrating claActivities claId:", e);
+  }
+
+  // 6. Users (ALAs / Colaboradores linked to this CLA)
+  try {
+    const snap = await getDocs(query(collection(db, "users"), where("claId", "==", oldClaId)));
+    for (const d of snap.docs) {
+      await updateDoc(doc(db, "users", d.id), { claId: newClaId });
+    }
+  } catch (e) {
+    console.error("Error migrating users claId:", e);
+  }
+}
+
+// Seamlessly resolve and synchronize SuperAdmin & CLA master profile across linked accounts (philippewagnermra@gmail.com and lipewmra@gmail.com)
+export async function resolveSuperAdminAndClaProfile(user: any): Promise<UserProfile> {
+  const currentEmail = (user.email || "").toLowerCase().trim();
+  const knownMasterEmails = ["lipewmra@gmail.com", "philippewagnermra@gmail.com"];
+  const allMasterEmails = Array.from(new Set([currentEmail, ...knownMasterEmails].filter(Boolean)));
+
+  // 1. Fetch current profile if exists
+  let existingProfile: UserProfile | null = await getCurrentUserProfile(user.uid);
+
+  // 2. Search for any existing profile matching either email or in users collection
+  let oldUidToMigrate: string | null = null;
+  try {
+    const allUsersSnap = await getDocs(collection(db, "users"));
+    let bestDocData: UserProfile | null = null;
+    let bestDocId: string | null = null;
+
+    allUsersSnap.forEach((d) => {
+      const u = d.data() as UserProfile;
+      const uEmail = (u.email || "").toLowerCase().trim();
+      const uEmails = (u.emails || []).map(e => (e || "").toLowerCase().trim());
+      const matchesMaster = allMasterEmails.includes(uEmail) || uEmails.some(e => allMasterEmails.includes(e));
+
+      if (matchesMaster) {
+        if (d.id === user.uid) {
+          existingProfile = u;
+        } else {
+          // Found doc with different UID
+          if (!bestDocData || (u.coordinationCode && !bestDocData.coordinationCode) || (u.roles?.includes("CLA") && !bestDocData.roles?.includes("CLA"))) {
+            bestDocData = u;
+            bestDocId = d.id;
+          }
+        }
+      }
+    });
+
+    if (bestDocData && bestDocId && bestDocId !== user.uid) {
+      oldUidToMigrate = bestDocId;
+      existingProfile = {
+        ...(existingProfile || {}),
+        ...bestDocData,
+        uid: user.uid
+      };
+    }
+  } catch (err) {
+    console.warn("Could not query users collection for master profile search:", err);
+  }
+
+  // 3. Migrate data from old UID if present
+  if (oldUidToMigrate && oldUidToMigrate !== user.uid) {
+    await migrateClaData(oldUidToMigrate, user.uid);
+    try {
+      await deleteDoc(doc(db, "users", oldUidToMigrate));
+    } catch (dErr) {
+      console.warn("Could not delete old master user doc:", dErr);
+    }
+  }
+
+  // 4. Resolve coordination code and building ownership
+  let finalCoordCode = existingProfile?.coordinationCode || "";
+  try {
+    const bSnap = await getDocs(query(collection(db, "buildings"), where("claId", "==", user.uid)));
+    if (bSnap.empty) {
+      // Check if there are any buildings in the system
+      const allBSnap = await getDocs(collection(db, "buildings"));
+      if (!allBSnap.empty) {
+        const firstB = allBSnap.docs[0];
+        const bData = firstB.data() as BuildingInfo;
+        await updateDoc(doc(db, "buildings", firstB.id), { claId: user.uid });
+        if (bData.coordRoom) {
+          finalCoordCode = bData.coordRoom;
+        }
+      }
+    } else {
+      const bData = bSnap.docs[0].data() as BuildingInfo;
+      if (bData.coordRoom && !finalCoordCode) {
+        finalCoordCode = bData.coordRoom;
+      }
+    }
+  } catch (bErr) {
+    console.warn("Error resolving building for SuperAdmin/CLA:", bErr);
+  }
+
+  if (!finalCoordCode) {
+    finalCoordCode = "8520";
+  }
+
+  const finalName = existingProfile?.name || user.displayName || "Philippe Wagner";
+  const finalPhotoUrl = user.photoURL || existingProfile?.photoUrl || "";
+  const finalEmails = Array.from(new Set([
+    ...allMasterEmails,
+    ...(existingProfile?.emails || []),
+    currentEmail
+  ].filter(Boolean)));
+
+  const roles = Array.from(new Set([
+    ...(existingProfile?.roles || []),
+    "SuperAdmin",
+    "CLA"
+  ] as UserRole[]));
+
+  const resolvedProfile: UserProfile = {
+    uid: user.uid,
+    email: currentEmail,
+    emails: finalEmails,
+    name: finalName,
+    role: "SuperAdmin",
+    roles: roles,
+    coordinationCode: finalCoordCode,
+    hasAccessed: true,
+  };
+
+  if (finalPhotoUrl) {
+    resolvedProfile.photoUrl = finalPhotoUrl;
+  }
+  if (existingProfile?.pingramConfig) {
+    resolvedProfile.pingramConfig = existingProfile.pingramConfig;
+  }
+
+  const cleanedProfile = cleanUndefined(resolvedProfile);
+  await setDoc(doc(db, "users", user.uid), cleanedProfile);
+  return cleanedProfile;
 }
 
 // Subscribe to users registered under the same parent CLA (where claId == activeClaId)
@@ -220,11 +491,12 @@ export async function getEventConfig(): Promise<EventConfigInfo | null> {
 export async function saveEventConfig(config: Omit<EventConfigInfo, "id"> & { id?: string }): Promise<string> {
   const path = "eventConfigs";
   try {
-    if (config.id) {
-      await setDoc(doc(db, "eventConfigs", config.id), config);
-      return config.id;
+    const cleaned = cleanUndefined(config);
+    if (cleaned.id) {
+      await setDoc(doc(db, "eventConfigs", cleaned.id), cleaned);
+      return cleaned.id;
     } else {
-      const res = await addDoc(collection(db, "eventConfigs"), config);
+      const res = await addDoc(collection(db, "eventConfigs"), cleaned);
       return res.id;
     }
   } catch (error) {
@@ -270,7 +542,7 @@ export function subscribeToBuilding(claId: string, onUpdate: (building: Building
 export async function saveBuilding(building: BuildingInfo): Promise<void> {
   const path = "buildings";
   try {
-    const data = { ...building };
+    const data = cleanUndefined({ ...building });
     if (data.id === undefined) {
       delete data.id;
     }
@@ -511,10 +783,11 @@ export function subscribeToCatering(claId: string, onUpdate: (catering: Catering
 export async function saveCatering(catering: CateringInfo): Promise<void> {
   const path = "catering";
   try {
-    if (catering.id) {
-      await setDoc(doc(db, "catering", catering.id), catering);
+    const data = cleanUndefined(catering);
+    if (data.id) {
+      await setDoc(doc(db, "catering", data.id), data);
     } else {
-      await addDoc(collection(db, "catering"), catering);
+      await addDoc(collection(db, "catering"), data);
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -543,7 +816,7 @@ export function subscribeToPhotos(claId: string, onUpdate: (photos: PhotoRecord[
 export async function addPhoto(photo: Omit<PhotoRecord, "id">): Promise<void> {
   const path = "photos";
   try {
-    await addDoc(collection(db, "photos"), photo);
+    await addDoc(collection(db, "photos"), cleanUndefined(photo));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -580,7 +853,7 @@ export function subscribeToClaActivities(claId: string, onUpdate: (activities: C
 export async function saveClaActivities(activities: ClaActivities): Promise<void> {
   const path = "claActivities";
   try {
-    const data = { ...activities };
+    const data = cleanUndefined({ ...activities });
     if (data.id === undefined) {
       delete data.id;
     }
@@ -620,29 +893,5 @@ export function subscribeToAllClaActivities(onUpdate: (activities: ClaActivities
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
   });
-}
-
-// ==========================================
-// 8. MASTER RESET (Cebraspe Central only)
-// ==========================================
-export async function masterResetDatabase(): Promise<void> {
-  const collections = ["users", "eventConfigs", "buildings", "collaborators", "catering", "photos", "claActivities"];
-  try {
-    for (const colName of collections) {
-      const snap = await getDocs(collection(db, colName));
-      const deletePromises = snap.docs.map(async (docVal) => {
-        const path = `${colName}/${docVal.id}`;
-        try {
-          await deleteDoc(doc(db, colName, docVal.id));
-        } catch (error) {
-          handleFirestoreError(error, OperationType.DELETE, path);
-        }
-      });
-      await Promise.all(deletePromises);
-    }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, "master-reset");
-    throw error;
-  }
 }
 

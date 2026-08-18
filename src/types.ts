@@ -14,6 +14,7 @@ export interface PingramConfig {
 export interface UserProfile {
   uid: string;
   email: string;
+  emails?: string[];
   name: string;
   role: UserRole;
   roles?: UserRole[];
@@ -23,6 +24,8 @@ export interface UserProfile {
   hasAccessed?: boolean;
   photoUrl?: string;
   pingramConfig?: PingramConfig;
+  createdBySuperAdmin?: boolean;
+  createdByCla?: boolean;
 }
 
 export interface RoomDetails {

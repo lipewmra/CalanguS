@@ -43,8 +43,11 @@ export default function AccessManagementView({ currentUser, colegas, activeClaId
         name: name.trim(),
         email: email.trim().toLowerCase(),
         role: allowedRole,
+        roles: [allowedRole],
         claId: activeClaId,
-        coordinationCode: currentUser.coordinationCode || ""
+        coordinationCode: currentUser.coordinationCode || "",
+        createdByCla: true,
+        createdBySuperAdmin: false
       };
 
       await createPreRegisteredUser(newTeammate);

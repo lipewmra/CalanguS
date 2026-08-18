@@ -38,7 +38,8 @@ import {
   requestCollaboratorTransfer,
   approveCollaboratorTransfer,
   rejectCollaboratorTransfer,
-  cancelCollaboratorTransfer
+  cancelCollaboratorTransfer,
+  resolveSuperAdminAndClaProfile
 } from "./lib/db-services";
 
 import SuperAdminDash from "./components/SuperAdminDash";
@@ -297,44 +298,12 @@ export default function App() {
     // 2. SuperAdmin hardcoded authorized emails
     const isSuperAdminEmail = email === "lipewmra@gmail.com" || email === "philippewagnermra@gmail.com";
     if (isSuperAdminEmail) {
-      let profile: UserProfile | null = null;
       try {
-        profile = await getCurrentUserProfile(user.uid);
+        const profile = await resolveSuperAdminAndClaProfile(user);
+        return profile;
       } catch (err) {
-        console.warn("Could not retrieve remote SuperAdmin profile, generating standard admin profile:", err);
+        console.error("Error resolving master SuperAdmin & CLA profile:", err);
       }
-      
-      if (!profile) {
-        profile = {
-          uid: user.uid,
-          email: email,
-          name: user.displayName || "Super Administrador",
-          role: "SuperAdmin",
-          roles: ["SuperAdmin"],
-          hasAccessed: true,
-        };
-        try {
-          await saveUserProfile(profile);
-        } catch (err) {
-          console.warn("Could not save initial SuperAdmin profile to Firestore:", err);
-        }
-      } else {
-        const roles = profile.roles || [profile.role];
-        if (!roles.includes("SuperAdmin") || profile.role !== "SuperAdmin" || !profile.hasAccessed) {
-          profile = {
-            ...profile,
-            role: "SuperAdmin",
-            roles: Array.from(new Set([...roles, "SuperAdmin"])),
-            hasAccessed: true,
-          };
-          try {
-            await saveUserProfile(profile);
-          } catch (err) {
-            console.warn("Could not update SuperAdmin profile to Firestore:", err);
-          }
-        }
-      }
-      return profile;
     }
 
     // 3. Look up if there is a pre-registered profile by email in users collection
@@ -1154,8 +1123,7 @@ export default function App() {
                 { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
                 { id: "admin-directives", label: "2. Diretivas Gerais", icon: Calendar, iconColor: "text-sky-400" },
                 { id: "admin-profiles", label: "3. Gestão de Perfis", icon: Users, iconColor: "text-indigo-400" },
-                { id: "admin-register", label: "4. Cadastrar CLA/Admin", icon: PlusCircle, iconColor: "text-amber-400" },
-                { id: "admin-reset", label: "5. Master Reset", icon: Trash2, iconColor: "text-rose-500", isDanger: true }
+                { id: "admin-register", label: "4. Cadastrar CLA/Admin", icon: PlusCircle, iconColor: "text-amber-400" }
               ] : [
                 { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
                 { id: "staff", label: "2. Fiscais e Inscrições", icon: Users, iconColor: "text-sky-400" },
@@ -1195,12 +1163,6 @@ export default function App() {
                     return effectiveRole === "SuperAdmin" ? (
                       <div className="animate-fade-in">
                         <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="register" />
-                      </div>
-                    ) : null;
-                  case "admin-reset":
-                    return effectiveRole === "SuperAdmin" ? (
-                      <div className="animate-fade-in">
-                        <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="reset" />
                       </div>
                     ) : null;
                   case "building":
@@ -1380,7 +1342,7 @@ export default function App() {
                             onClick={() => setActiveTab((prev) => (prev === item.id ? "" : item.id))}
                             className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center justify-between px-4 py-3.5 cursor-pointer border-2 transition-all duration-150 ${
                               isActive
-                                ? item.isDanger ? "bg-rose-600 text-white border-rose-805 shadow-[3px_3px_0px_0px_#9f1239] scale-[1.01]" : "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.01]"
+                                ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.01]"
                                 : isDarkMode
                                 ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]"
                                 : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"
@@ -1442,7 +1404,7 @@ export default function App() {
                                 title={item.label}
                                 className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-start px-4 py-3.5"} ${
                                   isActive
-                                    ? item.isDanger ? "bg-rose-600 text-white border-rose-805 shadow-[3px_3px_0px_0px_#9f1239] scale-[1.02]" : "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]"
+                                    ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]"
                                     : isDarkMode
                                     ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]"
                                     : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"

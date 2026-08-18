@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { EventConfigInfo, UserProfile, UserRole, BuildingInfo, CollaboratorInfo, ClaActivities } from "../types";
-import { saveEventConfig, subscribeToUsers, updateUserRole, updateUserRoles, createPreRegisteredUser, masterResetDatabase, subscribeToAllBuildings, subscribeToAllClaActivities, subscribeToAllCollaborators, saveBuilding } from "../lib/db-services";
-import { ShieldCheck, Calendar, Settings, CheckCircle, Save, Users, RefreshCw, AlertCircle, PlusCircle, Trash2, AlertTriangle, Building, Activity, CheckSquare, Server, Layers } from "lucide-react";
+import { saveEventConfig, subscribeToUsers, updateUserRole, updateUserRoles, updateUserDetails, createPreRegisteredUser, subscribeToAllBuildings, subscribeToAllClaActivities, subscribeToAllCollaborators, saveBuilding } from "../lib/db-services";
+import { ShieldCheck, Calendar, Settings, CheckCircle, Save, Users, RefreshCw, AlertCircle, PlusCircle, Trash2, AlertTriangle, Building, Activity, CheckSquare, Server, Layers, Pencil, X, Search, Mail, UserCheck, Hash } from "lucide-react";
 import BuildingConfigView from "./BuildingConfigView";
 
 interface SuperAdminProps {
@@ -37,21 +37,29 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
   const [configSuccess, setConfigSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // User Profile Editing states (Super Admin)
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editEmails, setEditEmails] = useState<string[]>([]);
+  const [newSecondaryEmailInput, setNewSecondaryEmailInput] = useState("");
+  const [editCoordCode, setEditCoordCode] = useState("");
+  const [editRole, setEditRole] = useState<UserRole>("CLA");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
+  const [profileSearch, setProfileSearch] = useState("");
+
   // New CLA Pre-registration states
   const [claName, setClaName] = useState("");
   const [claEmail, setClaEmail] = useState("");
+  const [claAdditionalEmails, setClaAdditionalEmails] = useState<string[]>([]);
+  const [claNewAdditionalEmail, setClaNewAdditionalEmail] = useState("");
   const [claCode, setClaCode] = useState("");
   const [claError, setClaError] = useState("");
   const [claSuccess, setClaSuccess] = useState("");
   const [claSubmitting, setClaSubmitting] = useState(false);
   const [registerRole, setRegisterRole] = useState<"CLA" | "SuperAdmin">("CLA");
-
-  // Master Reset states
-  const [resetConfirmText, setResetConfirmText] = useState("");
-  const [isResetting, setIsResetting] = useState(false);
-  const [resetError, setResetError] = useState("");
-  const [resetSuccess, setResetSuccess] = useState("");
-  const [showResetConfirmDialog, setShowResetConfirmDialog] = useState(false);
 
   useEffect(() => {
     if (initialConfig) {
@@ -170,6 +178,406 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
     }
   };
 
+  const handleOpenEditUser = (profile: UserProfile) => {
+    setEditingUser(profile);
+    setEditName(profile.name || "");
+    const primary = (profile.email || "").toLowerCase().trim();
+    const allEmails = Array.from(new Set([
+      primary,
+      ...(profile.emails || []).map(e => (e || "").toLowerCase().trim())
+    ].filter(Boolean)));
+
+    setEditEmail(primary);
+    setEditEmails(allEmails.length > 0 ? allEmails : [primary]);
+    setNewSecondaryEmailInput("");
+    setEditCoordCode(profile.coordinationCode || "");
+    setEditRole(profile.role || "CLA");
+    setEditError("");
+    setEditSuccess("");
+  };
+
+  const handleCloseEditUser = () => {
+    setEditingUser(null);
+    setEditEmails([]);
+    setNewSecondaryEmailInput("");
+    setEditError("");
+    setEditSuccess("");
+  };
+
+  const handleAddSecondaryEmailInModal = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const emailToAdd = newSecondaryEmailInput.trim().toLowerCase();
+    if (!emailToAdd) return;
+
+    if (!emailToAdd.endsWith("@gmail.com")) {
+      setEditError("O e-mail adicional deve ser obrigatoriamente do Gmail (@gmail.com).");
+      return;
+    }
+
+    if (editEmails.includes(emailToAdd)) {
+      setEditError("Este e-mail já está incluído na lista do usuário.");
+      return;
+    }
+
+    setEditEmails(prev => [...prev, emailToAdd]);
+    setNewSecondaryEmailInput("");
+    setEditError("");
+  };
+
+  const handleRemoveSecondaryEmailInModal = (emailToRemove: string) => {
+    if (editEmails.length <= 1) {
+      setEditError("O usuário precisa ter ao menos um e-mail cadastrado.");
+      return;
+    }
+    const updated = editEmails.filter(e => e !== emailToRemove);
+    setEditEmails(updated);
+    // If the removed email was the active primary email, switch primary to first remaining
+    if (editEmail.toLowerCase() === emailToRemove.toLowerCase()) {
+      setEditEmail(updated[0]);
+    }
+  };
+
+  const handleSetPrimaryEmailInModal = (newPrimary: string) => {
+    setEditEmail(newPrimary);
+    if (!editEmails.includes(newPrimary)) {
+      setEditEmails(prev => [newPrimary, ...prev]);
+    }
+  };
+
+  const handleSaveUserEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setEditError("");
+    setEditSuccess("");
+
+    if (!editName.trim()) {
+      setEditError("O nome completo não pode estar vazio.");
+      return;
+    }
+    if (!editEmail.trim()) {
+      setEditError("O e-mail principal não pode estar vazio.");
+      return;
+    }
+    if (!editEmail.toLowerCase().endsWith("@gmail.com")) {
+      setEditError("O e-mail principal deve ser obrigatoriamente do Gmail (@gmail.com).");
+      return;
+    }
+
+    // Ensure all emails in editEmails end with @gmail.com
+    const allCleanEmails = Array.from(new Set([
+      editEmail.trim().toLowerCase(),
+      ...editEmails.map(em => em.trim().toLowerCase())
+    ].filter(Boolean)));
+
+    for (const em of allCleanEmails) {
+      if (!em.endsWith("@gmail.com")) {
+        setEditError(`O e-mail '${em}' não é um endereço válido do Gmail (@gmail.com).`);
+        return;
+      }
+    }
+
+    if (editRole === "CLA" && editCoordCode.trim() && !/^\d+$/.test(editCoordCode.trim())) {
+      setEditError("O código de coordenação deve conter apenas números.");
+      return;
+    }
+
+    setEditSaving(true);
+    try {
+      const currentRoles = editingUser.roles || [editingUser.role];
+      let nextRoles = [...currentRoles];
+      if (!nextRoles.includes(editRole)) {
+        nextRoles.push(editRole);
+      }
+
+      await updateUserDetails(editingUser.uid, {
+        name: editName.trim(),
+        email: editEmail.trim().toLowerCase(),
+        emails: allCleanEmails,
+        coordinationCode: editCoordCode.trim(),
+        role: editRole,
+        roles: nextRoles
+      });
+
+      // Synchronize associated building if exists
+      if (editCoordCode.trim()) {
+        try {
+          const userBuilding = allBuildings.find(b => b.claId === editingUser.uid || b.id === editingUser.uid);
+          if (userBuilding) {
+            await saveBuilding({
+              ...userBuilding,
+              coordRoom: editCoordCode.trim()
+            });
+          }
+        } catch (bErr) {
+          console.warn("Could not sync building with edited CLA:", bErr);
+        }
+      }
+
+      setEditSuccess("Dados e e-mails do usuário atualizados com sucesso!");
+      setTimeout(() => {
+        setEditingUser(null);
+        setEditSuccess("");
+      }, 1200);
+    } catch (err) {
+      console.error(err);
+      setEditError("Erro ao salvar alterações do usuário. Tente novamente.");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // Edit User Modal
+  const renderEditUserModal = () => {
+    if (!editingUser) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in" id="edit-user-modal-overlay">
+        <div className="bg-white dark:bg-[#0c1220] w-full max-w-lg rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[8px_8px_0px_0px_#047857] dark:shadow-[8px_8px_0px_0px_#10b981]/30 p-6 space-y-5 max-h-[90vh] overflow-y-auto" id="edit-user-modal">
+          
+          {/* Header */}
+          <div className="flex items-center justify-between pb-3 border-b-2 border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                <Pencil className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-display font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                  Editar Usuário e E-mails
+                </h3>
+                <p className="text-[11px] text-slate-400 font-semibold">
+                  Gerenciar dados cadastrais e múltiplos e-mails autorizados
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleCloseEditUser}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Feedback messages */}
+          {editSuccess && (
+            <div className="p-3 bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 text-xs font-bold rounded-xl border border-emerald-500/20 flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <span>{editSuccess}</span>
+            </div>
+          )}
+          {editError && (
+            <div className="p-3 bg-rose-500/10 text-rose-800 dark:text-rose-400 text-xs font-bold rounded-xl border border-rose-500/20 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{editError}</span>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSaveUserEdit} className="space-y-4 text-xs font-semibold">
+            <div>
+              <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                Nome Completo
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Nome do usuário"
+                  className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2.5 bg-white dark:bg-[#101726]/80 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500/40"
+                  required
+                />
+                <UserCheck className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              </div>
+            </div>
+
+            {/* Multiple Emails Management */}
+            <div className="p-3.5 bg-slate-50 dark:bg-[#101726]/60 rounded-xl border-2 border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-700 dark:text-slate-300">
+                  E-mails Autorizados do Gmail (@gmail.com)
+                </label>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                  {editEmails.length} {editEmails.length === 1 ? "e-mail vinculado" : "e-mails vinculados"}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                O usuário poderá entrar no sistema utilizando <strong>qualquer um</strong> destes e-mails do Gmail.
+              </p>
+
+              {/* List of associated emails */}
+              <div className="space-y-1.5">
+                {editEmails.map((emailItem) => {
+                  const isPrimary = emailItem.toLowerCase() === editEmail.toLowerCase();
+                  return (
+                    <div
+                      key={emailItem}
+                      className={`flex items-center justify-between p-2 rounded-lg border text-xs font-mono transition ${
+                        isPrimary
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-300 font-bold"
+                          : "bg-white dark:bg-[#070b13] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Mail className={`w-3.5 h-3.5 shrink-0 ${isPrimary ? "text-emerald-500" : "text-slate-400"}`} />
+                        <span className="truncate">{emailItem}</span>
+                        {isPrimary ? (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[8px] font-black uppercase tracking-wider shrink-0">
+                            Principal
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSetPrimaryEmailInModal(emailItem)}
+                            className="text-[9px] text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 underline font-sans font-semibold cursor-pointer shrink-0"
+                          >
+                            Tornar Principal
+                          </button>
+                        )}
+                      </div>
+
+                      {editEmails.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSecondaryEmailInModal(emailItem)}
+                          className="p-1 text-slate-400 hover:text-rose-500 rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
+                          title="Remover este e-mail"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add another email field */}
+              <div className="flex gap-2 pt-1">
+                <input
+                  type="email"
+                  value={newSecondaryEmailInput}
+                  onChange={(e) => setNewSecondaryEmailInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddSecondaryEmailInModal();
+                    }
+                  }}
+                  placeholder="adicionar.outro.email@gmail.com"
+                  className="flex-1 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 bg-white dark:bg-[#070b13] text-slate-900 dark:text-white font-mono text-[11px]"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAddSecondaryEmailInModal()}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>Adicionar</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                  Perfil de Acesso
+                </label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value as UserRole)}
+                  className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-white dark:bg-[#101726]/80 text-slate-900 dark:text-white font-bold cursor-pointer"
+                >
+                  <option value="CLA">Coordenador (CLA)</option>
+                  <option value="SuperAdmin">Super Administrador</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                  Código de Coordenação
+                </label>
+                {editRole === "CLA" ? (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={editCoordCode}
+                      onChange={(e) => setEditCoordCode(e.target.value)}
+                      placeholder="Ex: 8520"
+                      className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2.5 bg-white dark:bg-[#101726]/80 text-slate-900 dark:text-white font-mono font-bold"
+                    />
+                    <Hash className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  </div>
+                ) : (
+                  <div className="w-full border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#101726]/40 text-slate-400 text-[11px] select-none">
+                    Não Aplicável
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t-2 border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={handleCloseEditUser}
+                disabled={editSaving}
+                className="px-4 py-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={editSaving}
+                className="btn-3d btn-3d-primary px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>{editSaving ? "SALVANDO..." : "SALVAR ALTERAÇÕES"}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  // Helper to filter ONLY users added by SuperAdmin in menu 4 (Cadastrar CLA/Admin)
+  const isSuperAdminAddedUser = (u: UserProfile) => {
+    // If marked as created by CLA/ALA in access management, exclude
+    if (u.createdByCla) return false;
+    // If explicitly marked as created by SuperAdmin in menu 4
+    if (u.createdBySuperAdmin) return true;
+    // Known hardcoded SuperAdmins
+    const emailLower = (u.email || "").toLowerCase().trim();
+    if (emailLower === "lipewmra@gmail.com" || emailLower === "philippewagnermra@gmail.com") return true;
+    // Exclude Collaborators and ALAs or subordinate accounts under a CLA
+    if (u.role === "Colaborador" || u.role === "ALA" || (u.claId && u.role !== "CLA" && u.role !== "SuperAdmin")) {
+      return false;
+    }
+    // CLA and SuperAdmin accounts
+    return u.role === "SuperAdmin" || u.role === "CLA";
+  };
+
+  const handleAddAdditionalEmailInRegister = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const em = claNewAdditionalEmail.trim().toLowerCase();
+    if (!em) return;
+    if (!em.endsWith("@gmail.com")) {
+      setClaError("O e-mail adicional deve ser obrigatoriamente do Gmail (@gmail.com).");
+      return;
+    }
+    if (em === claEmail.trim().toLowerCase() || claAdditionalEmails.includes(em)) {
+      setClaError("Este e-mail já foi adicionado.");
+      return;
+    }
+    setClaAdditionalEmails(prev => [...prev, em]);
+    setClaNewAdditionalEmail("");
+    setClaError("");
+  };
+
+  const handleRemoveAdditionalEmailInRegister = (emToRemove: string) => {
+    setClaAdditionalEmails(prev => prev.filter(e => e !== emToRemove));
+  };
+
   const handleClaRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setClaError("");
@@ -180,13 +588,26 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
       return;
     }
     if (!claEmail.trim()) {
-      setClaError("Insira o e-mail.");
+      setClaError("Insira o e-mail principal.");
       return;
     }
     if (!claEmail.toLowerCase().endsWith("@gmail.com")) {
-      setClaError("O e-mail deve ser obrigatoriamente do Gmail (@gmail.com).");
+      setClaError("O e-mail principal deve ser obrigatoriamente do Gmail (@gmail.com).");
       return;
     }
+
+    const allCleanEmails = Array.from(new Set([
+      claEmail.trim().toLowerCase(),
+      ...claAdditionalEmails.map(em => em.trim().toLowerCase())
+    ].filter(Boolean)));
+
+    for (const em of allCleanEmails) {
+      if (!em.endsWith("@gmail.com")) {
+        setClaError(`O e-mail '${em}' não é um endereço válido do Gmail (@gmail.com).`);
+        return;
+      }
+    }
+
     if (registerRole === "CLA") {
       if (!claCode.trim() || !/^\d+$/.test(claCode)) {
         setClaError("O código de coordenação deve conter apenas números.");
@@ -200,17 +621,21 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
         await createPreRegisteredUser({
           name: claName.trim(),
           email: claEmail.trim().toLowerCase(),
+          emails: allCleanEmails,
           role: "SuperAdmin",
-          roles: ["SuperAdmin"]
+          roles: ["SuperAdmin"],
+          createdBySuperAdmin: true
         });
-        setClaSuccess(`Super Administrador ${claName} cadastrado com sucesso!`);
+        setClaSuccess(`Super Administrador ${claName} cadastrado com sucesso com ${allCleanEmails.length} e-mail(s) vinculados!`);
       } else {
         const registeredUid = await createPreRegisteredUser({
           name: claName.trim(),
           email: claEmail.trim().toLowerCase(),
+          emails: allCleanEmails,
           role: "CLA",
           roles: ["CLA"],
-          coordinationCode: claCode.trim()
+          coordinationCode: claCode.trim(),
+          createdBySuperAdmin: true
         });
 
         if (registeredUid && preConfigureSchool) {
@@ -257,10 +682,12 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
           await saveBuilding(draftBuilding);
         }
 
-        setClaSuccess(`Coordenador (CLA) ${claName} cadastrado com sucesso!`);
+        setClaSuccess(`Coordenador (CLA) ${claName} cadastrado com sucesso com ${allCleanEmails.length} e-mail(s) vinculados!`);
       }
       setClaName("");
       setClaEmail("");
+      setClaAdditionalEmails([]);
+      setClaNewAdditionalEmail("");
       setClaCode("");
       setPreConfigureSchool(false);
       setPreSchoolName("");
@@ -276,32 +703,6 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
       setClaError("Erro ao registrar. Tente de novo.");
     } finally {
       setClaSubmitting(false);
-    }
-  };
-
-  const handleMasterReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (resetConfirmText.trim() !== "EXCLUIR TUDO") {
-      setResetError("Por favor, digite 'EXCLUIR TUDO' exatamente como indicado para prosseguir.");
-      return;
-    }
-
-    setIsResetting(true);
-    setResetError("");
-    setResetSuccess("");
-
-    try {
-      await masterResetDatabase();
-      setResetSuccess("MASTER RESET REALIZADO! Todos os dados de usuários, alocações, escolas, fotos e atividades foram completamente removidos do Firestore. O sistema será reiniciado em instantes.");
-      setResetConfirmText("");
-      setTimeout(() => {
-        window.location.reload();
-      }, 5000);
-    } catch (err: any) {
-      console.error(err);
-      setResetError("Ocorreu um erro ao realizar o Master Reset: " + (err.message || String(err)));
-    } finally {
-      setIsResetting(false);
     }
   };
 
@@ -812,73 +1213,201 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
   }
 
   if (activeSubTab === "profiles") {
+    const superAdminUsers = users.filter(isSuperAdminAddedUser);
+    const filteredUsers = superAdminUsers.filter(u => {
+      if (!profileSearch.trim()) return true;
+      const term = profileSearch.toLowerCase().trim();
+      const allUserEmails = [u.email, ...(u.emails || [])].map(e => (e || "").toLowerCase());
+      const hasEmailMatch = allUserEmails.some(e => e.includes(term));
+      return (
+        (u.name || "").toLowerCase().includes(term) ||
+        hasEmailMatch ||
+        (u.coordinationCode || "").toLowerCase().includes(term) ||
+        (u.role || "").toLowerCase().includes(term)
+      );
+    });
+
     return (
       <div className="bg-white dark:bg-[#0c1220]/90 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[6px_6px_0px_0px_#cbd5e1] dark:shadow-[6px_6px_0px_0px_#10b981]/15 max-w-4xl mx-auto space-y-6 font-sans">
-        <div>
-          <h2 className="text-sm font-display font-black text-slate-855 dark:text-slate-200 uppercase tracking-widest pl-1 border-l-4 border-emerald-500 flex items-center gap-2 mb-2 pb-1 font-black">
-            <Users className="w-5 h-5 text-emerald-500" />
-            <span>Controle de Perfis Multi-Usuários</span>
-          </h2>
-          <p className="text-xs text-slate-400 font-semibold leading-relaxed">Defina níveis de acesso e vincule cargos ativos. Quando novas contas acessarem o app, promova-as a CLA (Coordenador Local) ou ALA (Assistente Local).</p>
+        {renderEditUserModal()}
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-display font-black text-slate-855 dark:text-slate-200 uppercase tracking-widest pl-1 border-l-4 border-emerald-500 flex items-center gap-2 mb-1 pb-0.5 font-black">
+              <Users className="w-5 h-5 text-emerald-500" />
+              <span>Gestão de Perfis (Cadastro Central)</span>
+            </h2>
+            <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+              Exibindo apenas usuários vinculados diretamente pelo Super Administrador no Menu 4 (CLAs e SuperAdmins). Clique em qualquer usuário para gerenciar nome, múltiplos e-mails e coordenação.
+            </p>
+          </div>
+          <div className="shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-3.5 py-1.5 rounded-xl border border-emerald-500/20 text-xs font-mono font-bold flex items-center gap-2">
+            <UserCheck className="w-4 h-4 text-emerald-500" />
+            <span>{superAdminUsers.length} cadastrados</span>
+          </div>
         </div>
 
-        <div className="p-3 bg-indigo-500/[0.04] dark:bg-[#070b13]/65 text-slate-700 dark:text-slate-300 rounded-xl border-2 border-indigo-500/10 dark:border-slate-800 flex items-center gap-3 text-xs font-bold leading-relaxed">
+        {/* Search bar */}
+        <div className="relative">
+          <input
+            type="text"
+            value={profileSearch}
+            onChange={(e) => setProfileSearch(e.target.value)}
+            placeholder="Buscar por nome, e-mails vinculados do Gmail ou código de coordenação..."
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#101726]/60 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40"
+          />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+          {profileSearch && (
+            <button
+              type="button"
+              onClick={() => setProfileSearch("")}
+              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="p-3 bg-emerald-500/[0.05] dark:bg-[#070b13]/65 text-slate-700 dark:text-slate-300 rounded-xl border-2 border-emerald-500/15 dark:border-slate-800 flex items-center gap-3 text-xs font-bold leading-relaxed">
           <AlertCircle className="w-5 h-5 text-emerald-500 shrink-0" />
-          <span>Administre funções. Quando novas contas acessarem o app, promova-as a CLA (Coordenador Local) ou ALA (Assistente Local) para gerenciar escolas de aplicação.</span>
+          <span>
+            Clique no botão <strong>"Editar Dados"</strong> ou no cartão do usuário para renomear, corrigir ou <strong>adicionar múltiplos e-mails do Gmail</strong> para acesso.
+          </span>
         </div>
 
-        <div className="space-y-3.5 max-h-[500px] overflow-y-auto pr-1">
-          {users.length === 0 ? (
-            <p className="text-xs text-slate-450 dark:text-slate-400 text-center py-10 font-bold">Nenhum perfil de conta registrado no firestore.</p>
+        <div className="space-y-3.5 max-h-[550px] overflow-y-auto pr-1">
+          {filteredUsers.length === 0 ? (
+            <div className="text-center py-12 px-4 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-[#101726]/20">
+              <Users className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">
+                {profileSearch ? "Nenhum usuário encontrado para a busca." : "Nenhum perfil de CLA ou SuperAdmin cadastrado pelo Super Admin ainda."}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Utilize a aba "4. Cadastro CLA/Admin" para adicionar novos coordenadores locais ou administradores.
+              </p>
+            </div>
           ) : (
-            users.map((profile) => {
+            filteredUsers.map((profile) => {
               const currentRoles = profile.roles || [profile.role];
-              const allAvailableRoles: UserRole[] = ["SuperAdmin", "CLA", "ALA", "Colaborador"];
+              const allAvailableRoles: UserRole[] = ["SuperAdmin", "CLA"];
+              const allEmails = Array.from(new Set([
+                profile.email,
+                ...(profile.emails || [])
+              ].filter(Boolean)));
 
               return (
                 <div
                   key={profile.uid}
-                  className="p-3.5 border-2 border-slate-150 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-[#101726]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs hover:border-[#10b981]/30 transition"
+                  className="p-4 border-2 border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-[#101726]/40 hover:border-emerald-500/40 hover:shadow-md transition-all duration-200 group flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs"
                 >
-                  <div className="min-w-0 flex-1">
-                    <span className="font-extrabold text-[#111827] dark:text-white block truncate">{profile.name}</span>
-                    <span className="text-[10px] text-slate-400 block font-mono font-bold truncate mb-2">{profile.email}</span>
+                  <div
+                    onClick={() => handleOpenEditUser(profile)}
+                    className="min-w-0 flex-1 cursor-pointer flex items-start gap-3"
+                    title="Clique para editar este usuário e gerenciar e-mails"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white font-display font-black flex items-center justify-center text-xs shrink-0 shadow-xs group-hover:scale-105 transition">
+                      {profile.name?.charAt(0).toUpperCase() || "U"}
+                    </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <span className="text-[9px] uppercase font-extrabold text-slate-450 dark:text-slate-500 mr-1">Perfis:</span>
-                      {allAvailableRoles.map((roleOpt) => {
-                        const hasRole = currentRoles.includes(roleOpt);
-                        return (
-                          <button
-                            key={roleOpt}
-                            type="button"
-                            onClick={() => handleRoleToggle(profile, roleOpt)}
-                            className={`px-2 py-0.5 rounded text-[9px] font-mono font-extrabold transition border cursor-pointer ${
-                              hasRole
-                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-400/40"
-                                : "bg-slate-100 dark:bg-[#070b13] text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-800 hover:border-slate-400"
-                            }`}
-                          >
-                            {roleOpt}
-                          </button>
-                        );
-                      })}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-extrabold text-[#111827] dark:text-white truncate text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition">
+                          {profile.name}
+                        </span>
+                        {profile.coordinationCode && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-black text-[10px] border border-slate-300 dark:border-slate-700">
+                            Coord: {profile.coordinationCode}
+                          </span>
+                        )}
+                        {profile.hasAccessed ? (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-mono font-extrabold text-[9px] border border-emerald-500/20">
+                            Ativo
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono font-extrabold text-[9px] border border-amber-500/20">
+                            Pendente Acesso
+                          </span>
+                        )}
+                        {allEmails.length > 1 && (
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-mono font-extrabold text-[9px] border border-indigo-500/20">
+                            {allEmails.length} e-mails vinculados
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Emails tags */}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5 mb-2">
+                        {allEmails.map((em, idx) => {
+                          const isPrimary = em.toLowerCase() === (profile.email || "").toLowerCase();
+                          return (
+                            <span
+                              key={em}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono border ${
+                                isPrimary
+                                  ? "bg-slate-200/80 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold border-slate-300 dark:border-slate-700"
+                                  : "bg-white/90 dark:bg-[#070b13] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800"
+                              }`}
+                            >
+                              <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate max-w-[200px]">{em}</span>
+                              {isPrimary && (
+                                <span className="text-[8px] bg-emerald-600 text-white px-1 rounded uppercase font-extrabold">
+                                  Principal
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-[9px] uppercase font-extrabold text-slate-450 dark:text-slate-500 mr-1">Perfis:</span>
+                        {allAvailableRoles.map((roleOpt) => {
+                          const hasRole = currentRoles.includes(roleOpt);
+                          return (
+                            <button
+                              key={roleOpt}
+                              type="button"
+                              onClick={() => handleRoleToggle(profile, roleOpt)}
+                              className={`px-2.5 py-0.5 rounded-md text-[9px] font-mono font-extrabold transition border cursor-pointer ${
+                                hasRole
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-400/40"
+                                  : "bg-slate-100 dark:bg-[#070b13] text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-800 hover:border-slate-400"
+                              }`}
+                            >
+                              {roleOpt}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-start sm:items-end gap-1 shrink-0">
-                    <span className="text-[9px] uppercase font-extrabold text-[#475569] dark:text-slate-400">Ativo / Principal:</span>
-                    <select
-                      value={profile.role}
-                      onChange={(e) => handlePrimaryRoleChange(profile, e.target.value as UserRole)}
-                      className="bg-white dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-lg p-1.5 text-[10px] font-extrabold text-slate-705 dark:text-white cursor-pointer focus:outline-hidden"
+                  <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                    <div className="flex flex-col items-start md:items-end gap-1">
+                      <span className="text-[9px] uppercase font-extrabold text-[#475569] dark:text-slate-400">Ativo / Principal:</span>
+                      <select
+                        value={profile.role}
+                        onChange={(e) => handlePrimaryRoleChange(profile, e.target.value as UserRole)}
+                        className="bg-white dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-lg p-1.5 text-[10px] font-extrabold text-slate-705 dark:text-white cursor-pointer focus:outline-hidden"
+                      >
+                        {currentRoles.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditUser(profile)}
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-[#0c1220] border-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-bold hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-500/40 hover:text-emerald-600 dark:hover:text-emerald-400 transition cursor-pointer flex items-center gap-1.5 text-xs shadow-xs"
+                      title="Editar nome e gerenciar múltiplos e-mails"
                     >
-                      {currentRoles.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
+                      <Pencil className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="hidden sm:inline">Editar Dados</span>
+                    </button>
                   </div>
                 </div>
               );
@@ -897,7 +1426,9 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
             <PlusCircle className="w-5 h-5 text-emerald-500" />
             <span>Cadastrar Novo Coordenador (CLA) ou Super Administrador</span>
           </h2>
-          <p className="text-xs text-slate-400 font-semibold leading-relaxed">Adicione antecipadamente e-mails autorizados para vincular permissões de acesso e definir sua escola de aplicação.</p>
+          <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+            Adicione antecipadamente e-mails autorizados para vincular permissões de acesso, suporte a múltiplos e-mails e definir sua escola de aplicação.
+          </p>
         </div>
 
         <form onSubmit={handleClaRegisterSubmit} className="space-y-4">
@@ -938,13 +1469,13 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-500 dark:text-slate-400 mb-1">E-mail do Gmail</label>
+              <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-500 dark:text-slate-400 mb-1">E-mail Principal (Gmail)</label>
               <input
                 type="email"
-                placeholder="nome@gmail.com"
+                placeholder="principal@gmail.com"
                 value={claEmail}
                 onChange={(e) => setClaEmail(e.target.value)}
-                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 bg-white dark:bg-[#101726]/80 text-slate-900 dark:text-white"
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 bg-white dark:bg-[#101726]/80 text-slate-900 dark:text-white font-mono"
                 required
               />
             </div>
@@ -965,6 +1496,69 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
                   Não Aplicável para SuperAdmin
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Multiple Additional Emails Box */}
+          <div className="p-3.5 bg-slate-50 dark:bg-[#101726]/50 rounded-xl border-2 border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-700 dark:text-slate-300">
+                E-mails Adicionais / Secundários (Opcional)
+              </label>
+              <span className="text-[10px] text-slate-500 font-mono font-bold">
+                {claAdditionalEmails.length} adicional(is)
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+              Você pode cadastrar e-mails secundários do Gmail para este coordenador ou administrador acessar o sistema com mais de uma conta.
+            </p>
+
+            {/* List of additional emails */}
+            {claAdditionalEmails.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {claAdditionalEmails.map((em) => (
+                  <div
+                    key={em}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs font-mono font-bold"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>{em}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAdditionalEmailInRegister(em)}
+                      className="text-slate-400 hover:text-rose-500 p-0.5 rounded cursor-pointer transition"
+                      title="Remover e-mail"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Input to add email */}
+            <div className="flex gap-2 pt-1">
+              <input
+                type="email"
+                value={claNewAdditionalEmail}
+                onChange={(e) => setClaNewAdditionalEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddAdditionalEmailInRegister();
+                  }
+                }}
+                placeholder="outro.email.secundario@gmail.com"
+                className="flex-1 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 bg-white dark:bg-[#070b13] text-slate-900 dark:text-white font-mono text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => handleAddAdditionalEmailInRegister()}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Adicionar E-mail</span>
+              </button>
             </div>
           </div>
 
@@ -1077,80 +1671,10 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
     );
   }
 
-  if (activeSubTab === "reset") {
-    return (
-      <div className="bg-rose-500/5 dark:bg-rose-950/15 p-6 rounded-2xl border-2 border-rose-300 dark:border-rose-900 shadow-[6px_6px_0px_0px_rgba(244,63,94,0.15)] max-w-4xl mx-auto space-y-6 font-sans">
-        <h2 className="text-sm font-display font-black text-rose-700 dark:text-rose-400 uppercase tracking-widest pl-1 border-l-4 border-rose-500 flex items-center gap-2 mb-4 pb-1 font-black">
-          <AlertTriangle className="w-5 h-5 text-rose-500" />
-          <span>Master Reset - Restauração de Fábrica do Sistema</span>
-        </h2>
-
-        <div className="text-xs text-rose-800 dark:text-rose-300 font-semibold leading-relaxed mb-4 space-y-2">
-          <p>
-            ⚠️ <strong className="font-black text-rose-600 dark:text-rose-400">ATENÇÃO EXTREMA:</strong> Esta é uma ação administrativa altamente destrutiva e irrevogável! 
-            Ao efetuar o Master Reset, todas as informações do Firestore do ENEM serão eliminadas permanentemente.
-          </p>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Exclusão de todos os usuários pré-registrados e sincronizados (você precisará logar de novo para restaurar seu acesso principal).</li>
-            <li>Limpeza completa de escolas/prédios de aplicação configurados (buildings).</li>
-            <li>Exclusão de listas de fiscais de apoio (collaborators) e todos os check-ins.</li>
-            <li>Limpeza de dados de fornecimento de lanches e fotos de relatórios de auditoria.</li>
-          </ul>
-        </div>
-
-        <form onSubmit={handleMasterReset} className="space-y-4">
-          {resetSuccess && (
-            <div className="p-4 bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 text-xs font-bold rounded-xl border-2 border-emerald-500/20">
-              {resetSuccess}
-            </div>
-          )}
-          {resetError && (
-            <div className="p-4 bg-rose-500/10 text-rose-800 dark:text-rose-400 text-xs font-bold rounded-xl border-2 border-rose-500/20">
-              {resetError}
-            </div>
-          )}
-
-          <div className="p-4 bg-white dark:bg-[#0c1220]/75 rounded-xl border border-rose-300/30 dark:border-rose-900/30 font-sans">
-            <label className="block text-[10px] uppercase font-extrabold tracking-wider text-rose-400 mb-2">
-              Confirmação de Segurança
-            </label>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 font-semibold">
-              Escreva exatamente as palavras <span className="font-mono bg-rose-500/10 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded font-black">EXCLUIR TUDO</span> no campo abaixo para habilitar o comando de limpeza:
-            </p>
-            
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <input
-                type="text"
-                placeholder="EXCLUIR TUDO"
-                value={resetConfirmText}
-                onChange={(e) => setResetConfirmText(e.target.value)}
-                disabled={isResetting}
-                className="flex-1 border-2 border-rose-200 dark:border-rose-950 rounded-xl px-4 py-2.5 bg-white dark:bg-[#101726]/80 text-rose-600 dark:text-rose-400 font-mono font-black placeholder:text-slate-300 tracking-wider text-xs focus:ring-2 focus:ring-rose-500/30 focus:outline-hidden"
-                required
-              />
-              
-              <button
-                type="submit"
-                disabled={isResetting || resetConfirmText !== "EXCLUIR TUDO"}
-                className={`px-6 py-2.5 rounded-xl flex items-center justify-center gap-2 font-black text-xs shadow-md transition-all text-white border-b-4 border-rose-900 ${
-                  resetConfirmText === "EXCLUIR TUDO" && !isResetting
-                    ? "bg-rose-600 hover:bg-rose-700 cursor-pointer"
-                    : "bg-slate-300 dark:bg-slate-800 cursor-not-allowed opacity-50 border-slate-400"
-                }`}
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>{isResetting ? "RESETANDO FIRESTORE..." : "EXECUTAR MASTER RESET"}</span>
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
   // Fallback monolithic rendering if no subtab matches (keeps original tail intact)
   return (
     <div className="space-y-6 animate-fade-in" id="super-admin-root-dashboard">
+      {renderEditUserModal()}
       
       {/* HEADER BAR */}
       <div className="p-6 bg-[#0c1220]/90 text-white rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border-2 border-[#1e293b] shadow-[6px_6px_0px_0px_#10b981]/25">
@@ -1465,34 +1989,50 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
         {/* PARTE 2: USER PROFILE CONFIGURE */}
         <div className="bg-white dark:bg-[#0c1220]/90 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[6px_6px_0px_0px_#e2e8f0] dark:shadow-[6px_6px_0px_0px_#10b981]/20 flex flex-col justify-between">
           <div>
-            <h2 className="text-sm font-display font-black text-slate-855 dark:text-slate-200 uppercase tracking-widest pl-1 border-l-4 border-emerald-500 flex items-center gap-2 mb-4 pb-2">
-              <Users className="w-4 h-4 text-emerald-500" />
-              <span>Controle de Perfis Multi-Usuários</span>
-            </h2>
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150 dark:border-slate-800">
+              <h2 className="text-sm font-display font-black text-slate-855 dark:text-slate-200 uppercase tracking-widest pl-1 border-l-4 border-emerald-500 flex items-center gap-2">
+                <Users className="w-4 h-4 text-emerald-500" />
+                <span>Controle de Perfis Multi-Usuários</span>
+              </h2>
+              <span className="text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md">
+                {users.filter(isSuperAdminAddedUser).length} cadastrados
+              </span>
+            </div>
 
             <div className="p-3 bg-indigo-500/[0.04] dark:bg-[#070b13]/65 text-slate-700 dark:text-slate-300 rounded-xl border-2 border-indigo-500/10 dark:border-slate-800 flex items-center gap-3 mb-4 text-xs font-bold leading-relaxed">
               <AlertCircle className="w-5 h-5 text-[#10b981] shrink-0" />
-              <span>Administre funções. Quando novas contas acessarem o app, promova-as a CLA (Coordenador Local) ou ALA (Assistente Local) para gerenciar escolas de aplicação.</span>
+              <span>Exibindo apenas usuários vinculados no Menu 4 pelo Super Admin. Clique no usuário ou no botão "Editar Dados" para renomear ou trocar o e-mail.</span>
             </div>
 
-            <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1">
-              {users.length === 0 ? (
-                <p className="text-xs text-slate-450 dark:text-slate-400 text-center py-10 font-bold">Nenhum perfil de conta registrado no firestore.</p>
+            <div className="space-y-3.5 max-h-[360px] overflow-y-auto pr-1">
+              {users.filter(isSuperAdminAddedUser).length === 0 ? (
+                <p className="text-xs text-slate-450 dark:text-slate-400 text-center py-10 font-bold">Nenhum perfil de CLA ou SuperAdmin registrado pelo Super Admin ainda.</p>
               ) : (
-                users.map((profile) => {
+                users.filter(isSuperAdminAddedUser).map((profile) => {
                   const currentRoles = profile.roles || [profile.role];
-                  const allAvailableRoles: UserRole[] = ["SuperAdmin", "CLA", "ALA", "Colaborador"];
+                  const allAvailableRoles: UserRole[] = ["SuperAdmin", "CLA"];
 
                   return (
                     <div
                       key={profile.uid}
                       className="p-3.5 border-2 border-slate-150 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-[#101726]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs hover:border-[#10b981]/30 transition"
                     >
-                      <div className="min-w-0 flex-1">
-                        <span className="font-extrabold text-[#111827] dark:text-white block truncate">{profile.name}</span>
+                      <div 
+                        onClick={() => handleOpenEditUser(profile)}
+                        className="min-w-0 flex-1 cursor-pointer group"
+                        title="Clique para editar este usuário"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-[#111827] dark:text-white block truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition">{profile.name}</span>
+                          {profile.coordinationCode && (
+                            <span className="px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[9px] font-bold">
+                              Coord: {profile.coordinationCode}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-slate-400 block font-mono font-bold truncate mb-2">{profile.email}</span>
 
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1" onClick={(e) => e.stopPropagation()}>
                           <span className="text-[9px] uppercase font-extrabold text-slate-450 dark:text-slate-500 mr-1">Perfis:</span>
                           {allAvailableRoles.map((roleOpt) => {
                             const hasRole = currentRoles.includes(roleOpt);
@@ -1514,19 +2054,30 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
                         </div>
                       </div>
 
-                      <div className="flex flex-col items-start sm:items-end gap-1 shrink-0">
-                        <span className="text-[9px] uppercase font-extrabold text-[#475569] dark:text-slate-400">Ativo / Principal:</span>
-                        <select
-                          value={profile.role}
-                          onChange={(e) => handlePrimaryRoleChange(profile, e.target.value as UserRole)}
-                          className="bg-white dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-lg p-1.5 text-[10px] font-extrabold text-slate-705 dark:text-white cursor-pointer focus:outline-hidden"
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-col items-start sm:items-end gap-1 shrink-0">
+                          <span className="text-[9px] uppercase font-extrabold text-[#475569] dark:text-slate-400">Ativo / Principal:</span>
+                          <select
+                            value={profile.role}
+                            onChange={(e) => handlePrimaryRoleChange(profile, e.target.value as UserRole)}
+                            className="bg-white dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-lg p-1.5 text-[10px] font-extrabold text-slate-705 dark:text-white cursor-pointer focus:outline-hidden"
+                          >
+                            {currentRoles.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditUser(profile)}
+                          className="p-2 rounded-lg bg-white dark:bg-[#0c1220] border-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:text-emerald-600 hover:border-emerald-500/40 transition cursor-pointer"
+                          title="Editar Nome e E-mail"
                         >
-                          {currentRoles.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   );
@@ -1624,74 +2175,6 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
               <PlusCircle className="w-4 h-4" />
               <span>{claSubmitting ? "CADASTRANDO..." : registerRole === "SuperAdmin" ? "CADASTRAR SUPER ADMINISTRADOR" : "CADASTRAR NOVO CLA"}</span>
             </button>
-          </form>
-        </div>
-
-        {/* PARTE 4: MASTER RESET DE TODO O BANCO DE DADOS */}
-        <div className="bg-rose-500/5 dark:bg-rose-950/15 p-6 rounded-2xl border-2 border-rose-300 dark:border-rose-900 shadow-[6px_6px_0px_0px_rgba(244,63,94,0.15)] lg:col-span-2">
-          <h2 className="text-sm font-display font-black text-rose-700 dark:text-rose-400 uppercase tracking-widest pl-1 border-l-4 border-rose-500 flex items-center gap-2 mb-4 pb-2">
-            <AlertTriangle className="w-5 h-5 text-rose-500" />
-            <span>Master Reset - Restauração de Fábrica do Sistema</span>
-          </h2>
-
-          <div className="text-xs text-rose-800 dark:text-rose-300 font-semibold leading-relaxed mb-4 space-y-2">
-            <p>
-              ⚠️ <strong className="font-black text-rose-600 dark:text-rose-400">ATENÇÃO EXTREMA:</strong> Esta é uma ação administrativa altamente destrutiva e irrevogável! 
-              Ao efetuar o Master Reset, todas as informações do Firestore do ENEM serão eliminadas permanentemente.
-            </p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Exclusão de todos os usuários pré-registrados e sincronizados (você precisará logar de novo para restaurar seu acesso principal).</li>
-              <li>Limpeza completa de escolas/prédios de aplicação configurados (buildings).</li>
-              <li>Exclusão de listas de fiscais de apoio (collaborators) e todos os check-ins.</li>
-              <li>Limpeza de dados de fornecimento de lanches e fotos de relatórios de auditoria.</li>
-            </ul>
-          </div>
-
-          <form onSubmit={handleMasterReset} className="space-y-4">
-            {resetSuccess && (
-              <div className="p-4 bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 text-xs font-bold rounded-xl border-2 border-emerald-500/20 animate-pulse">
-                {resetSuccess}
-              </div>
-            )}
-            {resetError && (
-              <div className="p-4 bg-rose-500/10 text-rose-800 dark:text-rose-400 text-xs font-bold rounded-xl border-2 border-rose-500/20">
-                {resetError}
-              </div>
-            )}
-
-            <div className="p-4 bg-white dark:bg-[#0c1220]/75 rounded-xl border border-rose-300/30 dark:border-rose-900/30 font-sans">
-              <label className="block text-[10px] uppercase font-extrabold tracking-wider text-rose-400 mb-2">
-                Confirmação de Segurança
-              </label>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 font-semibold">
-                Escreva exatamente as palavras <span className="font-mono bg-rose-500/10 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded font-black">EXCLUIR TUDO</span> no campo abaixo para habilitar o comando de limpeza:
-              </p>
-              
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <input
-                  type="text"
-                  placeholder="EXCLUIR TUDO"
-                  value={resetConfirmText}
-                  onChange={(e) => setResetConfirmText(e.target.value)}
-                  disabled={isResetting}
-                  className="flex-1 border-2 border-rose-200 dark:border-rose-950 rounded-xl px-4 py-2.5 bg-white dark:bg-[#101726]/80 text-rose-600 dark:text-rose-400 font-mono font-black placeholder:text-slate-300 tracking-wider text-xs focus:ring-2 focus:ring-rose-500/30 focus:outline-hidden"
-                  required
-                />
-                
-                <button
-                  type="submit"
-                  disabled={isResetting || resetConfirmText !== "EXCLUIR TUDO"}
-                  className={`px-6 py-2.5 rounded-xl flex items-center justify-center gap-2 font-black text-xs shadow-md transition-all text-white border-b-4 border-rose-900 ${
-                    resetConfirmText === "EXCLUIR TUDO" && !isResetting
-                      ? "bg-rose-600 hover:bg-rose-700 cursor-pointer"
-                      : "bg-slate-300 dark:bg-slate-800 cursor-not-allowed opacity-50 border-slate-400"
-                  }`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>{isResetting ? "RESETANDO FIRESTORE..." : "EXECUTAR MASTER RESET"}</span>
-                </button>
-              </div>
-            </div>
           </form>
         </div>
       </div>
