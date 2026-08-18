@@ -682,6 +682,10 @@ export default function PublicRegisterForm({
                     <option value="Técnico de Informática">Técnico de Informática</option>
                     <option value="Auxiliar de Acessibilidade">Auxiliar de Acessibilidade</option>
                     <option value="Ledor/Transcritor">Ledor/Transcritor Especializado</option>
+                    <option value="Leitor transcritor espanhol">Leitor transcritor espanhol</option>
+                    <option value="Leitor transcritor inglês">Leitor transcritor inglês</option>
+                    <option value="Apenas leitor espanhol">Apenas leitor espanhol</option>
+                    <option value="Apenas leitor inglês">Apenas leitor inglês</option>
                   </select>
                 </div>
 

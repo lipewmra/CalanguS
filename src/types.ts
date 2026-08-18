@@ -182,7 +182,7 @@ export interface CollaboratorInfo {
   hasWorkedEnem: boolean;
   pastEditions: PastEdition[]; // checkbox lists for 1998 up to 2025
   pixKey: string;
-  specialRole: "Nenhuma" | "Libras" | "Tradutor e Intérprete" | "Técnico de Informática" | "Auxiliar de Acessibilidade" | "Ledor/Transcritor" | "Ledora de Gestante";
+  specialRole: "Nenhuma" | "Libras" | "Tradutor e Intérprete" | "Técnico de Informática" | "Auxiliar de Acessibilidade" | "Ledor/Transcritor" | "Leitor transcritor espanhol" | "Leitor transcritor inglês" | "Apenas leitor espanhol" | "Apenas leitor inglês" | "Ledora de Gestante" | string;
   languages: string[]; // only relevant if "Tradutor e Intérprete"
   certificateAttachedName?: string;
   isReserve: boolean;

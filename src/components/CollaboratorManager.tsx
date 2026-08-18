@@ -96,6 +96,10 @@ export const ENEM_ROLES = [
   { name: "Fiscal Volante", desc: "Monitora os corredores, acompanha candidatos aos sanitários e dá suporte logístico." },
   { name: "Interprete de Libras", desc: "Suporte especializado a candidatos surdos, traduzindo instruções para a Língua de Sinais." },
   { name: "Ledor/Transcritor", desc: "Auxílio especializado para leitura de provas ou transcrição de respostas para candidatos PCD." },
+  { name: "Leitor transcritor espanhol", desc: "Leitura de prova e transcrição especializada de respostas em Língua Espanhola." },
+  { name: "Leitor transcritor inglês", desc: "Leitura de prova e transcrição especializada de respostas em Língua Inglesa." },
+  { name: "Apenas leitor espanhol", desc: "Atendimento especializado de leitura de prova em Língua Espanhola." },
+  { name: "Apenas leitor inglês", desc: "Atendimento especializado de leitura de prova em Língua Inglesa." },
   { name: "Tecnico Informática", desc: "Suporte aos computadores, coletores de biometria e conectividade lógica do prédio." },
   { name: "Auxiliar de Limpeza", desc: "Responsável pela higienização periódica dos banheiros, salas e corredores do local." },
   { name: "Porteiro", desc: "Responsável pelo controle de abertura e fechamento de portões e filtragem de acessos." },
@@ -1881,6 +1885,26 @@ function activeTabSubAddForm(
             placeholder="Escreva PCD ou Nenhuma"
             className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-semibold"
           />
+        </div>
+
+        <div>
+          <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Função de Apoio / Especialização</label>
+          <select
+            value={specialRole}
+            onChange={(e) => setSpecialRole(e.target.value as any)}
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-800 dark:text-slate-200 text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
+          >
+            <option value="Nenhuma">Nenhuma / Fiscal de Sala Padrão</option>
+            <option value="Libras">Libras (Intérprete)</option>
+            <option value="Tradutor e Intérprete">Tradutor e Intérprete</option>
+            <option value="Técnico de Informática">Técnico de Informática</option>
+            <option value="Auxiliar de Acessibilidade">Auxiliar de Acessibilidade</option>
+            <option value="Ledor/Transcritor">Ledor/Transcritor Especializado</option>
+            <option value="Leitor transcritor espanhol">Leitor transcritor espanhol</option>
+            <option value="Leitor transcritor inglês">Leitor transcritor inglês</option>
+            <option value="Apenas leitor espanhol">Apenas leitor espanhol</option>
+            <option value="Apenas leitor inglês">Apenas leitor inglês</option>
+          </select>
         </div>
 
 
