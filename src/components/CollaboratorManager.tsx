@@ -96,6 +96,7 @@ export const ENEM_ROLES = [
   { name: "Fiscal Volante", desc: "Monitora os corredores, acompanha candidatos aos sanitários e dá suporte logístico." },
   { name: "Interprete de Libras", desc: "Suporte especializado a candidatos surdos, traduzindo instruções para a Língua de Sinais." },
   { name: "Ledor/Transcritor", desc: "Auxílio especializado para leitura de provas ou transcrição de respostas para candidatos PCD." },
+  { name: "Apenas Ledor", desc: "Atendimento especializado exclusivamente para leitura de prova e enunciados para candidatos." },
   { name: "Leitor transcritor espanhol", desc: "Leitura de prova e transcrição especializada de respostas em Língua Espanhola." },
   { name: "Leitor transcritor inglês", desc: "Leitura de prova e transcrição especializada de respostas em Língua Inglesa." },
   { name: "Apenas leitor espanhol", desc: "Atendimento especializado de leitura de prova em Língua Espanhola." },
@@ -1900,6 +1901,7 @@ function activeTabSubAddForm(
             <option value="Técnico de Informática">Técnico de Informática</option>
             <option value="Auxiliar de Acessibilidade">Auxiliar de Acessibilidade</option>
             <option value="Ledor/Transcritor">Ledor/Transcritor Especializado</option>
+            <option value="Apenas Ledor">Apenas Ledor</option>
             <option value="Leitor transcritor espanhol">Leitor transcritor espanhol</option>
             <option value="Leitor transcritor inglês">Leitor transcritor inglês</option>
             <option value="Apenas leitor espanhol">Apenas leitor espanhol</option>

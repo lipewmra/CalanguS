@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, addDoc } from "firebase/firestore";
-import { db } from "../firebase";
 import { CollaboratorInfo, BuildingInfo, PastEdition } from "../types";
 import { auditCollaborator } from "../lib/data-validator";
-import { getCurrentUserProfile } from "../lib/db-services";
+import { getCurrentUserProfile, addCollaborator, getLocalCache, subscribeToAllBuildings } from "../lib/db-services";
 import { 
   Building2, Users, FileText, CheckCircle, AlertTriangle, 
   ChevronRight, Sparkles, Mail, Phone, ShieldCheck, Heart, RotateCcw,
@@ -99,41 +97,27 @@ export default function PublicRegisterForm({
     return null;
   };
 
-  // Load buildings from Firestore to link public form registration
+  // Load buildings with cache fallback to link public form registration
   useEffect(() => {
-    let active = true;
-    const fetchBuildings = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "buildings"));
-        const list: BuildingInfo[] = [];
-        querySnapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() } as BuildingInfo);
-        });
-        if (active) {
-          setBuildings(list);
-          
-          // Try to auto-select matching building
-          const claParam = getClaParamFromUrl();
-          if (claParam) {
-            // Find a building where building.id or building.claId matches the parameter
-            const matched = list.find(b => b.claId === claParam || b.id === claParam);
-            if (matched) {
-              setSelectedBuildingId(matched.id || "");
-            } else if (list.length > 0) {
-              setSelectedBuildingId(list[0].id || "");
-            }
-          } else if (list.length > 0) {
-            setSelectedBuildingId(list[0].id || "");
-          }
+    const unsub = subscribeToAllBuildings((list) => {
+      setBuildings(list);
+      setLoadingBuildings(false);
+      
+      // Try to auto-select matching building
+      const claParam = getClaParamFromUrl();
+      if (claParam) {
+        const matched = list.find(b => b.claId === claParam || b.id === claParam);
+        if (matched) {
+          setSelectedBuildingId(matched.id || "");
+        } else if (list.length > 0) {
+          setSelectedBuildingId(list[0].id || "");
         }
-      } catch (err) {
-        console.error("Error loading buildings", err);
-      } finally {
-        if (active) setLoadingBuildings(false);
+      } else if (list.length > 0) {
+        setSelectedBuildingId(list[0].id || "");
       }
-    };
-    fetchBuildings();
-    return () => { active = false; };
+    });
+
+    return () => unsub();
   }, []);
 
   // Load CLA user profile if available in URL parameters
@@ -267,7 +251,7 @@ export default function PublicRegisterForm({
         createdAt: new Date().toISOString()
       };
 
-      await addDoc(collection(db, "collaborators"), collabData);
+      await addCollaborator(collabData as any);
       setSubmitSuccess(true);
     } catch (err: any) {
       console.error(err);
@@ -682,6 +666,7 @@ export default function PublicRegisterForm({
                     <option value="Técnico de Informática">Técnico de Informática</option>
                     <option value="Auxiliar de Acessibilidade">Auxiliar de Acessibilidade</option>
                     <option value="Ledor/Transcritor">Ledor/Transcritor Especializado</option>
+                    <option value="Apenas Ledor">Apenas Ledor</option>
                     <option value="Leitor transcritor espanhol">Leitor transcritor espanhol</option>
                     <option value="Leitor transcritor inglês">Leitor transcritor inglês</option>
                     <option value="Apenas leitor espanhol">Apenas leitor espanhol</option>

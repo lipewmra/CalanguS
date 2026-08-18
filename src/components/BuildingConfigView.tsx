@@ -962,7 +962,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                             type="text"
                             value={room.details || ""}
                             onChange={(e) => handleSpecialRoomFieldChange(index, "details", e.target.value)}
-                            placeholder="Ex: Libras, Leitor transcritor espanhol, Leitor transcritor inglês, Apenas leitor espanhol, Apenas leitor inglês"
+                            placeholder="Ex: Libras, Apenas Ledor, Leitor transcritor espanhol, Leitor transcritor inglês, Apenas leitor espanhol, Apenas leitor inglês"
                             className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-medium text-slate-850 dark:text-white disabled:opacity-60"
                             required
                             disabled={isReadOnly}

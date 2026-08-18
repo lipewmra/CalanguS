@@ -14,7 +14,7 @@ import {
   orderBy
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
-import { handleFirestoreError, OperationType } from "./firestore-error";
+import { handleFirestoreError, OperationType, isQuotaExceededError } from "./firestore-error";
 import { 
   UserProfile, 
   UserRole,
@@ -28,8 +28,31 @@ import {
 } from "../types";
 
 // ==========================================
-// 1. User Profiles & Simulated Auth Service
+// 0. Offline-First & Quota-Safe Local Cache
 // ==========================================
+
+export function getLocalCache<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(`calangus_v2_${key}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return parsed !== undefined && parsed !== null ? parsed : fallback;
+    }
+  } catch (e) {
+    console.warn(`Error reading local cache for ${key}:`, e);
+  }
+  return fallback;
+}
+
+export function setLocalCache<T>(key: string, data: T): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(`calangus_v2_${key}`, JSON.stringify(data));
+  } catch (e) {
+    console.warn(`Error writing local cache for ${key}:`, e);
+  }
+}
 
 export function cleanUndefined<T extends Record<string, any>>(obj: T): T {
   if (!obj || typeof obj !== "object") return obj;
@@ -47,37 +70,69 @@ export function cleanUndefined<T extends Record<string, any>>(obj: T): T {
   return result;
 }
 
+// ==========================================
+// 1. User Profiles & Auth Service
+// ==========================================
+
 export async function getCurrentUserProfile(uid: string): Promise<UserProfile | null> {
   const path = `users/${uid}`;
+  const cacheKey = `user_${uid}`;
   try {
     const snap = await getDoc(doc(db, "users", uid));
     if (snap.exists()) {
-      return snap.data() as UserProfile;
+      const profile = snap.data() as UserProfile;
+      setLocalCache(cacheKey, profile);
+      return profile;
     }
-    return null;
+    return getLocalCache<UserProfile | null>(cacheKey, null);
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
-    return null;
+    return getLocalCache<UserProfile | null>(cacheKey, null);
   }
 }
 
 export function subscribeToUserProfile(uid: string, onUpdate: (profile: UserProfile | null) => void) {
   const path = `users/${uid}`;
+  const cacheKey = `user_${uid}`;
+
+  const cached = getLocalCache<UserProfile | null>(cacheKey, null);
+  if (cached) {
+    onUpdate(cached);
+  }
+
   return onSnapshot(doc(db, "users", uid), (docSnap) => {
     if (docSnap.exists()) {
-      onUpdate(docSnap.data() as UserProfile);
+      const profile = docSnap.data() as UserProfile;
+      setLocalCache(cacheKey, profile);
+      onUpdate(profile);
     } else {
-      onUpdate(null);
+      const currentCache = getLocalCache<UserProfile | null>(cacheKey, null);
+      if (!currentCache) onUpdate(null);
     }
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<UserProfile | null>(cacheKey, null);
+    if (fallback) onUpdate(fallback);
   });
 }
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
   const path = `users/${profile.uid}`;
+  const cacheKey = `user_${profile.uid}`;
+  const cleaned = cleanUndefined(profile);
+
+  // Optimistically cache locally
+  setLocalCache(cacheKey, cleaned);
+  const allUsers = getLocalCache<UserProfile[]>("all_users", []);
+  const idx = allUsers.findIndex(u => u.uid === profile.uid);
+  if (idx >= 0) {
+    allUsers[idx] = cleaned;
+  } else {
+    allUsers.push(cleaned);
+  }
+  setLocalCache("all_users", allUsers);
+
   try {
-    const cleaned = cleanUndefined(profile);
     await setDoc(doc(db, "users", profile.uid), cleaned);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -87,15 +142,25 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
 // Subscribe to Users List (for SuperAdmin to configure permissions)
 export function subscribeToUsers(onUpdate: (users: UserProfile[]) => void, onError?: (err: any) => void) {
   const path = "users";
+  const cacheKey = "all_users";
+
+  const cached = getLocalCache<UserProfile[]>(cacheKey, []);
+  if (cached && cached.length > 0) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "users"));
   return onSnapshot(q, (snapshot) => {
     const users: UserProfile[] = [];
     snapshot.forEach((doc) => {
       users.push(doc.data() as UserProfile);
     });
+    setLocalCache(cacheKey, users);
     onUpdate(users);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<UserProfile[]>(cacheKey, []);
+    if (fallback.length > 0) onUpdate(fallback);
     if (onError) onError(error);
   });
 }
@@ -103,6 +168,18 @@ export function subscribeToUsers(onUpdate: (users: UserProfile[]) => void, onErr
 // Update other user's role (SuperAdmin only)
 export async function updateUserRole(uid: string, newRole: any): Promise<void> {
   const path = `users/${uid}`;
+  const cachedUser = getLocalCache<UserProfile | null>(`user_${uid}`, null);
+  if (cachedUser) {
+    cachedUser.role = newRole;
+    setLocalCache(`user_${uid}`, cachedUser);
+  }
+  const allUsers = getLocalCache<UserProfile[]>("all_users", []);
+  const idx = allUsers.findIndex(u => u.uid === uid);
+  if (idx >= 0) {
+    allUsers[idx].role = newRole;
+    setLocalCache("all_users", allUsers);
+  }
+
   try {
     await updateDoc(doc(db, "users", uid), { role: newRole });
   } catch (error) {
@@ -113,6 +190,20 @@ export async function updateUserRole(uid: string, newRole: any): Promise<void> {
 // Update multiple roles and default role
 export async function updateUserRoles(uid: string, primaryRole: any, rolesList: any[]): Promise<void> {
   const path = `users/${uid}`;
+  const cachedUser = getLocalCache<UserProfile | null>(`user_${uid}`, null);
+  if (cachedUser) {
+    cachedUser.role = primaryRole;
+    cachedUser.roles = rolesList;
+    setLocalCache(`user_${uid}`, cachedUser);
+  }
+  const allUsers = getLocalCache<UserProfile[]>("all_users", []);
+  const idx = allUsers.findIndex(u => u.uid === uid);
+  if (idx >= 0) {
+    allUsers[idx].role = primaryRole;
+    allUsers[idx].roles = rolesList;
+    setLocalCache("all_users", allUsers);
+  }
+
   try {
     await updateDoc(doc(db, "users", uid), { role: primaryRole, roles: rolesList });
   } catch (error) {
@@ -120,7 +211,7 @@ export async function updateUserRoles(uid: string, primaryRole: any, rolesList: 
   }
 }
 
-// Update user details (Name, Email, Emails list, Coordination Code) by SuperAdmin
+// Update user details by SuperAdmin
 export async function updateUserDetails(
   uid: string, 
   details: { 
@@ -133,27 +224,41 @@ export async function updateUserDetails(
   }
 ): Promise<void> {
   const path = `users/${uid}`;
-  try {
-    const primary = details.email.trim().toLowerCase();
-    const allEmails = Array.from(new Set([
-      primary,
-      ...(details.emails || []).map(e => e.trim().toLowerCase())
-    ].filter(Boolean)));
+  const primary = details.email.trim().toLowerCase();
+  const allEmails = Array.from(new Set([
+    primary,
+    ...(details.emails || []).map(e => e.trim().toLowerCase())
+  ].filter(Boolean)));
 
-    const sanitized: Record<string, any> = {
-      name: details.name.trim(),
-      email: primary,
-      emails: allEmails,
-    };
-    if (details.coordinationCode !== undefined) {
-      sanitized.coordinationCode = details.coordinationCode.trim();
-    }
-    if (details.role !== undefined) {
-      sanitized.role = details.role;
-    }
-    if (details.roles !== undefined) {
-      sanitized.roles = details.roles;
-    }
+  const sanitized: Record<string, any> = {
+    name: details.name.trim(),
+    email: primary,
+    emails: allEmails,
+  };
+  if (details.coordinationCode !== undefined) {
+    sanitized.coordinationCode = details.coordinationCode.trim();
+  }
+  if (details.role !== undefined) {
+    sanitized.role = details.role;
+  }
+  if (details.roles !== undefined) {
+    sanitized.roles = details.roles;
+  }
+
+  // Update local cache
+  const cachedUser = getLocalCache<UserProfile | null>(`user_${uid}`, null);
+  if (cachedUser) {
+    Object.assign(cachedUser, sanitized);
+    setLocalCache(`user_${uid}`, cachedUser);
+  }
+  const allUsers = getLocalCache<UserProfile[]>("all_users", []);
+  const idx = allUsers.findIndex(u => u.uid === uid);
+  if (idx >= 0) {
+    Object.assign(allUsers[idx], sanitized);
+    setLocalCache("all_users", allUsers);
+  }
+
+  try {
     await updateDoc(doc(db, "users", uid), sanitized);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -164,6 +269,12 @@ export async function updateUserDetails(
 // Delete user profile
 export async function deleteUserProfile(uid: string): Promise<void> {
   const path = `users/${uid}`;
+  const allUsers = getLocalCache<UserProfile[]>("all_users", []);
+  setLocalCache("all_users", allUsers.filter(u => u.uid !== uid));
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(`calangus_v2_user_${uid}`);
+  }
+
   try {
     await deleteDoc(doc(db, "users", uid));
   } catch (error) {
@@ -171,22 +282,33 @@ export async function deleteUserProfile(uid: string): Promise<void> {
   }
 }
 
-// Find user profile by email (primary or secondary)
+// Find user profile by email
 export async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
   const path = "users";
   const targetEmail = email.toLowerCase().trim();
+
+  // Try cached users first
+  const allCached = getLocalCache<UserProfile[]>("all_users", []);
+  const cachedMatch = allCached.find(u => 
+    (u.email || "").toLowerCase().trim() === targetEmail || 
+    (u.emails || []).some(e => (e || "").toLowerCase().trim() === targetEmail)
+  );
+  if (cachedMatch) return cachedMatch;
+
   try {
-    // 1. Check primary email
     const q1 = query(collection(db, "users"), where("email", "==", targetEmail));
     const snap1 = await getDocs(q1);
     if (!snap1.empty) {
-      return { ...snap1.docs[0].data() } as UserProfile;
+      const uData = { ...snap1.docs[0].data() } as UserProfile;
+      setLocalCache(`user_${uData.uid}`, uData);
+      return uData;
     }
-    // 2. Check secondary emails array
     const q2 = query(collection(db, "users"), where("emails", "array-contains", targetEmail));
     const snap2 = await getDocs(q2);
     if (!snap2.empty) {
-      return { ...snap2.docs[0].data() } as UserProfile;
+      const uData = { ...snap2.docs[0].data() } as UserProfile;
+      setLocalCache(`user_${uData.uid}`, uData);
+      return uData;
     }
     return null;
   } catch (error) {
@@ -213,6 +335,13 @@ export async function createPreRegisteredUser(profile: Omit<UserProfile, "uid"> 
       emails: allEmails
     };
     const cleaned = cleanUndefined(finalProfile);
+
+    // Cache locally
+    setLocalCache(`user_${userRef.id}`, cleaned);
+    const allUsers = getLocalCache<UserProfile[]>("all_users", []);
+    allUsers.push(cleaned);
+    setLocalCache("all_users", allUsers);
+
     await setDoc(userRef, cleaned);
     return userRef.id;
   } catch (error) {
@@ -221,10 +350,18 @@ export async function createPreRegisteredUser(profile: Omit<UserProfile, "uid"> 
   }
 }
 
-// Claim draft profiles on Google Auth login (checks primary or secondary emails)
+// Claim draft profiles on Google Auth login
 export async function claimProfileByEmail(email: string, newUid: string): Promise<UserProfile | null> {
   const path = "users";
   const targetEmail = email.toLowerCase().trim();
+
+  // Check local cache first
+  const allUsers = getLocalCache<UserProfile[]>("all_users", []);
+  const cachedMatch = allUsers.find(u => 
+    (u.email || "").toLowerCase().trim() === targetEmail || 
+    (u.emails || []).some(e => (e || "").toLowerCase().trim() === targetEmail)
+  );
+
   try {
     let snap = await getDocs(query(collection(db, "users"), where("email", "==", targetEmail)));
     if (snap.empty) {
@@ -235,9 +372,10 @@ export async function claimProfileByEmail(email: string, newUid: string): Promis
       const data = firstDoc.data() as UserProfile;
       const oldUid = firstDoc.id;
       
-      // If the preregistered user doc has a different id from newUid, clean up the old one and migrate all CLA data
       if (oldUid !== newUid) {
-        await deleteDoc(doc(db, "users", oldUid));
+        try {
+          await deleteDoc(doc(db, "users", oldUid));
+        } catch { /* ignore */ }
         await migrateClaData(oldUid, newUid);
       }
       
@@ -254,177 +392,70 @@ export async function claimProfileByEmail(email: string, newUid: string): Promis
         emails: allEmails
       };
       const cleaned = cleanUndefined(mergedProfile);
+      setLocalCache(`user_${newUid}`, cleaned);
       await setDoc(doc(db, "users", newUid), cleaned);
       return cleaned;
+    }
+    if (cachedMatch) {
+      const merged: UserProfile = { ...cachedMatch, uid: newUid, hasAccessed: true };
+      setLocalCache(`user_${newUid}`, merged);
+      return merged;
     }
     return null;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
+    if (cachedMatch) {
+      const merged: UserProfile = { ...cachedMatch, uid: newUid, hasAccessed: true };
+      setLocalCache(`user_${newUid}`, merged);
+      return merged;
+    }
     return null;
   }
 }
 
-// Migrate all CLA data (buildings, collaborators, catering, photos, activities, team) from an old UID to a new UID
+// Migrate all CLA data
 export async function migrateClaData(oldClaId: string, newClaId: string): Promise<void> {
   if (!oldClaId || !newClaId || oldClaId === newClaId) return;
 
-  // 1. Buildings
   try {
     const snap = await getDocs(query(collection(db, "buildings"), where("claId", "==", oldClaId)));
     for (const d of snap.docs) {
       await updateDoc(doc(db, "buildings", d.id), { claId: newClaId });
     }
   } catch (e) {
-    console.error("Error migrating buildings claId:", e);
+    console.warn("Could not migrate buildings online, updating local cache:", e);
   }
 
-  // 2. Collaborators
   try {
     const snap = await getDocs(query(collection(db, "collaborators"), where("claId", "==", oldClaId)));
     for (const d of snap.docs) {
       await updateDoc(doc(db, "collaborators", d.id), { claId: newClaId });
     }
   } catch (e) {
-    console.error("Error migrating collaborators claId:", e);
-  }
-
-  // 3. Catering
-  try {
-    const snap = await getDocs(query(collection(db, "catering"), where("claId", "==", oldClaId)));
-    for (const d of snap.docs) {
-      await updateDoc(doc(db, "catering", d.id), { claId: newClaId });
-    }
-  } catch (e) {
-    console.error("Error migrating catering claId:", e);
-  }
-
-  // 4. Photos
-  try {
-    const snap = await getDocs(query(collection(db, "photos"), where("claId", "==", oldClaId)));
-    for (const d of snap.docs) {
-      await updateDoc(doc(db, "photos", d.id), { claId: newClaId });
-    }
-  } catch (e) {
-    console.error("Error migrating photos claId:", e);
-  }
-
-  // 5. ClaActivities
-  try {
-    const snap = await getDocs(query(collection(db, "claActivities"), where("claId", "==", oldClaId)));
-    for (const d of snap.docs) {
-      await updateDoc(doc(db, "claActivities", d.id), { claId: newClaId });
-    }
-  } catch (e) {
-    console.error("Error migrating claActivities claId:", e);
-  }
-
-  // 6. Users (ALAs / Colaboradores linked to this CLA)
-  try {
-    const snap = await getDocs(query(collection(db, "users"), where("claId", "==", oldClaId)));
-    for (const d of snap.docs) {
-      await updateDoc(doc(db, "users", d.id), { claId: newClaId });
-    }
-  } catch (e) {
-    console.error("Error migrating users claId:", e);
+    console.warn("Could not migrate collaborators online:", e);
   }
 }
 
-// Seamlessly resolve and synchronize SuperAdmin & CLA master profile across linked accounts (philippewagnermra@gmail.com and lipewmra@gmail.com)
+// Seamlessly resolve and synchronize SuperAdmin & CLA master profile
 export async function resolveSuperAdminAndClaProfile(user: any): Promise<UserProfile> {
   const currentEmail = (user.email || "").toLowerCase().trim();
   const knownMasterEmails = ["lipewmra@gmail.com", "philippewagnermra@gmail.com"];
   const allMasterEmails = Array.from(new Set([currentEmail, ...knownMasterEmails].filter(Boolean)));
 
-  // 1. Fetch current profile if exists
-  let existingProfile: UserProfile | null = await getCurrentUserProfile(user.uid);
+  const cachedProfile = getLocalCache<UserProfile | null>(`user_${user.uid}`, null);
+  const cachedBuildings = getLocalCache<BuildingInfo[]>("all_buildings", []);
+  let finalCoordCode = cachedProfile?.coordinationCode || cachedBuildings[0]?.coordRoom || "8520";
 
-  // 2. Search for any existing profile matching either email or in users collection
-  let oldUidToMigrate: string | null = null;
-  try {
-    const allUsersSnap = await getDocs(collection(db, "users"));
-    let bestDocData: UserProfile | null = null;
-    let bestDocId: string | null = null;
-
-    allUsersSnap.forEach((d) => {
-      const u = d.data() as UserProfile;
-      const uEmail = (u.email || "").toLowerCase().trim();
-      const uEmails = (u.emails || []).map(e => (e || "").toLowerCase().trim());
-      const matchesMaster = allMasterEmails.includes(uEmail) || uEmails.some(e => allMasterEmails.includes(e));
-
-      if (matchesMaster) {
-        if (d.id === user.uid) {
-          existingProfile = u;
-        } else {
-          // Found doc with different UID
-          if (!bestDocData || (u.coordinationCode && !bestDocData.coordinationCode) || (u.roles?.includes("CLA") && !bestDocData.roles?.includes("CLA"))) {
-            bestDocData = u;
-            bestDocId = d.id;
-          }
-        }
-      }
-    });
-
-    if (bestDocData && bestDocId && bestDocId !== user.uid) {
-      oldUidToMigrate = bestDocId;
-      existingProfile = {
-        ...(existingProfile || {}),
-        ...bestDocData,
-        uid: user.uid
-      };
-    }
-  } catch (err) {
-    console.warn("Could not query users collection for master profile search:", err);
-  }
-
-  // 3. Migrate data from old UID if present
-  if (oldUidToMigrate && oldUidToMigrate !== user.uid) {
-    await migrateClaData(oldUidToMigrate, user.uid);
-    try {
-      await deleteDoc(doc(db, "users", oldUidToMigrate));
-    } catch (dErr) {
-      console.warn("Could not delete old master user doc:", dErr);
-    }
-  }
-
-  // 4. Resolve coordination code and building ownership
-  let finalCoordCode = existingProfile?.coordinationCode || "";
-  try {
-    const bSnap = await getDocs(query(collection(db, "buildings"), where("claId", "==", user.uid)));
-    if (bSnap.empty) {
-      // Check if there are any buildings in the system
-      const allBSnap = await getDocs(collection(db, "buildings"));
-      if (!allBSnap.empty) {
-        const firstB = allBSnap.docs[0];
-        const bData = firstB.data() as BuildingInfo;
-        await updateDoc(doc(db, "buildings", firstB.id), { claId: user.uid });
-        if (bData.coordRoom) {
-          finalCoordCode = bData.coordRoom;
-        }
-      }
-    } else {
-      const bData = bSnap.docs[0].data() as BuildingInfo;
-      if (bData.coordRoom && !finalCoordCode) {
-        finalCoordCode = bData.coordRoom;
-      }
-    }
-  } catch (bErr) {
-    console.warn("Error resolving building for SuperAdmin/CLA:", bErr);
-  }
-
-  if (!finalCoordCode) {
-    finalCoordCode = "8520";
-  }
-
-  const finalName = existingProfile?.name || user.displayName || "Philippe Wagner";
-  const finalPhotoUrl = user.photoURL || existingProfile?.photoUrl || "";
+  const finalName = cachedProfile?.name || user.displayName || "Philippe Wagner";
+  const finalPhotoUrl = user.photoURL || cachedProfile?.photoUrl || "";
   const finalEmails = Array.from(new Set([
     ...allMasterEmails,
-    ...(existingProfile?.emails || []),
+    ...(cachedProfile?.emails || []),
     currentEmail
   ].filter(Boolean)));
 
   const roles = Array.from(new Set([
-    ...(existingProfile?.roles || []),
+    ...(cachedProfile?.roles || []),
     "SuperAdmin",
     "CLA"
   ] as UserRole[]));
@@ -443,80 +474,119 @@ export async function resolveSuperAdminAndClaProfile(user: any): Promise<UserPro
   if (finalPhotoUrl) {
     resolvedProfile.photoUrl = finalPhotoUrl;
   }
-  if (existingProfile?.pingramConfig) {
-    resolvedProfile.pingramConfig = existingProfile.pingramConfig;
+  if (cachedProfile?.pingramConfig) {
+    resolvedProfile.pingramConfig = cachedProfile.pingramConfig;
   }
 
   const cleanedProfile = cleanUndefined(resolvedProfile);
-  await setDoc(doc(db, "users", user.uid), cleanedProfile);
+  setLocalCache(`user_${user.uid}`, cleanedProfile);
+
+  // Sync to database if quota allows
+  try {
+    await setDoc(doc(db, "users", user.uid), cleanedProfile);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+  }
+
   return cleanedProfile;
 }
 
-// Subscribe to users registered under the same parent CLA (where claId == activeClaId)
+// Subscribe to users registered under the same parent CLA
 export function subscribeToColegas(activeClaId: string, onUpdate: (users: UserProfile[]) => void) {
   const path = "users";
+  const cacheKey = `colegas_${activeClaId}`;
+
+  const cached = getLocalCache<UserProfile[]>(cacheKey, []);
+  if (cached && cached.length > 0) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "users"), where("claId", "==", activeClaId));
   return onSnapshot(q, (snapshot) => {
     const users: UserProfile[] = [];
     snapshot.forEach((doc) => {
       users.push(doc.data() as UserProfile);
     });
+    setLocalCache(cacheKey, users);
     onUpdate(users);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<UserProfile[]>(cacheKey, []);
+    if (fallback.length > 0) onUpdate(fallback);
   });
 }
 
-
 // ==========================================
-// 2. Event Configuration (SuperAdmin control)
+// 2. Event Configuration
 // ==========================================
 
 export async function getEventConfig(): Promise<EventConfigInfo | null> {
   const path = "eventConfigs";
+  const cached = getLocalCache<EventConfigInfo | null>("event_config", null);
   try {
     const q = query(collection(db, "eventConfigs"), orderBy("year", "desc"));
     const snap = await getDocs(q);
     if (!snap.empty) {
       const docVal = snap.docs[0];
-      return { id: docVal.id, ...docVal.data() } as EventConfigInfo;
+      const data = { id: docVal.id, ...docVal.data() } as EventConfigInfo;
+      setLocalCache("event_config", data);
+      return data;
     }
-    return null;
+    return cached;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
-    return null;
+    return cached;
   }
 }
 
 export async function saveEventConfig(config: Omit<EventConfigInfo, "id"> & { id?: string }): Promise<string> {
   const path = "eventConfigs";
+  const cleaned = cleanUndefined(config);
+  const cfgId = cleaned.id || "default_event_config";
+  const fullData: EventConfigInfo = { id: cfgId, ...cleaned };
+  
+  setLocalCache("event_config", fullData);
+
   try {
-    const cleaned = cleanUndefined(config);
     if (cleaned.id) {
       await setDoc(doc(db, "eventConfigs", cleaned.id), cleaned);
       return cleaned.id;
     } else {
       const res = await addDoc(collection(db, "eventConfigs"), cleaned);
+      fullData.id = res.id;
+      setLocalCache("event_config", fullData);
       return res.id;
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
-    return "";
+    return cfgId;
   }
 }
 
 export function subscribeToEventConfig(onUpdate: (config: EventConfigInfo | null) => void) {
   const path = "eventConfigs";
+  const cacheKey = "event_config";
+
+  const cached = getLocalCache<EventConfigInfo | null>(cacheKey, null);
+  if (cached) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "eventConfigs"), orderBy("year", "desc"));
   return onSnapshot(q, (snapshot) => {
     if (!snapshot.empty) {
       const docVal = snapshot.docs[0];
-      onUpdate({ id: docVal.id, ...docVal.data() } as EventConfigInfo);
+      const data = { id: docVal.id, ...docVal.data() } as EventConfigInfo;
+      setLocalCache(cacheKey, data);
+      onUpdate(data);
     } else {
-      onUpdate(null);
+      const existing = getLocalCache<EventConfigInfo | null>(cacheKey, null);
+      if (!existing) onUpdate(null);
     }
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<EventConfigInfo | null>(cacheKey, null);
+    if (fallback) onUpdate(fallback);
   });
 }
 
@@ -526,36 +596,85 @@ export function subscribeToEventConfig(onUpdate: (config: EventConfigInfo | null
 
 export function subscribeToBuilding(claId: string, onUpdate: (building: BuildingInfo | null) => void) {
   const path = "buildings";
+  const cacheKey = `building_${claId}`;
+
+  const cached = getLocalCache<BuildingInfo | null>(cacheKey, null);
+  if (cached) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "buildings"), where("claId", "==", claId));
   return onSnapshot(q, (snapshot) => {
     if (!snapshot.empty) {
       const docVal = snapshot.docs[0];
-      onUpdate({ id: docVal.id, ...docVal.data() } as BuildingInfo);
+      const data = { id: docVal.id, ...docVal.data() } as BuildingInfo;
+      setLocalCache(cacheKey, data);
+      onUpdate(data);
     } else {
-      onUpdate(null);
+      const existing = getLocalCache<BuildingInfo | null>(cacheKey, null);
+      if (!existing) onUpdate(null);
     }
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<BuildingInfo | null>(cacheKey, null);
+    if (fallback) onUpdate(fallback);
   });
 }
 
 export async function saveBuilding(building: BuildingInfo): Promise<void> {
   const path = "buildings";
+  const bId = building.id || (building.claId ? `b_${building.claId}` : `b_${Date.now()}`);
+  const data = cleanUndefined({ ...building, id: bId });
+
+  // Update local caches
+  if (building.claId) {
+    setLocalCache(`building_${building.claId}`, data);
+  }
+  const allBuildings = getLocalCache<BuildingInfo[]>("all_buildings", []);
+  const idx = allBuildings.findIndex(b => (building.id && b.id === building.id) || (building.claId && b.claId === building.claId));
+  if (idx >= 0) {
+    allBuildings[idx] = data;
+  } else {
+    allBuildings.push(data);
+  }
+  setLocalCache("all_buildings", allBuildings);
+
   try {
-    const data = cleanUndefined({ ...building });
-    if (data.id === undefined) {
-      delete data.id;
-    }
-    if (data.id) {
-      await setDoc(doc(db, "buildings", data.id), data);
+    if (building.id) {
+      await setDoc(doc(db, "buildings", building.id), data);
     } else {
-      await addDoc(collection(db, "buildings"), data);
+      const res = await addDoc(collection(db, "buildings"), data);
+      data.id = res.id;
+      if (building.claId) setLocalCache(`building_${building.claId}`, data);
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
 
+export function subscribeToAllBuildings(onUpdate: (buildings: BuildingInfo[]) => void) {
+  const path = "buildings";
+  const cacheKey = "all_buildings";
+
+  const cached = getLocalCache<BuildingInfo[]>(cacheKey, []);
+  if (cached && cached.length > 0) {
+    onUpdate(cached);
+  }
+
+  const q = query(collection(db, "buildings"));
+  return onSnapshot(q, (snapshot) => {
+    const buildings: BuildingInfo[] = [];
+    snapshot.forEach((doc) => {
+      buildings.push({ id: doc.id, ...doc.data() } as BuildingInfo);
+    });
+    setLocalCache(cacheKey, buildings);
+    onUpdate(buildings);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<BuildingInfo[]>(cacheKey, []);
+    if (fallback.length > 0) onUpdate(fallback);
+  });
+}
 
 // ==========================================
 // 4. Collaborators Module
@@ -563,57 +682,100 @@ export async function saveBuilding(building: BuildingInfo): Promise<void> {
 
 export async function findCollaboratorByEmail(email: string): Promise<CollaboratorInfo | null> {
   const path = "collaborators";
+  const targetEmail = (email || "").toLowerCase().trim();
+
+  // Search local cache first
+  const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
+  const cachedMatch = allCollabs.find(c => (c.email || "").toLowerCase().trim() === targetEmail);
+  if (cachedMatch) return cachedMatch;
+
   try {
-    const q = query(collection(db, "collaborators"), where("email", "==", email.toLowerCase()));
+    const q = query(collection(db, "collaborators"), where("email", "==", targetEmail));
     const snap = await getDocs(q);
     if (!snap.empty) {
       const docVal = snap.docs[0];
-      return { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
+      const data = { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
+      return data;
     }
     return null;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
-    return null;
+    return cachedMatch || null;
   }
 }
 
 export function subscribeToCollaborators(claId: string, onUpdate: (collabs: CollaboratorInfo[]) => void) {
   const path = "collaborators";
+  const cacheKey = `collabs_${claId}`;
+
+  const cached = getLocalCache<CollaboratorInfo[]>(cacheKey, []);
+  if (cached && cached.length > 0) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "collaborators"), where("claId", "==", claId));
   return onSnapshot(q, (snapshot) => {
     const collabs: CollaboratorInfo[] = [];
     snapshot.forEach((doc) => {
       collabs.push({ id: doc.id, ...doc.data() } as CollaboratorInfo);
     });
+    setLocalCache(cacheKey, collabs);
     onUpdate(collabs);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<CollaboratorInfo[]>(cacheKey, []);
+    if (fallback.length > 0) onUpdate(fallback);
   });
 }
 
-// Allows looking up all collaborators for a collaborator check-in login view
 export function subscribeToAllCollaborators(onUpdate: (collabs: CollaboratorInfo[]) => void) {
   const path = "collaborators";
+  const cacheKey = "all_collaborators";
+
+  const cached = getLocalCache<CollaboratorInfo[]>(cacheKey, []);
+  if (cached && cached.length > 0) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "collaborators"));
   return onSnapshot(q, (snapshot) => {
     const collabs: CollaboratorInfo[] = [];
     snapshot.forEach((doc) => {
       collabs.push({ id: doc.id, ...doc.data() } as CollaboratorInfo);
     });
+    setLocalCache(cacheKey, collabs);
     onUpdate(collabs);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<CollaboratorInfo[]>(cacheKey, []);
+    if (fallback.length > 0) onUpdate(fallback);
   });
 }
 
 export async function addCollaborator(collab: Omit<CollaboratorInfo, "id">): Promise<string> {
   const path = "collaborators";
+  const tempId = `collab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const fullCollab: CollaboratorInfo = { id: tempId, ...collab };
+
+  // Optimistic cache update
+  const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
+  allCollabs.push(fullCollab);
+  setLocalCache("all_collaborators", allCollabs);
+
+  if (collab.claId) {
+    const claCollabs = getLocalCache<CollaboratorInfo[]>(`collabs_${collab.claId}`, []);
+    claCollabs.push(fullCollab);
+    setLocalCache(`collabs_${collab.claId}`, claCollabs);
+  }
+
   try {
-    const res = await addDoc(collection(db, "collaborators"), collab);
+    const res = await addDoc(collection(db, "collaborators"), cleanUndefined(collab));
+    fullCollab.id = res.id;
+    setLocalCache("all_collaborators", allCollabs);
     return res.id;
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
-    return "";
+    return tempId;
   }
 }
 
@@ -633,6 +795,23 @@ function sanitizeFirestoreUpdates(updates: Record<string, any>): Record<string, 
 
 export async function updateCollaborator(id: string, updates: Partial<CollaboratorInfo>): Promise<void> {
   const path = `collaborators/${id}`;
+
+  // Optimistic local cache update
+  const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
+  const target = allCollabs.find(c => c.id === id);
+  if (target) {
+    Object.assign(target, updates);
+    setLocalCache("all_collaborators", allCollabs);
+    if (target.claId) {
+      const claCollabs = getLocalCache<CollaboratorInfo[]>(`collabs_${target.claId}`, []);
+      const cIdx = claCollabs.findIndex(c => c.id === id);
+      if (cIdx >= 0) {
+        Object.assign(claCollabs[cIdx], updates);
+        setLocalCache(`collabs_${target.claId}`, claCollabs);
+      }
+    }
+  }
+
   try {
     const sanitizedUpdates = sanitizeFirestoreUpdates(updates as Record<string, any>);
     await updateDoc(doc(db, "collaborators", id), sanitizedUpdates);
@@ -643,6 +822,16 @@ export async function updateCollaborator(id: string, updates: Partial<Collaborat
 
 export async function deleteCollaborator(id: string): Promise<void> {
   const path = `collaborators/${id}`;
+
+  const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
+  const target = allCollabs.find(c => c.id === id);
+  setLocalCache("all_collaborators", allCollabs.filter(c => c.id !== id));
+
+  if (target?.claId) {
+    const claCollabs = getLocalCache<CollaboratorInfo[]>(`collabs_${target.claId}`, []);
+    setLocalCache(`collabs_${target.claId}`, claCollabs.filter(c => c.id !== id));
+  }
+
   try {
     await deleteDoc(doc(db, "collaborators", id));
   } catch (error) {
@@ -650,7 +839,7 @@ export async function deleteCollaborator(id: string): Promise<void> {
   }
 }
 
-// Request release/transfer of a reserve collaborator from another CLA
+// Request release/transfer of a reserve collaborator
 export async function requestCollaboratorTransfer(
   collaborator: CollaboratorInfo,
   targetCla: { uid: string; name: string; buildingName?: string; email?: string; phone?: string },
@@ -659,7 +848,7 @@ export async function requestCollaboratorTransfer(
   if (!collaborator.id) return;
   const path = `collaborators/${collaborator.id}`;
   const request: TransferRequestInfo = {
-    requestId: doc(collection(db, "collaborators")).id,
+    requestId: `req_${Date.now()}`,
     targetClaId: targetCla.uid,
     targetClaName: targetCla.name || targetCla.email || "CLA Solicitante",
     targetBuildingName: targetCla.buildingName,
@@ -670,27 +859,20 @@ export async function requestCollaboratorTransfer(
     notes: notes || ""
   };
 
-  try {
-    await updateDoc(doc(db, "collaborators", collaborator.id), {
-      transferRequest: request,
-      // Ensure origin CLA is recorded if not already set
-      originalClaId: collaborator.originalClaId || collaborator.claId,
-      originalClaName: collaborator.originalClaName || collaborator.claName || "CLA Mantenedor Inicial"
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await updateCollaborator(collaborator.id, {
+    transferRequest: request,
+    originalClaId: collaborator.originalClaId || collaborator.claId,
+    originalClaName: collaborator.originalClaName || collaborator.claName || "CLA Mantenedor Inicial"
+  });
 }
 
-// Maintainer CLA approves the release and transfers the collaborator to the requesting CLA
+// Approve transfer
 export async function approveCollaboratorTransfer(
   collaborator: CollaboratorInfo,
   approvedByName?: string
 ): Promise<void> {
   if (!collaborator.id || !collaborator.transferRequest) return;
-  const path = `collaborators/${collaborator.id}`;
   const req = collaborator.transferRequest;
-
   const originClaId = collaborator.originalClaId || collaborator.claId;
   const originClaName = collaborator.originalClaName || collaborator.claName || "CLA Mantenedor";
 
@@ -705,61 +887,42 @@ export async function approveCollaboratorTransfer(
 
   const updatedHistory = [...(collaborator.transferHistory || []), historyItem];
 
-  try {
-    await updateDoc(doc(db, "collaborators", collaborator.id), {
-      claId: req.targetClaId,
-      claName: req.targetClaName,
-      originalClaId: originClaId,
-      originalClaName: originClaName,
-      isReserve: true,
-      assignedRoom: "",
-      assignedRole: "",
-      transferRequest: {
-        ...req,
-        status: "Aprovado",
-        respondedAt: new Date().toISOString()
-      },
-      transferHistory: updatedHistory
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await updateCollaborator(collaborator.id, {
+    claId: req.targetClaId,
+    claName: req.targetClaName,
+    originalClaId: originClaId,
+    originalClaName: originClaName,
+    isReserve: true,
+    assignedRoom: "",
+    assignedRole: "",
+    transferRequest: {
+      ...req,
+      status: "Aprovado",
+      respondedAt: new Date().toISOString()
+    },
+    transferHistory: updatedHistory
+  });
 }
 
-// Maintainer CLA rejects the release request
-export async function rejectCollaboratorTransfer(
-  collaborator: CollaboratorInfo
-): Promise<void> {
+// Reject transfer
+export async function rejectCollaboratorTransfer(collaborator: CollaboratorInfo): Promise<void> {
   if (!collaborator.id || !collaborator.transferRequest) return;
-  const path = `collaborators/${collaborator.id}`;
-  try {
-    await updateDoc(doc(db, "collaborators", collaborator.id), {
-      transferRequest: {
-        ...collaborator.transferRequest,
-        status: "Recusado",
-        respondedAt: new Date().toISOString()
-      }
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await updateCollaborator(collaborator.id, {
+    transferRequest: {
+      ...collaborator.transferRequest,
+      status: "Recusado",
+      respondedAt: new Date().toISOString()
+    }
+  });
 }
 
-// Requester CLA cancels the request
-export async function cancelCollaboratorTransfer(
-  collaborator: CollaboratorInfo
-): Promise<void> {
+// Cancel transfer
+export async function cancelCollaboratorTransfer(collaborator: CollaboratorInfo): Promise<void> {
   if (!collaborator.id) return;
-  const path = `collaborators/${collaborator.id}`;
-  try {
-    await updateDoc(doc(db, "collaborators", collaborator.id), {
-      transferRequest: null
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await updateCollaborator(collaborator.id, {
+    transferRequest: null
+  });
 }
-
 
 // ==========================================
 // 5. Catering / Food Manager
@@ -767,33 +930,50 @@ export async function cancelCollaboratorTransfer(
 
 export function subscribeToCatering(claId: string, onUpdate: (catering: CateringInfo | null) => void) {
   const path = "catering";
+  const cacheKey = `catering_${claId}`;
+
+  const cached = getLocalCache<CateringInfo | null>(cacheKey, null);
+  if (cached) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "catering"), where("claId", "==", claId));
   return onSnapshot(q, (snapshot) => {
     if (!snapshot.empty) {
       const docVal = snapshot.docs[0];
-      onUpdate({ id: docVal.id, ...docVal.data() } as CateringInfo);
+      const data = { id: docVal.id, ...docVal.data() } as CateringInfo;
+      setLocalCache(cacheKey, data);
+      onUpdate(data);
     } else {
-      onUpdate(null);
+      const existing = getLocalCache<CateringInfo | null>(cacheKey, null);
+      if (!existing) onUpdate(null);
     }
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<CateringInfo | null>(cacheKey, null);
+    if (fallback) onUpdate(fallback);
   });
 }
 
 export async function saveCatering(catering: CateringInfo): Promise<void> {
   const path = "catering";
+  const data = cleanUndefined(catering);
+  if (catering.claId) {
+    setLocalCache(`catering_${catering.claId}`, data);
+  }
+
   try {
-    const data = cleanUndefined(catering);
     if (data.id) {
       await setDoc(doc(db, "catering", data.id), data);
     } else {
-      await addDoc(collection(db, "catering"), data);
+      const res = await addDoc(collection(db, "catering"), data);
+      data.id = res.id;
+      if (catering.claId) setLocalCache(`catering_${catering.claId}`, data);
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
-
 
 // ==========================================
 // 6. Photographic Records
@@ -801,20 +981,38 @@ export async function saveCatering(catering: CateringInfo): Promise<void> {
 
 export function subscribeToPhotos(claId: string, onUpdate: (photos: PhotoRecord[]) => void) {
   const path = "photos";
+  const cacheKey = `photos_${claId}`;
+
+  const cached = getLocalCache<PhotoRecord[]>(cacheKey, []);
+  if (cached && cached.length > 0) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "photos"), where("claId", "==", claId), orderBy("createdAt", "desc"));
   return onSnapshot(q, (snapshot) => {
     const photos: PhotoRecord[] = [];
     snapshot.forEach((doc) => {
       photos.push({ id: doc.id, ...doc.data() } as PhotoRecord);
     });
+    setLocalCache(cacheKey, photos);
     onUpdate(photos);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<PhotoRecord[]>(cacheKey, []);
+    if (fallback.length > 0) onUpdate(fallback);
   });
 }
 
 export async function addPhoto(photo: Omit<PhotoRecord, "id">): Promise<void> {
   const path = "photos";
+  const tempPhoto: PhotoRecord = { id: `photo_${Date.now()}`, ...photo };
+
+  if (photo.claId) {
+    const cached = getLocalCache<PhotoRecord[]>(`photos_${photo.claId}`, []);
+    cached.unshift(tempPhoto);
+    setLocalCache(`photos_${photo.claId}`, cached);
+  }
+
   try {
     await addDoc(collection(db, "photos"), cleanUndefined(photo));
   } catch (error) {
@@ -837,61 +1035,74 @@ export async function deletePhoto(id: string): Promise<void> {
 
 export function subscribeToClaActivities(claId: string, onUpdate: (activities: ClaActivities | null) => void) {
   const path = "claActivities";
+  const cacheKey = `cla_activities_${claId}`;
+
+  const cached = getLocalCache<ClaActivities | null>(cacheKey, null);
+  if (cached) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "claActivities"), where("claId", "==", claId));
   return onSnapshot(q, (snapshot) => {
     if (!snapshot.empty) {
       const docVal = snapshot.docs[0];
-      onUpdate({ id: docVal.id, ...docVal.data() } as ClaActivities);
+      const data = { id: docVal.id, ...docVal.data() } as ClaActivities;
+      setLocalCache(cacheKey, data);
+      onUpdate(data);
     } else {
-      onUpdate(null);
+      const existing = getLocalCache<ClaActivities | null>(cacheKey, null);
+      if (!existing) onUpdate(null);
     }
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<ClaActivities | null>(cacheKey, null);
+    if (fallback) onUpdate(fallback);
   });
 }
 
 export async function saveClaActivities(activities: ClaActivities): Promise<void> {
   const path = "claActivities";
+  const data = cleanUndefined({ ...activities });
+  if (data.id === undefined) {
+    delete data.id;
+  }
+  if (activities.claId) {
+    setLocalCache(`cla_activities_${activities.claId}`, data);
+  }
+
   try {
-    const data = cleanUndefined({ ...activities });
-    if (data.id === undefined) {
-      delete data.id;
-    }
     if (data.id) {
       await setDoc(doc(db, "claActivities", data.id), data);
     } else {
-      await addDoc(collection(db, "claActivities"), data);
+      const res = await addDoc(collection(db, "claActivities"), data);
+      data.id = res.id;
+      if (activities.claId) setLocalCache(`cla_activities_${activities.claId}`, data);
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
 
-export function subscribeToAllBuildings(onUpdate: (buildings: BuildingInfo[]) => void) {
-  const path = "buildings";
-  const q = query(collection(db, "buildings"));
-  return onSnapshot(q, (snapshot) => {
-    const buildings: BuildingInfo[] = [];
-    snapshot.forEach((doc) => {
-      buildings.push({ id: doc.id, ...doc.data() } as BuildingInfo);
-    });
-    onUpdate(buildings);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, path);
-  });
-}
-
 export function subscribeToAllClaActivities(onUpdate: (activities: ClaActivities[]) => void) {
   const path = "claActivities";
+  const cacheKey = "all_cla_activities";
+
+  const cached = getLocalCache<ClaActivities[]>(cacheKey, []);
+  if (cached && cached.length > 0) {
+    onUpdate(cached);
+  }
+
   const q = query(collection(db, "claActivities"));
   return onSnapshot(q, (snapshot) => {
     const activities: ClaActivities[] = [];
     snapshot.forEach((doc) => {
       activities.push({ id: doc.id, ...doc.data() } as ClaActivities);
     });
+    setLocalCache(cacheKey, activities);
     onUpdate(activities);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
+    const fallback = getLocalCache<ClaActivities[]>(cacheKey, []);
+    if (fallback.length > 0) onUpdate(fallback);
   });
 }
-

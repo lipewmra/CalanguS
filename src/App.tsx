@@ -201,6 +201,18 @@ export default function App() {
   const [regError, setRegError] = useState("");
   const [regLoading, setRegLoading] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isQuotaMode, setIsQuotaMode] = useState(false);
+
+  // Listen to Firestore quota status
+  useEffect(() => {
+    const handleQuotaEvent = (e: any) => {
+      setIsQuotaMode(true);
+    };
+    window.addEventListener("calangus_firestore_quota_status", handleQuotaEvent);
+    return () => {
+      window.removeEventListener("calangus_firestore_quota_status", handleQuotaEvent);
+    };
+  }, []);
 
   // Sync registration fields when currentUser overrides
   useEffect(() => {
@@ -300,10 +312,22 @@ export default function App() {
     if (isSuperAdminEmail) {
       try {
         const profile = await resolveSuperAdminAndClaProfile(user);
-        return profile;
+        if (profile) return profile;
       } catch (err) {
         console.error("Error resolving master SuperAdmin & CLA profile:", err);
       }
+      // Guaranteed offline/quota fallback for SuperAdmin
+      const fallbackMaster: UserProfile = {
+        uid: user.uid,
+        email: email,
+        emails: [email, "lipewmra@gmail.com", "philippewagnermra@gmail.com"],
+        name: user.displayName || "Philippe Wagner",
+        role: "SuperAdmin",
+        roles: ["SuperAdmin", "CLA"],
+        coordinationCode: "8520",
+        hasAccessed: true,
+      };
+      return fallbackMaster;
     }
 
     // 3. Look up if there is a pre-registered profile by email in users collection
@@ -529,6 +553,29 @@ export default function App() {
     return () => unsubEvent();
   }, [authInitialized]);
 
+  // Global pool subscriptions (network-wide pool for general reserves exchange, CLA buildings, and users)
+  useEffect(() => {
+    if (!authInitialized) return;
+
+    const unsubAllCollabs = subscribeToAllCollaborators((allList) => {
+      setAllCollaborators(allList);
+    });
+
+    const unsubAllBuildings = subscribeToAllBuildings((allB) => {
+      setAllBuildings(allB);
+    });
+
+    const unsubAllUsers = subscribeToUsers((allU) => {
+      setAllUsers(allU);
+    });
+
+    return () => {
+      unsubAllCollabs();
+      unsubAllBuildings();
+      unsubAllUsers();
+    };
+  }, [authInitialized]);
+
   // Subscribe to CLA data structures
   useEffect(() => {
     if (!authInitialized || !effectiveUser?.uid) return;
@@ -571,19 +618,6 @@ export default function App() {
       });
     }
 
-    // Subscribe to network-wide pool for general reserves exchange and CLA buildings
-    const unsubAllCollabs = subscribeToAllCollaborators((allList) => {
-      setAllCollaborators(allList);
-    });
-
-    const unsubAllBuildings = subscribeToAllBuildings((allB) => {
-      setAllBuildings(allB);
-    });
-
-    const unsubAllUsers = subscribeToUsers((allU) => {
-      setAllUsers(allU);
-    });
-
     return () => {
       unsubBuilding();
       unsubCollab();
@@ -591,9 +625,6 @@ export default function App() {
       unsubPhotos();
       unsubColegas();
       unsubActivities();
-      unsubAllCollabs();
-      unsubAllBuildings();
-      unsubAllUsers();
     };
   }, [authInitialized, effectiveUser?.uid, effectiveUser?.role, effectiveUser?.claId]);
 
@@ -878,6 +909,18 @@ export default function App() {
       ) : (
         /* CASE C: REAL LOGGED-IN WORKSPACE */
         <>
+          {/* OFFLINE / QUOTA RESILIENCE BANNER */}
+          {isQuotaMode && (
+            <div className="no-print bg-amber-500/15 border-b border-amber-500/30 text-amber-900 dark:text-amber-200 px-4 py-2 text-xs font-semibold flex items-center justify-between gap-2 shadow-xs">
+              <div className="flex items-center gap-2 max-w-5xl mx-auto w-full">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
+                <span>
+                  <strong>Modo de Cota / Persistência Local Ativo:</strong> Seus dados de salas, fiscais, fotos e configurações continuam 100% salvos e funcionais no navegador através do cache persistente offline.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* PRIMARY REAL NAVBAR (GLOWING 3D GLASS DESIGN) */}
           <header className={`no-print border-b-4 transition mb-2 py-3 px-4 md:py-0 md:px-6 md:h-20 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-0 ${isDarkMode ? "bg-[#0c1220]/80 backdrop-blur-md border-slate-900 sticky top-0 z-40" : "bg-white border-slate-200 sticky top-0 z-40"}`}>
             <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between w-full h-full gap-3 md:gap-4">

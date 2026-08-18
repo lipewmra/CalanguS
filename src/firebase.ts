@@ -1,6 +1,12 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { initializeFirestore, doc, getDocFromServer } from "firebase/firestore";
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  doc, 
+  getDocFromCache 
+} from "firebase/firestore";
 import appletConfig from "../firebase-applet-config.json";
 
 const defaultFirebaseConfig = {
@@ -29,26 +35,32 @@ const finalConfig = {
 // Initialize Firebase SDK
 const app = initializeApp(finalConfig);
 
-// Initialize Firestore with long-polling fallback for seamless sandboxed iframe support
-export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
-}, finalConfig.firestoreDatabaseId);
-
-export const auth = getAuth(app);
-
-// Validate Connection on load as per firebase skill
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, "test", "connection"));
-    console.log("Firebase Connection verified successfully.");
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("the client is offline")) {
-      console.warn("Firebase client initialized in offline-first mode, synchronizing in background.");
-    } else {
-      console.log("Database connection set up and ready to sync.");
-    }
-  }
+// Initialize Firestore with local persistent caching to preserve quota & provide offline resilience
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    }),
+    experimentalAutoDetectLongPolling: true,
+  }, finalConfig.firestoreDatabaseId);
+} catch (initErr) {
+  console.warn("Falling back to standard Firestore initialization:", initErr);
+  firestoreInstance = initializeFirestore(app, {
+    experimentalAutoDetectLongPolling: true,
+  }, finalConfig.firestoreDatabaseId);
 }
 
-testConnection();
+export const db = firestoreInstance;
+export const auth = getAuth(app);
+
+// Check cached connection without incurring forced server reads
+async function checkCachedConnection() {
+  try {
+    await getDocFromCache(doc(db, "test", "connection"));
+  } catch {
+    // Expected on fresh load
+  }
+}
+checkCachedConnection();
 
