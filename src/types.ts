@@ -211,6 +211,8 @@ export interface CollaboratorInfo {
   refusedRoleDate?: string;
   refusalTag?: string;
   attendanceConfirmedAt?: string;
+  isPresent?: boolean;
+  presenceCheckedAt?: string;
   createdAt?: string; // Form submission/registration ISO date
 }
 

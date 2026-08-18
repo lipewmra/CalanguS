@@ -60,13 +60,14 @@ import SettingsModal, { FontSizeOption, ColorThemeOption } from "./components/Se
 import FiscalAvatar from "./components/FiscalAvatar";
 import CollaboratorSettingsView from "./components/CollaboratorSettingsView";
 import MessagingCenter from "./components/MessagingCenter";
+import AttendanceListView from "./components/AttendanceListView";
 
 import { 
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
   Printer, Sun, Moon, Sparkles, HelpCircle, MapPin,
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
-  Activity, Calendar, PlusCircle, Trash2, Settings
+  Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
@@ -1172,14 +1173,15 @@ export default function App() {
                 { id: "staff", label: "2. Fiscais e Inscrições", icon: Users, iconColor: "text-sky-400" },
                 ...((effectiveRole === "CLA" || effectiveRole === "ALA") ? [
                   { id: "association", label: "3. Associação de Função", icon: UserCheck, iconColor: "text-emerald-450" },
-                  { id: "alloc", label: "4. Alocação e Reservas", icon: Layers, iconColor: "text-indigo-400" }
+                  { id: "alloc", label: "4. Alocação e Reservas", icon: Layers, iconColor: "text-indigo-400" },
+                  { id: "attendance", label: "5. Lista de Presença", icon: ClipboardCheck, iconColor: "text-emerald-400" }
                 ] : []),
-                { id: "team", label: "5. Gestão de Equipe", icon: Users, iconColor: "text-emerald-450" },
-                { id: "catering", label: "6. Alimentação", icon: Coffee, iconColor: "text-amber-400" },
-                { id: "plates", label: "7. Impressão", icon: Printer, iconColor: "text-pink-400" },
-                { id: "activities", label: "8. Atividades do CLA", icon: CheckSquare, iconColor: "text-emerald-450" },
-                { id: "collab-settings", label: "9. Dados Colaboradores", icon: Calendar, iconColor: "text-emerald-400" },
-                { id: "messages", label: "10. Mensagens & Comunicação", icon: MessageSquare, iconColor: "text-teal-400" }
+                { id: "team", label: "6. Gestão de Equipe", icon: Users, iconColor: "text-emerald-450" },
+                { id: "catering", label: "7. Alimentação", icon: Coffee, iconColor: "text-amber-400" },
+                { id: "plates", label: "8. Impressão", icon: Printer, iconColor: "text-pink-400" },
+                { id: "activities", label: "9. Atividades do CLA", icon: CheckSquare, iconColor: "text-emerald-450" },
+                { id: "collab-settings", label: "10. Dados Colaboradores", icon: Calendar, iconColor: "text-emerald-400" },
+                { id: "messages", label: "11. Mensagens & Comunicação", icon: MessageSquare, iconColor: "text-teal-400" }
               ];
 
               const renderTabContent = (tabId: string) => {
@@ -1276,6 +1278,17 @@ export default function App() {
                             ...(building?.extraRooms || [])
                           ]} 
                           onMove={handleDragAllocationMove} 
+                        />
+                      </div>
+                    ) : null;
+                  case "attendance":
+                    return (effectiveRole === "CLA" || effectiveRole === "ALA") ? (
+                      <div className="animate-fade-in">
+                        <AttendanceListView 
+                          collaborators={collaborators} 
+                          building={building}
+                          onUpdateCollaborator={updateCollaborator}
+                          readOnly={effectiveRole === "ALA"}
                         />
                       </div>
                     ) : null;
