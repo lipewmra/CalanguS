@@ -8,7 +8,7 @@ interface FiscalAvatarProps {
   role?: string;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   className?: string;
-  onClick?: () => void;
+  onClick?: (e?: any) => void;
   showZoomBadge?: boolean;
 }
 

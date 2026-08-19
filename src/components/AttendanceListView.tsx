@@ -22,20 +22,20 @@ export default function AttendanceListView({
   readOnly = false
 }: AttendanceListViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "present" | "absent" | "reserves">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "present" | "absent">("all");
   const [roomFilter, setRoomFilter] = useState<string>("all");
   const [activeExamDay, setActiveExamDay] = useState<"day1" | "day2">("day1");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [batchLoading, setBatchLoading] = useState(false);
 
-  // Filter only collaborators who are associated / allocated for the exam
-  // (having an assignedRole, assignedRoom, or status === "Confirmado", or active reserves)
+  // Filter ONLY collaborators who are allocated to a specific room for the exam
+  // (strictly allocated to a room: not in reserve and having assignedRoom)
   const allocatedCollaborators = useMemo(() => {
     return collaborators.filter(c => {
-      // Must be confirmed in the system
+      // Must not be refused or cancelled
       if (c.status === "Recusado" || c.status === "Cancelado") return false;
-      // Allocated if they have assigned role, assigned room, or are designated reserve/effective
-      return Boolean(c.assignedRole || c.assignedRoom || !c.isReserve || c.status === "Confirmado");
+      // Strictly must be allocated to a room
+      return Boolean(!c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "");
     });
   }, [collaborators]);
 

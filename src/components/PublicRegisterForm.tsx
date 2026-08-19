@@ -35,7 +35,7 @@ export default function PublicRegisterForm({
   const [cpf, setCpf] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState(initialEmail || "");
-  const [education, setEducation] = useState<any>("Ensino Superior Completo");
+  const [education, setEducation] = useState<any>("Ensino Médio");
   const [disability, setDisability] = useState("Nenhuma");
   const [hasWorkedEnem, setHasWorkedEnem] = useState(false);
   const [pixKey, setPixKey] = useState("");

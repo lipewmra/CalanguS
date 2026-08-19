@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
 import FiscalAvatar from "./FiscalAvatar";
+import { LightboxData } from "./ImageLightboxModal";
 
 interface NetworkReservesPoolProps {
   allCollaborators: CollaboratorInfo[];
@@ -20,15 +21,7 @@ interface NetworkReservesPoolProps {
     targetCla: { uid: string; name: string; buildingName?: string; email?: string; phone?: string },
     notes?: string
   ) => Promise<void>;
-  onViewPhoto?: (data: {
-    imageUrl: string;
-    name: string;
-    role?: string;
-    cpf?: string;
-    claName?: string;
-    education?: string;
-    specialRole?: string;
-  }) => void;
+  onViewPhoto?: (data: LightboxData) => void;
 }
 
 export default function NetworkReservesPool({
@@ -226,7 +219,9 @@ export default function NetworkReservesPool({
                             cpf: collab.cpf,
                             claName: originName,
                             education: collab.education,
-                            specialRole: collab.specialRole
+                            specialRole: collab.specialRole,
+                            hasWorkedEnem: collab.hasWorkedEnem,
+                            pastEditions: collab.pastEditions
                           })}
                         />
                         <h4 className="font-extrabold text-slate-900 dark:text-white text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate" title={collab.name}>

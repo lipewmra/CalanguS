@@ -497,6 +497,36 @@ export default function CollaboratorManager({
     await onUpdate(id, { status: "Recusado" });
   };
 
+  // Batch Accept All Pending Collaborators
+  const handleAcceptAllPending = async () => {
+    const pendingCollabs = collaborators.filter(c => c.status === "Pendente" && c.id);
+    if (pendingCollabs.length === 0) {
+      alert("Não há colaboradores com aprovação pendente no momento.");
+      return;
+    }
+    const confirmed = window.confirm(`Deseja aprovar e aceitar TODOS os ${pendingCollabs.length} colaboradores que aguardam aprovação?`);
+    if (!confirmed) return;
+
+    for (const collab of pendingCollabs) {
+      const updates: Partial<CollaboratorInfo> = { status: "Confirmado" };
+      if (!collab.originalClaId) {
+        updates.originalClaId = claId;
+      }
+      if (!collab.originalClaName) {
+        updates.originalClaName = currentUserName || buildingName || "CLA";
+      }
+      if (!collab.claName) {
+        updates.claName = currentUserName || buildingName || "CLA";
+      }
+      if (!collab.assignedRoom) {
+        updates.isReserve = true;
+      }
+      await onUpdate(collab.id!, updates);
+    }
+    setLocalSuccessMsg(`${pendingCollabs.length} colaboradores aprovados e confirmados com sucesso!`);
+    setTimeout(() => setLocalSuccessMsg(null), 3500);
+  };
+
   // File CSV Spreadsheet parsing implementation
   const handleSpreadsheetImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -856,7 +886,9 @@ export default function CollaboratorManager({
         sortBy, setSortBy,
         buildingName,
         () => setIsDuplicateModalOpen(true),
-        duplicateGroups.length
+        duplicateGroups.length,
+        handleAcceptAllPending,
+        collaborators.filter(c => c.status === "Pendente").length
       )}
 
       {/* SUBTAB 2: NETWORK RESERVES POOL (BANCO GERAL DE RESERVAS) */}
@@ -1194,7 +1226,9 @@ function activeTabSubList(
   setSortBy?: (s: "created_desc" | "created_asc" | "name_asc" | "name_desc") => void,
   buildingName: string = "Local de Aplicação",
   onOpenDuplicateFinder?: () => void,
-  duplicateGroupsCount: number = 0
+  duplicateGroupsCount: number = 0,
+  onAcceptAllPending?: () => void,
+  pendingCount: number = 0
 ) {
   if (activeSubTab !== "list") return null;
 
@@ -1301,19 +1335,28 @@ function activeTabSubList(
       </div>
 
       {recruitmentRequestsCount > 0 && (
-        <div className="p-3.5 bg-amber-500/10 border-2 border-amber-500/20 text-amber-800 dark:text-amber-400 rounded-xl text-xs font-bold flex items-center justify-between gap-2 animate-pulse shadow-xs">
+        <div className="p-3.5 bg-amber-500/10 border-2 border-amber-500/20 text-amber-800 dark:text-amber-400 rounded-xl text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
           <span className="flex items-center gap-1.5">
             <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0" />
             <span>Alerta CalanguS: Existem <strong>{recruitmentRequestsCount}</strong> inscrições pendentes realizadas pelo link externo de recrutamento público!</span>
           </span>
-          <span className="text-[9px] uppercase tracking-wider font-extrabold bg-amber-500/20 px-2 py-0.5 rounded font-mono border border-amber-550/10 text-amber-600">Apenas Confirmar</span>
+          {onAcceptAllPending && (
+            <button
+              type="button"
+              onClick={onAcceptAllPending}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs shrink-0"
+            >
+              <Check className="w-4 h-4 stroke-[3]" />
+              <span>ACEITAR TODOS ({recruitmentRequestsCount})</span>
+            </button>
+          )}
         </div>
       )}
 
       {/* ADVANCED FILTER & SEARCH TOOLBAR */}
       <div className="bg-slate-50 dark:bg-[#070b13]/60 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3.5">
         
-        {/* Top line: Search Input + Field Selector + CSV Export */}
+        {/* Top line: Search Input + Field Selector + Action Buttons */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           {/* Search Box */}
           <div className="flex items-center gap-2 flex-1">
@@ -1350,7 +1393,25 @@ function activeTabSubList(
             </select>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Aceitar Todos Button */}
+            {onAcceptAllPending && (
+              <button
+                type="button"
+                onClick={onAcceptAllPending}
+                disabled={pendingCount === 0}
+                className={`px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs shrink-0 ${
+                  pendingCount > 0
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse"
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60"
+                }`}
+                title={pendingCount > 0 ? `Aprovar e aceitar todos os ${pendingCount} colaboradores aguardando aprovação` : "Nenhum colaborador pendente"}
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>ACEITAR TODOS {pendingCount > 0 ? `(${pendingCount})` : ""}</span>
+              </button>
+            )}
+
             {/* Find Duplicates Button */}
             {onOpenDuplicateFinder && (
               <button
@@ -1477,10 +1538,8 @@ function activeTabSubList(
             <thead>
               <tr className="bg-slate-50 dark:bg-[#101726]/50 uppercase text-[9px] font-black text-slate-550 dark:text-slate-400 tracking-widest border-b-2 border-slate-200 dark:border-slate-800">
                 <th className="p-4">Nome Colaborador / Origem CLA</th>
-                <th className="p-4 font-mono">CPF / Chave Pix</th>
-                <th className="p-4">Função Especial</th>
+                <th className="p-4">Experiência</th>
                 <th className="p-4">Escolaridade / Deficiência</th>
-                <th className="p-4">Relação Orion</th>
                 <th className="p-4">Confirm. Cand.</th>
                 <th className="p-4 text-right">Ações</th>
               </tr>
@@ -1504,7 +1563,9 @@ function activeTabSubList(
                           cpf: c.cpf,
                           claName: originName,
                           education: c.education,
-                          specialRole: c.specialRole
+                          specialRole: c.specialRole,
+                          hasWorkedEnem: c.hasWorkedEnem,
+                          pastEditions: c.pastEditions
                         })}
                       />
                       <div className="grow min-w-0">
@@ -1570,22 +1631,40 @@ function activeTabSubList(
                     </div>
                   </td>
 
-                  {/* CPF & Pix */}
-                  <td className="p-4 font-mono">
-                    <div className="font-bold text-slate-850 dark:text-slate-200 text-xs">{c.cpf}</div>
-                    <div className="text-[10px] text-slate-400 dark:text-slate-450 mt-0.5 font-bold">PIX: {c.pixKey || "Nenhum Pix"}</div>
-                  </td>
-
-                  {/* Specialized and past enem experience */}
+                  {/* Experiência no ENEM e Função Especial */}
                   <td className="p-4">
-                    <span className="bg-indigo-500/10 text-indigo-700 dark:text-indigo-455 font-black px-2.5 py-0.5 rounded-md text-[10px] border border-indigo-500/10">
-                      {c.specialRole}
-                    </span>
-                    {c.specialRole === "Tradutor e Intérprete" && c.languages && (
-                      <div className="text-[9px] font-black text-indigo-500 dark:text-indigo-400 mt-1">Idiomas: {c.languages.join(", ")}</div>
-                    )}
-                    <div className="text-[9px] text-slate-450 dark:text-slate-400 mt-1 font-bold">
-                      {c.hasWorkedEnem ? `Trabalhou em ${c.pastEditions.length} edições` : "Novo no ENEM"}
+                    <div className="space-y-1.5 max-w-[280px]">
+                      {c.specialRole && c.specialRole !== "Nenhuma" && (
+                        <div className="inline-block">
+                          <span className="bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-black px-2.5 py-0.5 rounded-md text-[10px] border border-indigo-500/20">
+                            ★ {c.specialRole}
+                          </span>
+                          {c.specialRole === "Tradutor e Intérprete" && c.languages && c.languages.length > 0 && (
+                            <div className="text-[9px] font-black text-indigo-500 dark:text-indigo-400 mt-0.5">Idiomas: {c.languages.join(", ")}</div>
+                          )}
+                        </div>
+                      )}
+                      {c.pastEditions && c.pastEditions.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {c.pastEditions.map((pe, idx) => (
+                            <span 
+                              key={idx}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-900 dark:text-amber-300 border border-amber-500/20"
+                            >
+                              <span className="font-black font-mono text-amber-700 dark:text-amber-400">{pe.year}:</span>
+                              <span>{pe.role || "Fiscal"}</span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : c.hasWorkedEnem ? (
+                        <div className="text-[10px] text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1">
+                          <span>✓ Já atuou em edições anteriores</span>
+                        </div>
+                      ) : (c.specialRole === "Nenhuma" || !c.specialRole) ? (
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                          Novo / Sem experiência anterior
+                        </div>
+                      ) : null}
                     </div>
                   </td>
 
@@ -1593,42 +1672,6 @@ function activeTabSubList(
                   <td className="p-4">
                     <div className="text-slate-705 dark:text-slate-300 font-extrabold text-xs">{c.education}</div>
                     <div className="text-[10px] text-slate-450 dark:text-slate-400 mt-0.5">PCD: {c.disability}</div>
-                  </td>
-
-                  {/* Orion Cross-audit reports */}
-                  <td className="p-4">
-                    {c.orionStatus === "Erro" ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenDiagnostic?.(c)}
-                        className="w-full text-left bg-rose-500/10 hover:bg-rose-500/20 text-rose-800 dark:text-rose-300 border-rose-500/30 hover:border-rose-500/60 border-2 p-2 rounded-xl max-w-[220px] shadow-xs hover:shadow-md transition-all cursor-pointer group active:scale-95 block"
-                        title="Clique para abrir detalhes da falha cadastral"
-                      >
-                        <div className="flex items-center justify-between gap-1 text-[9px] font-black uppercase text-rose-700 dark:text-rose-400">
-                          <div className="flex items-center gap-1">
-                            <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 group-hover:animate-bounce" />
-                            <span>Erro Cadastral</span>
-                          </div>
-                          <span className="text-[8px] bg-rose-500/20 text-rose-700 dark:text-rose-300 px-1.5 py-0.2 rounded-md font-mono font-extrabold border border-rose-500/30">
-                            Ver Falha 🔍
-                          </span>
-                        </div>
-                        <ul className="text-[9px] list-disc list-inside mt-1 space-y-0.5 max-h-[50px] overflow-y-auto font-mono font-bold text-rose-600/90 dark:text-rose-400/90">
-                          {c.orionErrors.map((err, i) => (
-                            <li key={i} className="truncate" title={err}>{err}</li>
-                          ))}
-                        </ul>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onOpenDiagnostic?.(c)}
-                        className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:border-emerald-500/40 border-2 font-black text-[9px] px-2.5 py-1 rounded-full shadow-xs cursor-pointer transition-all active:scale-95 inline-flex items-center gap-1"
-                        title="Auditoria Orion OK - Clique para ver detalhes do cadastro"
-                      >
-                        <span>✓ Orion OK</span>
-                      </button>
-                    )}
                   </td>
 
                   {/* Confirmation status */}

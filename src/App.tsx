@@ -731,6 +731,41 @@ export default function App() {
     }
   };
 
+  // Handle Collaborator Substitution
+  const handleSubstituteCollaborator = async (replacedId: string, replacementId: string, roomNumber: string, targetRole?: string) => {
+    try {
+      const replaced = collaborators.find(c => c.id === replacedId);
+      const replacement = collaborators.find(c => c.id === replacementId);
+      if (!replaced || !replacement) return;
+
+      const role = targetRole || replaced.assignedRole || "Aplicador (Fiscal de Sala)";
+      const now = new Date().toISOString();
+
+      // 1. Replaced collaborator X returns to reserve with tag
+      await updateCollaborator(replacedId, {
+        assignedRoom: "",
+        isReserve: true,
+        isSubstituted: true,
+        substitutedBy: replacement.name,
+        substitutedById: replacement.id,
+        substitutedAt: now,
+        substitutionTag: `Substituído por ${replacement.name}`
+      });
+
+      // 2. Replacement collaborator Y takes room & role
+      await updateCollaborator(replacementId, {
+        assignedRoom: roomNumber,
+        isReserve: false,
+        assignedRole: role,
+        substitutedFor: replaced.name,
+        isSubstituted: false,
+        substitutionTag: `Substituto de ${replaced.name}`
+      });
+    } catch (err) {
+      console.error("Erro ao substituir colaborador:", err);
+    }
+  };
+
   const isDarkMode = theme === "dark";
 
 
@@ -924,7 +959,7 @@ export default function App() {
 
           {/* PRIMARY REAL NAVBAR (GLOWING 3D GLASS DESIGN) */}
           <header className={`no-print border-b-4 transition mb-2 py-3 px-4 md:py-0 md:px-6 md:h-20 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-0 ${isDarkMode ? "bg-[#0c1220]/80 backdrop-blur-md border-slate-900 sticky top-0 z-40" : "bg-white border-slate-200 sticky top-0 z-40"}`}>
-            <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between w-full h-full gap-3 md:gap-4">
+            <div className="w-full px-2 sm:px-4 lg:px-6 xl:px-8 flex flex-col md:flex-row md:items-center justify-between h-full gap-3 md:gap-4">
               {/* ROW 1: CALANGUS LOGO & TITLE */}
               <div className="flex items-center gap-3 shrink-0">
                 {/* CalanguS Program Logo Image */}
@@ -1035,7 +1070,7 @@ export default function App() {
 
       {/* CORE DISPLAY MAIN BOARD */}
       <main 
-        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6"
+        className="w-full px-2 sm:px-4 lg:px-6 xl:px-8 mt-4 md:mt-6"
       >
         
         {/* EVENT TICKER BRIEF INSTRUCTIONS CARD (glowing 3D warning/announcement design) */}
@@ -1277,7 +1312,11 @@ export default function App() {
                             ...(building?.specialRooms || []),
                             ...(building?.extraRooms || [])
                           ]} 
+                          building={building}
+                          claName={building?.claId || effectiveUser?.name || "Coordenação"}
                           onMove={handleDragAllocationMove} 
+                          onUpdateCollaborator={updateCollaborator}
+                          onSubstitute={handleSubstituteCollaborator}
                         />
                       </div>
                     ) : null;

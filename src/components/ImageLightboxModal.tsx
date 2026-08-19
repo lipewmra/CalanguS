@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
-import { X, ZoomIn, Download, User, Shield, Building2, Award } from "lucide-react";
+import { X, ZoomIn, Download, User, Shield, Building2, Award, Sparkles, Clock, CheckCircle2 } from "lucide-react";
 import { getInitials } from "../lib/image-utils";
+import { PastEdition } from "../types";
 
 export interface LightboxData {
   imageUrl: string;
@@ -10,6 +11,8 @@ export interface LightboxData {
   claName?: string;
   education?: string;
   specialRole?: string;
+  hasWorkedEnem?: boolean;
+  pastEditions?: PastEdition[];
 }
 
 interface ImageLightboxModalProps {
@@ -128,7 +131,34 @@ export default function ImageLightboxModal({ data, onClose }: ImageLightboxModal
                   <span className="truncate">{data.education}</span>
                 </div>
               )}
+              {data.specialRole && data.specialRole !== "Nenhuma" && (
+                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 sm:col-span-2">
+                  <Shield className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400">Especialidade: {data.specialRole}</span>
+                </div>
+              )}
             </div>
+
+            {/* Atuação Anterior no ENEM (mostra apenas as que foram marcadas) */}
+            {data.pastEditions && data.pastEditions.length > 0 && (
+              <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-800 space-y-2">
+                <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span>Atuação Anterior no ENEM ({data.pastEditions.length} {data.pastEditions.length === 1 ? "edição" : "edições"})</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                  {data.pastEditions.map((pe, idx) => (
+                    <span 
+                      key={idx}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500/10 text-amber-900 dark:text-amber-200 border border-amber-500/25 shadow-2xs"
+                    >
+                      <span className="font-black font-mono text-amber-600 dark:text-amber-400 bg-amber-500/20 px-1 rounded">{pe.year}</span>
+                      <span>{pe.role || "Fiscal"}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -213,6 +213,12 @@ export interface CollaboratorInfo {
   attendanceConfirmedAt?: string;
   isPresent?: boolean;
   presenceCheckedAt?: string;
+  substitutedBy?: string; // Name of person who replaced this collaborator
+  substitutedById?: string; // ID of replacing collaborator
+  substitutedFor?: string; // Name of person replaced by this collaborator
+  substitutedAt?: string; // Date of substitution
+  substitutionTag?: string; // Tag / Badge text for substitution
+  isSubstituted?: boolean; // Flag indicating collaborator was substituted and returned to reserve
   createdAt?: string; // Form submission/registration ISO date
 }
 
