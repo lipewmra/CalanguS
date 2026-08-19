@@ -3,11 +3,64 @@ import { CollaboratorInfo, BuildingInfo } from "../types";
 import { 
   Users, UserCheck, Search, Filter, Sparkles, CheckCircle, Check,
   HelpCircle, ShieldAlert, ArrowRight, RotateCcw, AlertCircle,
-  Save, ChevronDown, ChevronUp, Plus, Minus
+  Save, ChevronDown, ChevronUp, Plus, Minus, Banknote, DollarSign,
+  Award, Shield, Bath, Footprints, FileText, Building2
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
 import FiscalAvatar from "./FiscalAvatar";
 import ImageLightboxModal, { LightboxData } from "./ImageLightboxModal";
+
+export const ROLE_PAYMENTS: Record<string, string> = {
+  "Chefe de Sala": "R$ 240,00",
+  "Representante do Local": "R$ 272,20",
+  "Representante da Local": "R$ 272,20",
+  "Ledor ou Transcritor (inglês ou espanhol)": "R$ 361,91",
+  "Ledor/Transcritor": "R$ 361,91",
+  "Ledor ou Transcritor": "R$ 361,91",
+  "Apenas Ledor": "R$ 361,91",
+  "Leitor transcritor espanhol": "R$ 361,91",
+  "Leitor transcritor inglês": "R$ 361,91",
+  "Apenas leitor espanhol": "R$ 361,91",
+  "Apenas leitor inglês": "R$ 361,91",
+  "Interprete de Libras": "R$ 361,91",
+  "Aplicador": "R$ 180,00",
+  "Aplicador (Fiscal de Sala)": "R$ 180,00",
+  "Fiscal Volante": "R$ 180,00",
+  "Fiscal de Banheiro": "R$ 180,00",
+  "Auxiliar de Limpeza": "R$ 170,00",
+  "Porteiro": "R$ 170,00",
+  "Tecnico Informática": "R$ 240,00",
+  "Auxiliar de Acessibilidade": "R$ 180,00",
+};
+
+export const OFFICIAL_PAYMENT_LIST = [
+  { role: "Chefe de Sala", value: "R$ 240,00", rawValue: 240, desc: "Abertura de malotes, ata e cronometragem oficial" },
+  { role: "Representante do Local", value: "R$ 272,20", rawValue: 272.20, desc: "Apoio de infraestrutura predial e ligação operacional" },
+  { role: "Ledor ou Transcritor (inglês ou espanhol)", value: "R$ 361,91", rawValue: 361.91, desc: "Atendimento especializado a candidatos PCD e idiomas" },
+  { role: "Aplicador", value: "R$ 180,00", rawValue: 180, desc: "Distribuição e fiscalização direta em sala de prova" },
+  { role: "Fiscal Volante", value: "R$ 180,00", rawValue: 180, desc: "Circulação em corredores e suporte de trânsito" },
+  { role: "Fiscal de Banheiro", value: "R$ 180,00", rawValue: 180, desc: "Inspeção e controle nos sanitários com detector" },
+  { role: "Auxiliar de Limpeza", value: "R$ 170,00", rawValue: 170, desc: "Higienização contínua de salas e banheiros" },
+  { role: "Porteiro", value: "R$ 170,00", rawValue: 170, desc: "Controle de acesso e fechamento pontual de portões" },
+];
+
+export function getRolePayment(roleName: string): string {
+  if (!roleName) return "—";
+  if (ROLE_PAYMENTS[roleName]) return ROLE_PAYMENTS[roleName];
+  
+  const lower = roleName.toLowerCase();
+  if (lower.includes("chefe")) return "R$ 240,00";
+  if (lower.includes("representante")) return "R$ 272,20";
+  if (lower.includes("ledor") || lower.includes("leitor") || lower.includes("transcritor") || lower.includes("libras")) return "R$ 361,91";
+  if (lower.includes("aplicador")) return "R$ 180,00";
+  if (lower.includes("volante")) return "R$ 180,00";
+  if (lower.includes("banheiro")) return "R$ 180,00";
+  if (lower.includes("limpeza")) return "R$ 170,00";
+  if (lower.includes("porteiro") || lower.includes("portão")) return "R$ 170,00";
+  if (lower.includes("informática") || lower.includes("tecnico")) return "R$ 240,00";
+  
+  return "—";
+}
 
 interface AssociationViewProps {
   collaborators: CollaboratorInfo[];
@@ -31,7 +84,7 @@ export default function AssociationView({
   const [lightboxData, setLightboxData] = useState<LightboxData | null>(null);
 
   // Collapse state for target quantities
-  const [showTargetQuantitiesForm, setShowTargetQuantitiesForm] = useState(false);
+  const [showTargetQuantitiesForm, setShowTargetQuantitiesForm] = useState(true);
 
   // Dynamic active roles from building configuration or fallback to standard ENEM_ROLES
   const activeRoles = React.useMemo(() => {
@@ -103,6 +156,16 @@ export default function AssociationView({
     return acc;
   }, {} as Record<string, number>);
 
+  // Compute estimated total payment
+  const totalEstimatedPayment = associatedCollabs.reduce((sum, c) => {
+    const paymentStr = getRolePayment(c.assignedRole || "");
+    if (paymentStr && paymentStr.startsWith("R$")) {
+      const numeric = parseFloat(paymentStr.replace("R$", "").replace(".", "").replace(",", ".").trim()) || 0;
+      return sum + numeric;
+    }
+    return sum;
+  }, 0);
+
   // Handle role setting
   const handleAssignRole = async (collabId: string, roleName: string) => {
     setIsUpdatingId(collabId);
@@ -122,7 +185,7 @@ export default function AssociationView({
           // If moving to reserve, clear room; otherwise preserve room if already set
           assignedRoom: isReserve ? "" : (collab.assignedRoom || "")
         });
-        setSuccessMsg(roleName !== "" ? `Função de ${collab.name} associada para "${roleName}" com sucesso!` : `${collab.name} movido(a) para a equipe de Reserva com sucesso!`);
+        setSuccessMsg(roleName !== "" ? `Função de ${collab.name} associada para "${roleName}" (${getRolePayment(roleName)}) com sucesso!` : `${collab.name} movido(a) para a equipe de Reserva com sucesso!`);
         setTimeout(() => setSuccessMsg(null), 3000);
       }
     } catch (err) {
@@ -163,14 +226,75 @@ export default function AssociationView({
         </div>
         <div className="relative z-10">
           <span className="text-[10px] bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 px-3 py-1 rounded-full font-mono font-bold uppercase tracking-wider">
-            Menu Associação Oficial
+            Menu 3 • Associação Oficial & Remuneração
           </span>
           <h2 className="text-xl font-display font-black tracking-tight text-white mt-2">
-            Designação de Funções ENEM
+            Designação de Funções & Valores ENEM 2026
           </h2>
           <p className="text-xs text-indigo-200 mt-2 max-w-xl font-medium leading-relaxed">
-            Aqui você gerencia o quadro de colaboradores associados. Defina a função oficial de cada fiscal elegível. Aqueles sem função definida permanecerão automaticamente na <strong>Equipe Reserva</strong> para substituições rápidas.
+            Aqui você gerencia o quadro de colaboradores associados e confere a <strong>remuneração oficial</strong> de cada função. Defina a função de cada fiscal elegível. Aqueles sem função definida permanecerão automaticamente na <strong>Equipe Reserva</strong>.
           </p>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* TABELA OFICIAL DE REMUNERAÇÃO POR CARGO (DESTAQUE VISUAL SOLICITADO) */}
+      {/* ========================================================================= */}
+      <div className="bg-white dark:bg-[#101726]/90 border-2 border-emerald-500/30 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(16,185,129,0.15)] relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b-2 border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black">
+              <Banknote className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-display font-black text-slate-850 dark:text-white flex items-center gap-2">
+                <span>Valores Oficiais de Remuneração por Cargo</span>
+                <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono font-bold px-2 py-0.5 rounded-full border border-emerald-500/20 uppercase">
+                  ENEM 2026
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                Tabela de diária/honorários por função para colaboradores de aplicação
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-1.5 text-right">
+              <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 block uppercase">Folha Estimada:</span>
+              <span className="font-mono font-black text-xs text-emerald-700 dark:text-emerald-400">
+                R$ {totalEstimatedPayment.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Official Role Values Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          {OFFICIAL_PAYMENT_LIST.map((item) => (
+            <div
+              key={item.role}
+              className="p-3 bg-slate-50 dark:bg-[#070b13]/60 border-2 border-slate-200 dark:border-slate-800/80 rounded-2xl hover:border-emerald-500/50 transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="text-xs font-black text-slate-850 dark:text-white truncate" title={item.role}>
+                    {item.role}
+                  </span>
+                </div>
+                <p className="text-[9.5px] text-slate-400 dark:text-slate-500 font-medium line-clamp-2 leading-tight">
+                  {item.desc}
+                </p>
+              </div>
+
+              <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between">
+                <span className="text-[9px] font-mono font-bold text-slate-400 uppercase">Valor:</span>
+                <span className="font-mono font-black text-xs bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-lg border border-emerald-500/30">
+                  {item.value}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -225,7 +349,7 @@ export default function AssociationView({
         </div>
       </div>
 
-      {/* Planning of Target Quantities Card */}
+      {/* Planning of Target Quantities Card with Value of each role */}
       <div className="bg-white dark:bg-[#101726]/80 rounded-2xl border-2 border-slate-150 dark:border-slate-800 p-5 shadow-xs relative overflow-hidden">
         <div className="flex items-center justify-between cursor-pointer select-none" onClick={() => setShowTargetQuantitiesForm(!showTargetQuantitiesForm)}>
           <div className="flex items-center gap-3">
@@ -234,16 +358,16 @@ export default function AssociationView({
             </span>
             <div>
               <h3 className="text-sm font-black text-slate-800 dark:text-white">
-                📋 Planejamento de Metas de Contratação por Função
+                📋 Planejamento de Metas de Contratação por Função & Valores
               </h3>
               <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-                Defina a quantidade de colaboradores necessária para cada função no local de aplicação
+                Defina o quantitativo necessário para cada cargo e confira o valor unitário
               </p>
             </div>
           </div>
           <button 
             type="button"
-            className="p-1 px-3 rounded-lg text-xs font-black transition flex items-center gap-1 shadow-sm hover:brightness-105"
+            className="p-1 px-3 rounded-lg text-xs font-black transition flex items-center gap-1 shadow-sm hover:brightness-105 cursor-pointer"
             style={{ backgroundColor: "#fcff05", color: "#0062fe" }}
           >
             {showTargetQuantitiesForm ? (
@@ -265,45 +389,61 @@ export default function AssociationView({
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
               {activeRoles.map((role) => {
                 const currentQty = targetQuantities[role.name] || 0;
+                const rolePayment = getRolePayment(role.name);
                 return (
                   <div 
                     key={role.id || role.name} 
-                    className="p-3 bg-slate-50 dark:bg-[#070b13]/40 border border-slate-150 dark:border-slate-850 rounded-xl space-y-2 flex flex-col justify-between"
+                    className="p-3.5 bg-slate-50 dark:bg-[#070b13]/40 border-2 border-slate-200 dark:border-slate-800 rounded-2xl space-y-2 flex flex-col justify-between hover:border-indigo-400 transition"
                   >
                     <div>
-                      <span className="text-[10px] font-mono uppercase font-black text-slate-500 dark:text-slate-400 block tracking-wider truncate" title={role.name}>
-                        {role.name}
-                      </span>
-                      <p className="text-[9px] text-slate-450 dark:text-slate-500 font-semibold leading-tight line-clamp-2" title={role.desc}>
+                      <div className="flex items-start justify-between gap-1">
+                        <span className="text-[11px] font-mono uppercase font-black text-slate-800 dark:text-slate-200 block tracking-wider truncate" title={role.name}>
+                          {role.name}
+                        </span>
+                        <span className="font-mono font-black text-[10px] bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/20 shrink-0">
+                          {rolePayment}
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 dark:text-slate-500 font-semibold leading-tight line-clamp-2 mt-1" title={role.desc}>
                         {role.desc}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1 mt-1">
-                      <button
-                        type="button"
-                        disabled={readOnly || !building}
-                        onClick={() => handleQuantityChange(role.name, currentQty - 1)}
-                        className="bg-slate-150 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 p-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <input
-                        type="number"
-                        min="0"
-                        disabled={readOnly || !building}
-                        value={currentQty}
-                        onChange={(e) => handleQuantityChange(role.name, parseInt(e.target.value) || 0)}
-                        className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-lg p-1.5 text-center text-xs font-black text-slate-850 dark:text-slate-200 focus:outline-hidden"
-                      />
-                      <button
-                        type="button"
-                        disabled={readOnly || !building}
-                        onClick={() => handleQuantityChange(role.name, currentQty + 1)}
-                        className="bg-slate-150 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 p-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="space-y-1.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                      <div className="flex items-center justify-between text-[9px] font-bold text-slate-400">
+                        <span>Meta de Fiscais:</span>
+                        {currentQty > 0 && rolePayment !== "—" && (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-mono">
+                            Subtotal: R$ {(parseFloat(rolePayment.replace("R$", "").replace(".", "").replace(",", ".").trim()) * currentQty).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={readOnly || !building}
+                          onClick={() => handleQuantityChange(role.name, currentQty - 1)}
+                          className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 p-2 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={readOnly || !building}
+                          value={currentQty}
+                          onChange={(e) => handleQuantityChange(role.name, parseInt(e.target.value) || 0)}
+                          className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl p-1.5 text-center text-xs font-black text-slate-850 dark:text-slate-200 focus:outline-hidden"
+                        />
+                        <button
+                          type="button"
+                          disabled={readOnly || !building}
+                          onClick={() => handleQuantityChange(role.name, currentQty + 1)}
+                          className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 p-2 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -324,24 +464,25 @@ export default function AssociationView({
         )}
       </div>
 
-      {/* Role breakdown grid */}
+      {/* Role breakdown grid with role payment */}
       <details open className="bg-slate-50 dark:bg-[#070b13]/40 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 cursor-pointer group">
         <summary className="font-extrabold text-xs text-indigo-700 dark:text-indigo-400 select-none flex items-center justify-between focus:outline-hidden hover:text-indigo-600">
           <div className="flex items-center gap-2">
             <span>📊</span>
-            <span>Ver Gráfico de Cobertura de Cargos do Prédio</span>
+            <span>Ver Cobertura de Cargos e Valores do Prédio</span>
           </div>
           <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full group-open:hidden">Abrir Resumo</span>
-          <span className="text-[10px] font-black uppercase text-indigo-500 bg-indigo-505/10 px-2 py-0.5 rounded-full hidden group-open:inline-block">Fechar Resumo</span>
+          <span className="text-[10px] font-black uppercase text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full hidden group-open:inline-block">Fechar Resumo</span>
         </summary>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3 mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 cursor-default">
           {activeRoles.map(role => {
             const count = roleCounts[role.name] || 0;
             const target = targetQuantities[role.name] || 0;
-            const pct = target > 0 ? Math.min(Math.round((count / target) * 105), 100) : 0;
+            const pct = target > 0 ? Math.min(Math.round((count / target) * 100), 100) : 0;
             const isComplete = target > 0 && count >= target;
             const hasUnder = target > 0 && count < target;
+            const rolePayment = getRolePayment(role.name);
 
             return (
               <div 
@@ -360,6 +501,9 @@ export default function AssociationView({
                   <h4 className="text-[10px] font-black text-slate-850 dark:text-slate-300 truncate" title={role.name}>
                     {role.name}
                   </h4>
+                  <span className="inline-block text-[9px] font-mono font-black text-emerald-700 dark:text-emerald-400 mt-0.5">
+                    {rolePayment}
+                  </span>
                   <div className="text-xl font-black mt-1 font-mono text-slate-900 dark:text-white">
                     {count}
                     {target > 0 && (
@@ -381,7 +525,7 @@ export default function AssociationView({
                       />
                     </div>
                     <div className="flex justify-between items-center text-[7.5px] font-black">
-                      <span className={isComplete ? "text-emerald-500" : hasUnder ? "text-amber-505" : "text-slate-400"}>
+                      <span className={isComplete ? "text-emerald-500" : hasUnder ? "text-amber-500" : "text-slate-400"}>
                         {pct}%
                       </span>
                       <span className="text-[7.5px] font-semibold text-slate-450">
@@ -425,7 +569,9 @@ export default function AssociationView({
               <option value="associated">Apenas Associados</option>
               <option value="unassociated">Apenas Reservas (Não Associados)</option>
               {ENEM_ROLES.map(role => (
-                <option key={role.name} value={role.name}>{role.name}</option>
+                <option key={role.name} value={role.name}>
+                  {role.name} — ({getRolePayment(role.name)})
+                </option>
               ))}
             </select>
           </div>
@@ -441,6 +587,8 @@ export default function AssociationView({
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((collab) => {
               const isAssigned = collab.assignedRole && collab.assignedRole !== "";
+              const currentPayment = isAssigned ? getRolePayment(collab.assignedRole!) : null;
+
               return (
                 <div 
                   key={collab.id}
@@ -451,9 +599,9 @@ export default function AssociationView({
                   } ${isUpdatingId === collab.id ? "opacity-50 scale-95" : ""}`}
                 >
                   <div>
-                    {/* Header: Name and badges */}
+                    {/* Header: Name, photo and badges */}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <FiscalAvatar
                           photoUrl={collab.photoUrl}
                           name={collab.name}
@@ -467,30 +615,41 @@ export default function AssociationView({
                             specialRole: collab.specialRole
                           })}
                         />
-                        <div className="truncate">
+                        <div className="truncate min-w-0 flex-1">
                           <h4 className="font-extrabold text-[#111827] dark:text-white text-sm truncate" title={collab.name}>
                             {collab.name}
                           </h4>
-                          <p className="text-[10px] text-slate-405 font-mono font-bold mt-0.5">{collab.cpf} • {collab.whatsapp}</p>
+                          <p className="text-[10px] text-slate-405 font-mono font-bold mt-0.5 truncate">
+                            {collab.cpf} • {collab.whatsapp}
+                          </p>
                         </div>
                       </div>
                       
-                      {isAssigned ? (
-                        <span className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-505/10 shrink-0">
-                          Associado
-                        </span>
-                      ) : (
-                        <span className="bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-505/10 shrink-0">
-                          Reserva
-                        </span>
-                      )}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {isAssigned ? (
+                          <>
+                            <span className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-505/10">
+                              Associado
+                            </span>
+                            {currentPayment && (
+                              <span className="text-[9px] font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                                {currentPayment}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-505/10">
+                            Reserva
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Metadata attributes */}
                     <div className="mt-2.5 space-y-1 bg-slate-50 dark:bg-[#070b13]/60 rounded-xl p-2.5 border border-slate-100 dark:border-slate-800 text-[10px]">
                       <div className="flex justify-between font-bold">
                         <span className="text-slate-400">Escolaridade:</span>
-                        <span className="text-slate-700 dark:text-slate-300 truncate max-w-[120px]" title={collab.education}>{collab.education}</span>
+                        <span className="text-slate-700 dark:text-slate-300 truncate max-w-[140px]" title={collab.education}>{collab.education}</span>
                       </div>
                       
                       {collab.disability && collab.disability !== "Nenhuma" && (
@@ -503,7 +662,7 @@ export default function AssociationView({
                       <div className="flex justify-between font-bold">
                         <span className="text-slate-400">Exp. ENEM:</span>
                         <span className="text-slate-700 dark:text-slate-200">
-                          {collab.hasWorkedEnem ? `Sim, ${collab.pastEditions.length} edições` : "Nenhum histórico"}
+                          {collab.hasWorkedEnem ? `Sim, ${collab.pastEditions?.length || 1} edições` : "Nenhum histórico"}
                         </span>
                       </div>
 
@@ -548,9 +707,16 @@ export default function AssociationView({
 
                   {/* Association Action Block */}
                   <div className="mt-4 pt-3.5 border-t border-slate-150 dark:border-slate-800">
-                    <label className="block text-[9px] uppercase font-black text-slate-400 mb-1.5 tracking-wider">
-                      Designar Função do ENEM:
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[9px] uppercase font-black text-slate-400 tracking-wider">
+                        Designar Função do ENEM:
+                      </label>
+                      {collab.assignedRole && (
+                        <span className="text-[9.5px] font-mono font-black text-emerald-600 dark:text-emerald-400">
+                          {getRolePayment(collab.assignedRole)}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <select
                         value={collab.assignedRole || ""}
@@ -560,7 +726,9 @@ export default function AssociationView({
                       >
                         <option value="">-- Mover p/ Reserva --</option>
                         {activeRoles.map(role => (
-                          <option key={role.id || role.name} value={role.name}>{role.name}</option>
+                          <option key={role.id || role.name} value={role.name}>
+                            {role.name} ({getRolePayment(role.name)})
+                          </option>
                         ))}
                       </select>
 
@@ -570,7 +738,7 @@ export default function AssociationView({
                           disabled={readOnly}
                           onClick={() => handleAssignRole(collab.id!, "")}
                           title="Voltar Colaborador para Reserva"
-                          className="bg-rose-500/10 text-rose-600 dark:text-rose-400 p-2.5 rounded-xl hover:bg-rose-550/20 border border-transparent hover:border-rose-500/25 transition cursor-pointer"
+                          className="bg-rose-500/10 text-rose-600 dark:text-rose-400 p-2.5 rounded-xl hover:bg-rose-500/20 border border-transparent hover:border-rose-500/25 transition cursor-pointer"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
                         </button>

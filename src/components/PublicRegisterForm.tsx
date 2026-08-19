@@ -351,11 +351,16 @@ export default function PublicRegisterForm({
                 <Users className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-lg md:text-xl font-display font-black text-slate-800 dark:text-white uppercase tracking-wider">
-                  Pré-Inscrição de Fiscais — ENEM 2026
-                </h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg md:text-xl font-display font-black text-slate-800 dark:text-white uppercase tracking-wider">
+                    Pré-Inscrição de Fiscais — ENEM 2026
+                  </h1>
+                  <span className="text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
+                    v2.0
+                  </span>
+                </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                  Portal Público CalanguS. Preencha seus dados abaixo para se credenciar à equipe de fiscais de sala e pessoal de apoio técnico.
+                  Portal Público CalanguS v2.0. Preencha seus dados abaixo para se credenciar à equipe de fiscais de sala e pessoal de apoio técnico.
                 </p>
               </div>
             </div>

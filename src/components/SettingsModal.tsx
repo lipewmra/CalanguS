@@ -180,9 +180,14 @@ export default function SettingsModal({
               <Settings className="w-6 h-6 animate-spin-slow" />
             </div>
             <div>
-              <h3 className="font-display font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">
-                Configurações do Sistema
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">
+                  Configurações do Sistema
+                </h3>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black">
+                  CalanguS v2.0
+                </span>
+              </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                 Personalize sua foto de perfil, tamanho das letras e esquema de cores
               </p>
@@ -425,13 +430,18 @@ export default function SettingsModal({
 
         {/* Footer */}
         <div className="px-6 py-4 border-t-2 border-slate-100 dark:border-slate-850 bg-slate-50/80 dark:bg-slate-900/80 flex items-center justify-between gap-4">
-          <button
-            onClick={handleResetDefaults}
-            className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white flex items-center gap-1.5 font-bold cursor-pointer transition"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Restaurar Padrões</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleResetDefaults}
+              className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white flex items-center gap-1.5 font-bold cursor-pointer transition"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Restaurar Padrões</span>
+            </button>
+            <span className="text-[10px] text-slate-400 dark:text-slate-600 font-mono font-bold hidden sm:inline">
+              CalanguS v2.0 (Build 2026)
+            </span>
+          </div>
 
           <button
             onClick={onClose}
