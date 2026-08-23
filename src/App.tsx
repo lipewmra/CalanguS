@@ -67,7 +67,7 @@ import {
   Printer, Sun, Moon, Sparkles, HelpCircle, MapPin,
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
-  Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck
+  Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck, Clock
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
@@ -1444,6 +1444,8 @@ export default function App() {
                     {currentMenuItems.map((item) => {
                       const IconComp = item.icon;
                       const isActive = activeTab === item.id;
+                      const pendingTransfers = item.id === "staff" ? (collaborators || []).filter(c => c.transferRequest && c.transferRequest.status === "Pendente").length : 0;
+
                       return (
                         <div key={item.id} className="w-full space-y-3">
                           <button
@@ -1460,7 +1462,14 @@ export default function App() {
                               <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
                               <span>{item.label}</span>
                             </div>
-                            <ChevronDown className={`w-4 h-4 transition-transform duration-200 shrink-0 ${isActive ? "rotate-180 text-white" : "text-slate-400"}`} />
+                            <div className="flex items-center gap-2">
+                              {pendingTransfers > 0 && (
+                                <span className="bg-amber-400 text-slate-950 font-black text-[9px] px-1.5 py-0.5 rounded-full animate-pulse shadow-sm">
+                                  {pendingTransfers} {pendingTransfers === 1 ? "pedido" : "pedidos"}
+                                </span>
+                              )}
+                              <ChevronDown className={`w-4 h-4 transition-transform duration-200 shrink-0 ${isActive ? "rotate-180 text-white" : "text-slate-400"}`} />
+                            </div>
                           </button>
 
                           {isActive && (
@@ -1476,6 +1485,8 @@ export default function App() {
                   {/* DESKTOP NAVIGATION VIEW (SIDEBAR + CONTENT PANEL) */}
                   {(() => {
                     const desktopActiveTab = activeTab || currentMenuItems[0]?.id || "building";
+                    const pendingTransfersCount = (collaborators || []).filter(c => c.transferRequest && c.transferRequest.status === "Pendente").length;
+
                     return (
                       <div className="hidden lg:flex lg:flex-row gap-6 items-start w-full">
                         <div className={`no-print shrink-0 space-y-3 transition-all duration-300 ${isSidebarCollapsed ? "w-16" : "w-64"}`}>
@@ -1505,12 +1516,14 @@ export default function App() {
                           {currentMenuItems.map((item) => {
                             const IconComp = item.icon;
                             const isActive = desktopActiveTab === item.id;
+                            const isStaffMenuWithTransfers = item.id === "staff" && pendingTransfersCount > 0;
+
                             return (
                               <button
                                 key={item.id}
                                 onClick={() => setActiveTab(item.id)}
                                 title={item.label}
-                                className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3" : "justify-start px-4 py-3.5"} ${
+                                className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3 relative" : "justify-between px-4 py-3.5"} ${
                                   isActive
                                     ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]"
                                     : isDarkMode
@@ -1522,6 +1535,15 @@ export default function App() {
                                   <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
                                   {!isSidebarCollapsed && <span>{item.label}</span>}
                                 </div>
+                                {isStaffMenuWithTransfers && (
+                                  isSidebarCollapsed ? (
+                                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
+                                  ) : (
+                                    <span className="bg-amber-400 text-slate-950 font-black text-[9px] px-1.5 py-0.5 rounded-full animate-pulse shadow-sm">
+                                      {pendingTransfersCount}
+                                    </span>
+                                  )
+                                )}
                               </button>
                             );
                           })}
@@ -1549,6 +1571,22 @@ export default function App() {
 
                         {/* DESKTOP TAB CONTENT PANEL */}
                         <div className="flex-1 min-w-0 w-full space-y-6">
+                          {pendingTransfersCount > 0 && desktopActiveTab !== "staff" && (
+                            <div className="no-print p-4 bg-amber-500/10 border-2 border-amber-500/30 text-amber-900 dark:text-amber-300 rounded-2xl flex items-center justify-between gap-4 text-xs font-bold shadow-xs">
+                              <div className="flex items-center gap-2.5">
+                                <Clock className="w-5 h-5 text-amber-500 shrink-0 animate-pulse" />
+                                <span>
+                                  Você possui <strong>{pendingTransfersCount}</strong> pedido(s) de liberação/transferência de colaboradores de outros CLAs aguardando resposta no Menu 2 (Fiscais e Inscrições).
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => setActiveTab("staff")}
+                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black shrink-0 cursor-pointer shadow-xs active:scale-95 transition"
+                              >
+                                Ver e Responder Pedidos
+                              </button>
+                            </div>
+                          )}
                           {renderTabContent(desktopActiveTab)}
                         </div>
                       </div>

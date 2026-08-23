@@ -779,13 +779,21 @@ export async function addCollaborator(collab: Omit<CollaboratorInfo, "id">): Pro
   }
 }
 
-function sanitizeFirestoreUpdates(updates: Record<string, any>): Record<string, any> {
+function sanitizeFirestoreUpdates(updates: Record<string, any>, isRoot = true): Record<string, any> {
   const sanitized: Record<string, any> = {};
   for (const [key, val] of Object.entries(updates)) {
     if (val === undefined) {
-      sanitized[key] = deleteField();
-    } else if (val !== null && typeof val === "object" && !Array.isArray(val) && !(val instanceof Date)) {
-      sanitized[key] = sanitizeFirestoreUpdates(val);
+      if (isRoot) {
+        sanitized[key] = deleteField();
+      }
+    } else if (val === null) {
+      if (isRoot) {
+        sanitized[key] = deleteField();
+      } else {
+        sanitized[key] = null;
+      }
+    } else if (typeof val === "object" && !Array.isArray(val) && !(val instanceof Date)) {
+      sanitized[key] = sanitizeFirestoreUpdates(val, false);
     } else {
       sanitized[key] = val;
     }
@@ -800,15 +808,34 @@ export async function updateCollaborator(id: string, updates: Partial<Collaborat
   const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
   const target = allCollabs.find(c => c.id === id);
   if (target) {
+    const oldClaId = target.claId;
     Object.assign(target, updates);
     setLocalCache("all_collaborators", allCollabs);
-    if (target.claId) {
-      const claCollabs = getLocalCache<CollaboratorInfo[]>(`collabs_${target.claId}`, []);
-      const cIdx = claCollabs.findIndex(c => c.id === id);
-      if (cIdx >= 0) {
-        Object.assign(claCollabs[cIdx], updates);
-        setLocalCache(`collabs_${target.claId}`, claCollabs);
+
+    // Sync old CLA cache
+    if (oldClaId) {
+      const oldClaCollabs = getLocalCache<CollaboratorInfo[]>(`collabs_${oldClaId}`, []);
+      if (updates.claId && updates.claId !== oldClaId) {
+        setLocalCache(`collabs_${oldClaId}`, oldClaCollabs.filter(c => c.id !== id));
+      } else {
+        const cIdx = oldClaCollabs.findIndex(c => c.id === id);
+        if (cIdx >= 0) {
+          Object.assign(oldClaCollabs[cIdx], updates);
+          setLocalCache(`collabs_${oldClaId}`, oldClaCollabs);
+        }
       }
+    }
+
+    // Sync new CLA cache
+    if (updates.claId && updates.claId !== oldClaId) {
+      const newClaCollabs = getLocalCache<CollaboratorInfo[]>(`collabs_${updates.claId}`, []);
+      const nIdx = newClaCollabs.findIndex(c => c.id === id);
+      if (nIdx >= 0) {
+        Object.assign(newClaCollabs[nIdx], target);
+      } else {
+        newClaCollabs.push(target);
+      }
+      setLocalCache(`collabs_${updates.claId}`, newClaCollabs);
     }
   }
 
@@ -847,13 +874,16 @@ export async function requestCollaboratorTransfer(
 ): Promise<void> {
   if (!collaborator.id) return;
   const path = `collaborators/${collaborator.id}`;
+  const originClaId = collaborator.originalClaId || collaborator.claId;
+  const originClaName = collaborator.originalClaName || collaborator.claName || "CLA Mantenedor Inicial";
+
   const request: TransferRequestInfo = {
     requestId: `req_${Date.now()}`,
     targetClaId: targetCla.uid,
     targetClaName: targetCla.name || targetCla.email || "CLA Solicitante",
-    targetBuildingName: targetCla.buildingName,
-    targetUserEmail: targetCla.email,
-    targetClaPhone: targetCla.phone,
+    targetBuildingName: targetCla.buildingName || "",
+    targetUserEmail: targetCla.email || "",
+    targetClaPhone: targetCla.phone || "",
     requestedAt: new Date().toISOString(),
     status: "Pendente",
     notes: notes || ""
@@ -861,8 +891,8 @@ export async function requestCollaboratorTransfer(
 
   await updateCollaborator(collaborator.id, {
     transferRequest: request,
-    originalClaId: collaborator.originalClaId || collaborator.claId,
-    originalClaName: collaborator.originalClaName || collaborator.claName || "CLA Mantenedor Inicial"
+    originalClaId: originClaId,
+    originalClaName: originClaName
   });
 }
 

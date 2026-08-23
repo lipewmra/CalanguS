@@ -612,7 +612,27 @@ export default function AssociationView({
                             role: collab.assignedRole || "Fiscal Reserva",
                             cpf: collab.cpf,
                             education: collab.education,
-                            specialRole: collab.specialRole
+                            specialRole: collab.specialRole,
+                            hasWorkedEnem: collab.hasWorkedEnem,
+                            pastEditions: collab.pastEditions,
+                            email: collab.email,
+                            whatsapp: collab.whatsapp,
+                            birthDate: collab.birthDate,
+                            disability: collab.disability,
+                            languages: collab.languages,
+                            pixKey: collab.pixKey,
+                            referencePerson: collab.referencePerson,
+                            assignedRoom: collab.assignedRoom,
+                            status: collab.status,
+                            attendanceStatus: collab.attendanceStatus,
+                            refusedRole: collab.refusedRole,
+                            refusalTag: collab.refusalTag,
+                            createdAt: collab.createdAt,
+                            isExternalRecruit: collab.isExternalRecruit,
+                            paymentValue: currentPayment || undefined,
+                            claName: collab.claName || building?.name,
+                            originalClaName: collab.originalClaName,
+                            transferHistory: collab.transferHistory
                           })}
                         />
                         <div className="truncate min-w-0 flex-1">

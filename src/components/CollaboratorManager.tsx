@@ -1561,11 +1561,27 @@ function activeTabSubList(
                           name: c.name,
                           role: c.assignedRole || (c.isReserve ? "Fiscal Reserva" : "Fiscal de Sala"),
                           cpf: c.cpf,
-                          claName: originName,
+                          claName: c.claName || originName,
+                          originalClaName: c.originalClaName || originName,
                           education: c.education,
                           specialRole: c.specialRole,
                           hasWorkedEnem: c.hasWorkedEnem,
-                          pastEditions: c.pastEditions
+                          pastEditions: c.pastEditions,
+                          email: c.email,
+                          whatsapp: c.whatsapp,
+                          birthDate: c.birthDate,
+                          disability: c.disability,
+                          languages: c.languages,
+                          pixKey: c.pixKey,
+                          referencePerson: c.referencePerson,
+                          assignedRoom: c.assignedRoom,
+                          status: c.status,
+                          attendanceStatus: c.attendanceStatus,
+                          refusedRole: c.refusedRole,
+                          refusalTag: c.refusalTag,
+                          createdAt: c.createdAt,
+                          isExternalRecruit: c.isExternalRecruit,
+                          transferHistory: c.transferHistory
                         })}
                       />
                       <div className="grow min-w-0">
