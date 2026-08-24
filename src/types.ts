@@ -33,6 +33,13 @@ export interface RoomDetails {
   capacity: number;
   floor: string;
   details?: string;
+  type?: "regular" | "special" | "extra";
+  targetChefes?: number;
+  targetAplicadores?: number;
+  targetLedores?: number;
+  targetLibras?: number;
+  targetAcessibilidade?: number;
+  customRoleTargets?: Record<string, number>;
 }
 
 export interface CollaboratorScheduleItem {
@@ -268,6 +275,43 @@ export interface PhotoRecord {
   createdAt: string;
 }
 
+export interface CollaboratorMetricsConfig {
+  // Salas Regulares
+  chefesPerRegularRoom: number; // 1 por sala
+  aplicadoresPerRegularRoom: number; // 1 (ou 2 se > 60 participantes)
+  aplicadoresDuplaThreshold?: number; // 60 participantes
+  
+  // Salas de Atendimento Especializado (PCD / Acessibilidade)
+  chefesPerSpecialRoom: number; // 1 por sala
+  aplicadoresPerSpecialRoom: number; // 0 ou 1 se muitos candidatos
+  ledoresPerSpecialRoom: number; // 2 por sala (Atuação em dupla)
+  transcritoresPerSpecialRoom: number; // 1 por sala/participante (Atuação individual)
+  tradutoresLibrasPerSpecialRoom: number; // 2 por sala (Atuação em dupla)
+  guiaInterpretesPerSpecialRoom: number; // 3 por sala (Atuação em trio)
+  tecnicosInformaticaPerTechRoom: number; // 1 por sala com Videoprova/Leitor
+  auxiliarAcessibilidadePerSpecialRoom: number;
+  ledorTranscritorPerSpecialRoom?: number; // legacy alias
+  interpreteLibrasPerSpecialRoom?: number; // legacy alias
+
+  // Salas Extras / Contingência
+  chefesPerExtraRoom: number; // 1 por sala
+  aplicadoresPerExtraRoom: number; // 1 por sala
+
+  // Apoio e Circulação por Prédio / Coordenação (Tabela Escalonada ou Customizável)
+  useOfficialTiersForCorredorAndBanheiro: boolean; // 01-15 (2); 16-30 (4); 31-45 (6); 46-52 (8); 53-59 (10); 60-66 (12)
+  fiscaisCorredorPerRoomsRatio: number; // Se personalizado
+  fiscaisBanheiroPerBuilding: number;   // Se personalizado
+  porteirosPerBuilding: number;
+  auxiliaresLimpezaPerBuilding: number;
+  tecnicosInformaticaPerBuilding: number;
+  representanteLocalPerBuilding: number;
+
+  // Reserva Técnica (%)
+  reservaPercentage: number; // ex: 10%
+
+  notes?: string;
+}
+
 export interface EventConfigInfo {
   id: string;
   year: number;
@@ -275,6 +319,7 @@ export interface EventConfigInfo {
   trainingDates: string[];
   generalInstructions: string;
   initialClaTasks: string[];
+  collaboratorMetrics?: CollaboratorMetricsConfig;
 }
 
 export interface ClaActivities {

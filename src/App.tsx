@@ -67,7 +67,8 @@ import {
   Printer, Sun, Moon, Sparkles, HelpCircle, MapPin,
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
-  Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck, Clock
+  Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck, Clock,
+  SlidersHorizontal
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
@@ -1215,7 +1216,8 @@ export default function App() {
                 { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
                 { id: "admin-directives", label: "2. Diretivas Gerais", icon: Calendar, iconColor: "text-sky-400" },
                 { id: "admin-profiles", label: "3. Gestão de Perfis", icon: Users, iconColor: "text-indigo-400" },
-                { id: "admin-register", label: "4. Cadastrar CLA/Admin", icon: PlusCircle, iconColor: "text-amber-400" }
+                { id: "admin-register", label: "4. Cadastrar CLA/Admin", icon: PlusCircle, iconColor: "text-amber-400" },
+                { id: "admin-metrics", label: "5. Métricas de Colaborador", icon: SlidersHorizontal, iconColor: "text-teal-400" }
               ] : [
                 { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
                 { id: "staff", label: "2. Fiscais e Inscrições", icon: Users, iconColor: "text-sky-400" },
@@ -1256,6 +1258,12 @@ export default function App() {
                     return effectiveRole === "SuperAdmin" ? (
                       <div className="animate-fade-in">
                         <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="register" />
+                      </div>
+                    ) : null;
+                  case "admin-metrics":
+                    return effectiveRole === "SuperAdmin" ? (
+                      <div className="animate-fade-in">
+                        <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="metrics" />
                       </div>
                     ) : null;
                   case "building":
@@ -1306,6 +1314,7 @@ export default function App() {
                           readOnly={false}
                           building={building}
                           onSaveBuilding={saveBuilding}
+                          eventConfig={eventConfig}
                         />
                       </div>
                     ) : null;
@@ -1330,6 +1339,8 @@ export default function App() {
                           onMove={handleDragAllocationMove} 
                           onUpdateCollaborator={updateCollaborator}
                           onSubstitute={handleSubstituteCollaborator}
+                          eventConfig={eventConfig}
+                          onSaveBuilding={saveBuilding}
                         />
                       </div>
                     ) : null;

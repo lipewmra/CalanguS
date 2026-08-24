@@ -90,20 +90,24 @@ export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "c
 }
 
 export const ENEM_ROLES = [
-  { name: "Aplicador", desc: "Entrega cadernos de provas, fiscaliza candidatos e preenche a ata de sala." },
-  { name: "Chefe de Sala", desc: "Coordenador direto da sala de prova, responsável por cronômetro e ata de abertura/fechamento." },
-  { name: "Fiscal de Banheiro", desc: "Responsável pela inspeção com detector de metais na entrada e saída dos sanitários." },
-  { name: "Fiscal Volante", desc: "Monitora os corredores, acompanha candidatos aos sanitários e dá suporte logístico." },
-  { name: "Interprete de Libras", desc: "Suporte especializado a candidatos surdos, traduzindo instruções para a Língua de Sinais." },
+  { name: "Chefe de Sala", desc: "Coordenador direto da sala de prova (1 por sala). Responsável por vistorias de materiais, lanches, identificação e atas oficiais." },
+  { name: "Aplicador", desc: "Auxilia na fiscalização e vistoria com detector de metais. 1 aplicador (1-60 participantes) ou 2 aplicadores em dupla (61-100 participantes)." },
+  { name: "Tradutor-Intérprete de Libras", desc: "Atendimento especializado a participantes usuários de Libras/deficiência auditiva. Atuação em dupla (2 por sala com este recurso)." },
+  { name: "Guia-Intérprete de Surdocegos", desc: "Atendimento especializado a participantes surdocegos (Tadoma/Libras Tátil). Atuação em trio (3 por sala com este recurso)." },
+  { name: "Ledor (Aplicador Especializado)", desc: "Atendimento especializado a participantes com deficiência visual/dislexia. Atuação em dupla (2 por sala com este recurso)." },
+  { name: "Transcritor (Aplicador Especializado)", desc: "Atendimento especializado para transcrição de respostas e redação. Atuação individual (1 por participante/sala)." },
+  { name: "Fiscal de Banheiro", desc: "Inspeção e vistoria eletrônica com detector de metais nas áreas comuns sanitárias (2 a 12 fiscais por prédio, mín. 1 por sexo)." },
+  { name: "Fiscal Volante / Corredor", desc: "Circulação nas áreas comuns, suporte logístico e condução de participantes com detector de metais (2 a 12 fiscais por prédio)." },
+  { name: "Técnico de Informática", desc: "Suporte especializado a computadores, videoprova em Libras ou leitor de tela (1 por sala com atendimento específico)." },
+  { name: "Fiscal Volante", desc: "Circulação e áreas comuns, condução de participantes e manuseio de detector de metais." },
+  { name: "Interprete de Libras", desc: "Suporte especializado a candidatos surdos, traduzindo instruções para a Língua de Sinais (em dupla)." },
   { name: "Ledor/Transcritor", desc: "Auxílio especializado para leitura de provas ou transcrição de respostas para candidatos PCD." },
   { name: "Apenas Ledor", desc: "Atendimento especializado exclusivamente para leitura de prova e enunciados para candidatos." },
-  { name: "Leitor transcritor espanhol", desc: "Leitura de prova e transcrição especializada de respostas em Língua Espanhola." },
-  { name: "Leitor transcritor inglês", desc: "Leitura de prova e transcrição especializada de respostas em Língua Inglesa." },
-  { name: "Apenas leitor espanhol", desc: "Atendimento especializado de leitura de prova em Língua Espanhola." },
-  { name: "Apenas leitor inglês", desc: "Atendimento especializado de leitura de prova em Língua Inglesa." },
-  { name: "Tecnico Informática", desc: "Suporte aos computadores, coletores de biometria e conectividade lógica do prédio." },
+  { name: "Transcritor", desc: "Atendimento especializado para transcrição de respostas de prova e redação." },
+  { name: "Tecnico Informática", desc: "Suporte aos computadores, videoprovas e conectividade do prédio." },
   { name: "Auxiliar de Limpeza", desc: "Responsável pela higienização periódica dos banheiros, salas e corredores do local." },
   { name: "Porteiro", desc: "Responsável pelo controle de abertura e fechamento de portões e filtragem de acessos." },
+  { name: "Representante do Local", desc: "Responsável oficial de ligação operacional e suporte de infraestrutura predial do local de aplicação." },
   { name: "Representante da Local", desc: "Responsável oficial de ligação operacional e suporte de infraestrutura predial do local de aplicação." },
   { name: "OUTROS", desc: "Compreende fiscais reservas ativados de última hora ou outras tarefas gerais não mapeadas." }
 ];
@@ -153,7 +157,20 @@ export default function CollaboratorManager({
   const [activeSubTab, setActiveSubTab] = useState<"list" | "network_reserves" | "add" | "import" | "edit">("list");
   const [filterType, setFilterType] = useState<"todos" | "confirmados" | "pendentes" | "efetivos" | "reservas" | "recusados" | "com_erro">("todos");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchField, setSearchField] = useState<"all" | "name" | "email" | "cpf">("all");
+  const [searchField, setSearchField] = useState<
+    | "all"
+    | "name"
+    | "cpf"
+    | "email"
+    | "whatsapp"
+    | "pixKey"
+    | "referencePerson"
+    | "education"
+    | "specialRole"
+    | "disability"
+    | "assignedRole"
+    | "assignedRoom"
+  >("all");
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
   const [sortBy, setSortBy] = useState<"created_desc" | "created_asc" | "name_asc" | "name_desc">("created_desc");
@@ -698,18 +715,68 @@ export default function CollaboratorManager({
       result = result.filter(c => c.orionStatus === "Erro");
     }
 
-    // 2. Text Search Query
+    // 2. Text Search Query - Realtime multi-field search across any available field
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
+      const qDigits = searchQuery.replace(/\D/g, "");
+
       result = result.filter(c => {
-        const matchesName = c.name.toLowerCase().includes(q);
+        const matchesName = c.name ? c.name.toLowerCase().includes(q) : false;
         const matchesEmail = c.email ? c.email.toLowerCase().includes(q) : false;
-        const matchesCpf = c.cpf ? c.cpf.replace(/\D/g, "").includes(q.replace(/\D/g, "")) || c.cpf.includes(q) : false;
+        const matchesCpf = c.cpf 
+          ? (c.cpf.toLowerCase().includes(q) || (qDigits.length > 0 && c.cpf.replace(/\D/g, "").includes(qDigits))) 
+          : false;
+        const matchesWhatsapp = c.whatsapp 
+          ? (c.whatsapp.toLowerCase().includes(q) || (qDigits.length > 0 && c.whatsapp.replace(/\D/g, "").includes(qDigits))) 
+          : false;
+        const matchesPixKey = c.pixKey ? c.pixKey.toLowerCase().includes(q) : false;
+        const matchesReference = c.referencePerson ? c.referencePerson.toLowerCase().includes(q) : false;
+        const matchesEducation = c.education ? c.education.toLowerCase().includes(q) : false;
+        const matchesSpecialRole = c.specialRole ? c.specialRole.toLowerCase().includes(q) : false;
+        const matchesDisability = c.disability ? c.disability.toLowerCase().includes(q) : false;
+        const matchesLanguages = c.languages ? c.languages.some(l => l.toLowerCase().includes(q)) : false;
+        const matchesAssignedRole = c.assignedRole ? c.assignedRole.toLowerCase().includes(q) : false;
+        const matchesAssignedRoom = c.assignedRoom ? c.assignedRoom.toLowerCase().includes(q) : false;
+        const matchesBirthDate = c.birthDate ? c.birthDate.toLowerCase().includes(q) : false;
+        const matchesStatus = c.status ? c.status.toLowerCase().includes(q) : false;
+        const matchesAttendance = c.attendanceStatus ? c.attendanceStatus.toLowerCase().includes(q) : false;
+        const matchesCla = (c.claName && c.claName.toLowerCase().includes(q)) || (c.originalClaName && c.originalClaName.toLowerCase().includes(q));
+        const matchesPastEditions = c.pastEditions ? c.pastEditions.some(ed => String(ed.year).includes(q) || ed.role.toLowerCase().includes(q)) : false;
+        const matchesRefusal = (c.refusedRole && c.refusedRole.toLowerCase().includes(q)) || (c.refusalTag && c.refusalTag.toLowerCase().includes(q));
 
         if (searchField === "name") return matchesName;
-        if (searchField === "email") return matchesEmail;
         if (searchField === "cpf") return matchesCpf;
-        return matchesName || matchesEmail || matchesCpf;
+        if (searchField === "email") return matchesEmail;
+        if (searchField === "whatsapp") return matchesWhatsapp;
+        if (searchField === "pixKey") return matchesPixKey;
+        if (searchField === "referencePerson") return matchesReference;
+        if (searchField === "education") return matchesEducation;
+        if (searchField === "specialRole") return matchesSpecialRole;
+        if (searchField === "disability") return matchesDisability;
+        if (searchField === "assignedRole") return matchesAssignedRole;
+        if (searchField === "assignedRoom") return matchesAssignedRoom;
+
+        // "all" - matches ANY available field
+        return (
+          matchesName ||
+          matchesCpf ||
+          matchesEmail ||
+          matchesWhatsapp ||
+          matchesPixKey ||
+          matchesReference ||
+          matchesEducation ||
+          matchesSpecialRole ||
+          matchesDisability ||
+          matchesLanguages ||
+          matchesAssignedRole ||
+          matchesAssignedRoom ||
+          matchesBirthDate ||
+          matchesStatus ||
+          matchesAttendance ||
+          matchesCla ||
+          matchesPastEditions ||
+          matchesRefusal
+        );
       });
     }
 
@@ -1366,7 +1433,7 @@ function activeTabSubList(
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery?.(e.target.value)}
-                placeholder="Pesquisar fiscais..."
+                placeholder="Pesquisar por qualquer campo (Nome, CPF, E-mail, WhatsApp, PIX, Cargo, Sala, PCD...)"
                 className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:outline-emerald-500"
               />
               {searchQuery && (
@@ -1386,10 +1453,18 @@ function activeTabSubList(
               onChange={(e) => setSearchField?.(e.target.value as any)}
               className="bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold rounded-xl text-slate-700 dark:text-slate-300 cursor-pointer focus:outline-emerald-500"
             >
-              <option value="all">Todos os Campos</option>
+              <option value="all">🔍 Todos os Campos</option>
               <option value="name">Por Nome</option>
-              <option value="email">Por E-mail</option>
               <option value="cpf">Por CPF</option>
+              <option value="email">Por E-mail</option>
+              <option value="whatsapp">Por WhatsApp / Telefone</option>
+              <option value="pixKey">Por Chave PIX</option>
+              <option value="referencePerson">Por Indicação / Referência</option>
+              <option value="education">Por Escolaridade</option>
+              <option value="specialRole">Por Perfil Especial</option>
+              <option value="disability">Por PCD / Deficiência</option>
+              <option value="assignedRole">Por Função</option>
+              <option value="assignedRoom">Por Sala Alocada</option>
             </select>
           </div>
 
