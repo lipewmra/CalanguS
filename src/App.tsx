@@ -61,6 +61,7 @@ import FiscalAvatar from "./components/FiscalAvatar";
 import CollaboratorSettingsView from "./components/CollaboratorSettingsView";
 import MessagingCenter from "./components/MessagingCenter";
 import AttendanceListView from "./components/AttendanceListView";
+import SimulateCollaboratorModal from "./components/SimulateCollaboratorModal";
 
 import { 
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
@@ -68,7 +69,7 @@ import {
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
   Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck, Clock,
-  SlidersHorizontal
+  SlidersHorizontal, Eye, ArrowRightLeft
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
@@ -191,6 +192,8 @@ export default function App() {
 
   // Colaborador simulation states
   const [individualConfirmationStatus, setIndividualConfirmationStatus] = useState<"Pendente" | "Confirmado" | "Recusado">("Pendente");
+  const [simulatedCollaborator, setSimulatedCollaborator] = useState<CollaboratorInfo | null>(null);
+  const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
 
   // Unregistered user redirection states for public fiscal form
   const [publicFormPrefill, setPublicFormPrefill] = useState<{ email?: string; name?: string }>({});
@@ -1022,6 +1025,18 @@ export default function App() {
 
                 {/* Action Buttons cluster */}
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  {/* Simular Colaborador Button for CLA / Admin */}
+                  {effectiveRole !== "Colaborador" && (
+                    <button
+                      onClick={() => setIsSimulateModalOpen(true)}
+                      className="p-2 sm:px-3 rounded-xl transition cursor-pointer border-2 bg-gradient-to-r from-emerald-500/15 to-teal-500/15 hover:from-emerald-500/25 hover:to-teal-500/25 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 shadow-[2px_2px_0px_0px_rgba(16,185,129,0.2)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-y-[1px] active:translate-x-[1px] flex items-center gap-1.5"
+                      title="Simular ambiente de um colaborador alocado"
+                    >
+                      <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="hidden sm:inline text-xs font-black uppercase tracking-wider">Simular Colaborador</span>
+                    </button>
+                  )}
+
                   {/* Configuration Settings Button */}
                   {effectiveRole !== "Colaborador" && (
                     <button
@@ -1059,19 +1074,19 @@ export default function App() {
           {/* MULTI_PROFILE TOP BANNER DROPDOWN MENU */}
           {currentUser && (currentUser.roles || [currentUser.role]).includes("SuperAdmin") && (currentUser.roles || [currentUser.role]).includes("CLA") && (
             <div 
-              className="bg-slate-900 border-b-2 border-slate-800 text-white px-4 py-2 flex flex-wrap items-center justify-center gap-2 text-xs font-bold shadow-md no-print"
+              className="bg-slate-100 dark:bg-slate-900 border-b-2 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white px-4 py-2 flex flex-wrap items-center justify-center gap-2 text-xs font-bold shadow-xs no-print"
             >
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <span className="text-slate-400 font-medium text-[11px] sm:text-xs">Operar Painel como:</span>
-                <div className="flex flex-wrap items-center justify-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 animate-fade-in">
+                <span className="text-slate-600 dark:text-slate-400 font-medium text-[11px] sm:text-xs">Operar Painel como:</span>
+                <div className="flex flex-wrap items-center justify-center bg-slate-200 dark:bg-slate-950 p-1 rounded-xl border border-slate-300 dark:border-slate-800 gap-1 animate-fade-in">
                   {(currentUser.roles || [currentUser.role]).map((r) => (
                     <button
                       key={r}
                       onClick={() => setSelectedRole(r)}
                       className={`px-3 sm:px-4 py-1.5 rounded-lg transition-all duration-155 text-[10px] font-black font-mono border uppercase cursor-pointer ${
                         effectiveRole === r
-                           ? "bg-emerald-500 text-slate-950 border-emerald-500 shadow-sm"
-                           : "bg-transparent text-slate-400 border-transparent hover:text-slate-200"
+                           ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                           : "bg-transparent text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-slate-200"
                       }`}
                     >
                       {r}
@@ -1082,29 +1097,113 @@ export default function App() {
             </div>
           )}
 
+      {/* SIMULATION MODE STICKY TOP BANNER */}
+      {simulatedCollaborator && (
+        <div className="sticky top-0 z-50 bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-950 text-white px-4 py-3 shadow-2xl border-b-2 border-emerald-400/50 flex flex-wrap items-center justify-between gap-3 animate-fade-in no-print">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 backdrop-blur-md flex items-center justify-center text-amber-300 border border-emerald-400/40 shrink-0 shadow-inner">
+              <Eye className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] uppercase font-mono font-black tracking-widest bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md shadow-xs">
+                  MODO DE SIMULAÇÃO ATIVO
+                </span>
+                <span className="text-xs text-emerald-200 font-bold hidden sm:inline">
+                  (Ambiente visualizado pelo colaborador)
+                </span>
+              </div>
+              <p className="text-xs font-black text-white mt-0.5">
+                Colaborador: <span className="text-amber-300">{simulatedCollaborator.name}</span> • Função: <span className="text-emerald-300">{simulatedCollaborator.assignedRole || "Não associada"}</span> • Sala: <span className="text-sky-300">{simulatedCollaborator.assignedRoom || "Coordenação"}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSimulateModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-800 text-emerald-300 hover:text-emerald-200 text-xs font-black border border-emerald-500/30 transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+              title="Escolher outro colaborador alocado"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              <span>Trocar Colaborador</span>
+            </button>
+            <button
+              onClick={() => setSimulatedCollaborator(null)}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-black shadow-md border border-rose-400 transition cursor-pointer flex items-center gap-1.5"
+              title="Encerrar simulação e voltar ao painel da coordenação"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Encerrar Simulação</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* CORE DISPLAY MAIN BOARD */}
       <main 
         className="w-full px-2 sm:px-4 lg:px-6 xl:px-8 mt-4 md:mt-6"
       >
-        
+        {simulatedCollaborator ? (
+          <div className="animate-fade-in pb-12">
+            <CollaboratorDashboard
+              currentUser={{
+                uid: simulatedCollaborator.id || `sim-${simulatedCollaborator.cpf}`,
+                name: simulatedCollaborator.name,
+                email: simulatedCollaborator.email || `${simulatedCollaborator.cpf}@enem.calangus`,
+                role: "Colaborador",
+                photoUrl: simulatedCollaborator.photoUrl,
+                coordinationCode: building?.coordRoom,
+                assignedBuildingId: building?.id
+              }}
+              building={building}
+              catering={catering}
+              collaboratorRecord={simulatedCollaborator}
+              individualConfirmationStatus={
+                simulatedCollaborator.status === "Confirmado" 
+                  ? "Confirmado" 
+                  : simulatedCollaborator.status === "Recusado" 
+                  ? "Recusado" 
+                  : "Pendente"
+              }
+              onUpdateConfirmationStatus={(status, roleNameToRefuse) => {
+                if (simulatedCollaborator.id) {
+                  updateCollaborator(simulatedCollaborator.id, {
+                    status,
+                    refusedRole: roleNameToRefuse
+                  });
+                  setSimulatedCollaborator(prev => prev ? { ...prev, status, refusedRole: roleNameToRefuse } : null);
+                }
+              }}
+              onUpdateProfile={async (updates) => {
+                if (simulatedCollaborator.id) {
+                  await updateCollaborator(simulatedCollaborator.id, updates);
+                  setSimulatedCollaborator(prev => prev ? { ...prev, ...updates } : null);
+                }
+              }}
+              onSaveBuilding={saveBuilding}
+            />
+          </div>
+        ) : (
+          <>
         {/* EVENT TICKER BRIEF INSTRUCTIONS CARD (glowing 3D warning/announcement design) */}
         {eventConfig && (
-          <div className={`no-print p-5 rounded-2xl mb-8 border-2 flex flex-col md:flex-row md:items-center justify-between gap-5 transition ${isDarkMode ? "bg-[#0f172a]/90 border-emerald-500/30 shadow-[4px_4px_0px_0px_var(--color-emerald-700)] glow-emerald" : "bg-emerald-50/75 border-emerald-300/60 shadow-[4px_4px_0px_0px_var(--color-emerald-500)]"}`}>
+          <div className={`no-print p-5 rounded-2xl mb-8 border-2 flex flex-col md:flex-row md:items-center justify-between gap-5 transition ${isDarkMode ? "bg-[#0f172a]/90 border-emerald-500/30 shadow-[4px_4px_0px_0px_var(--color-emerald-700)] glow-emerald" : "bg-emerald-50/90 border-emerald-300/80 shadow-[4px_4px_0px_0px_var(--color-emerald-500)]"}`}>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold text-emerald-500 dark:text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded-md">Diretiva Geral ENEM {eventConfig.year}</span>
-                <span className="text-[9px] bg-indigo-500/25 text-indigo-400 font-bold px-2 py-0.5 rounded-full font-mono border border-indigo-400/20">Sincronizado Cebraspe</span>
+                <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400 uppercase tracking-widest bg-emerald-500/15 px-2 py-0.5 rounded-md">Diretiva Geral ENEM {eventConfig.year}</span>
+                <span className="text-[9px] bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 font-bold px-2 py-0.5 rounded-full font-mono border border-indigo-400/30">Sincronizado Cebraspe</span>
               </div>
-              <p className="text-xs text-slate-950 dark:text-white leading-relaxed font-sans font-medium">{eventConfig.generalInstructions}</p>
+              <p className="text-xs text-slate-800 dark:text-slate-100 leading-relaxed font-sans font-semibold">{eventConfig.generalInstructions}</p>
             </div>
-            <div className="flex gap-4 text-xs shrink-0 font-bold text-slate-500 dark:text-slate-400 border-l-2 border-slate-200 dark:border-slate-800 pl-4">
+            <div className="flex gap-4 text-xs shrink-0 font-bold text-slate-600 dark:text-slate-400 border-l-2 border-slate-300 dark:border-slate-800 pl-4">
               <div>
-                <span className="block text-[8px] text-gray-400 uppercase font-extrabold tracking-wider">1ª Prova:</span>
-                <span className="font-mono font-extrabold text-slate-800 dark:text-emerald-400 text-sm">{eventConfig.examDates[0]}</span>
+                <span className="block text-[8px] text-slate-500 dark:text-gray-400 uppercase font-extrabold tracking-wider">1ª Prova:</span>
+                <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-400 text-sm">{eventConfig.examDates[0]}</span>
               </div>
               <div>
-                <span className="block text-[8px] text-gray-400 uppercase font-extrabold tracking-wider">2ª Prova:</span>
-                <span className="font-mono font-extrabold text-slate-800 dark:text-emerald-400 text-sm">{eventConfig.examDates[1]}</span>
+                <span className="block text-[8px] text-slate-500 dark:text-gray-400 uppercase font-extrabold tracking-wider">2ª Prova:</span>
+                <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-400 text-sm">{eventConfig.examDates[1]}</span>
               </div>
             </div>
           </div>
@@ -1350,6 +1449,7 @@ export default function App() {
                         <AttendanceListView 
                           collaborators={collaborators} 
                           building={building}
+                          eventConfig={eventConfig}
                           onUpdateCollaborator={updateCollaborator}
                           readOnly={effectiveRole === "ALA"}
                         />
@@ -1560,19 +1660,28 @@ export default function App() {
                           })}
 
                           {effectiveRole === "ALA" && !isSidebarCollapsed && (
-                            <div className="p-4 bg-indigo-500/10 border-2 border-indigo-500/30 text-indigo-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]">
+                            <div className="p-4 bg-indigo-500/10 border-2 border-indigo-500/30 text-indigo-900 dark:text-indigo-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-xs">
                               🚨 OBS (ALA): Você tem acesso para visualizar todos os menus do CLA, mas possui permissão de edição e alteração apenas nos menus: 2 (Fiscais e Inscrições), 3 (Associação de Função) e 4 (Alocação e Reservas).
                             </div>
                           )}
 
                           {effectiveRole === "CLA" && (effectiveUser?.coordinationCode || building?.coordRoom) && !isSidebarCollapsed && (
-                            <div className="p-4 bg-emerald-500/10 border-2 border-emerald-500/30 text-emerald-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]">
+                            <div className="p-4 bg-emerald-500/10 border-2 border-emerald-500/30 text-emerald-950 dark:text-emerald-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-xs">
                               🏢 <strong className="uppercase">Sua Coordenação</strong>
-                              <div className="mt-1 font-mono">Código: {effectiveUser?.coordinationCode || building?.coordRoom}</div>
-                              <div className="text-slate-400 mt-1 font-normal">Coordenador do local de aplicação do ENEM.</div>
+                              <div className="mt-1 font-mono font-bold text-slate-800 dark:text-emerald-300">Código: {effectiveUser?.coordinationCode || building?.coordRoom}</div>
+                              <div className="text-slate-600 dark:text-slate-400 mt-1 font-medium">Coordenador do local de aplicação do ENEM.</div>
+                              
+                              <button
+                                onClick={() => setIsSimulateModalOpen(true)}
+                                className="mt-3 w-full bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 border border-emerald-400/40 font-black py-2 px-2.5 rounded-xl text-[10px] cursor-pointer text-white tracking-wider uppercase transition active:scale-95 flex items-center justify-center gap-1.5 shadow-xs"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-amber-300" />
+                                <span>Simular Colaborador</span>
+                              </button>
+
                               <button 
                                 onClick={() => setIsEditingProfile(true)}
-                                className="mt-3 w-full bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/30 font-extrabold py-1.5 rounded-lg text-[9px] cursor-pointer text-white tracking-wider uppercase transition active:scale-95"
+                                className="mt-2 w-full bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-300 dark:border-emerald-500/20 font-extrabold py-1.5 rounded-lg text-[9px] cursor-pointer text-slate-800 dark:text-slate-300 tracking-wider uppercase transition active:scale-95"
                               >
                                 📝 Editar Cadastro
                               </button>
@@ -1624,10 +1733,24 @@ export default function App() {
             onSaveBuilding={saveBuilding}
           />
         )}
+          </>
+        )}
 
       </main>
     </>
    )}
+
+      {/* SIMULATE COLLABORATOR MODAL */}
+      <SimulateCollaboratorModal
+        isOpen={isSimulateModalOpen}
+        onClose={() => setIsSimulateModalOpen(false)}
+        collaborators={collaborators}
+        building={building}
+        onSelectCollaborator={(collab) => {
+          setSimulatedCollaborator(collab);
+          setIsSimulateModalOpen(false);
+        }}
+      />
 
       {/* GLOBAL CONFIGURATION SETTINGS MODAL */}
       <SettingsModal

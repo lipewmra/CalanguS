@@ -220,6 +220,10 @@ export interface CollaboratorInfo {
   attendanceConfirmedAt?: string;
   isPresent?: boolean;
   presenceCheckedAt?: string;
+  isPresentDay1?: boolean;
+  presenceCheckedAtDay1?: string;
+  isPresentDay2?: boolean;
+  presenceCheckedAtDay2?: string;
   substitutedBy?: string; // Name of person who replaced this collaborator
   substitutedById?: string; // ID of replacing collaborator
   substitutedFor?: string; // Name of person replaced by this collaborator

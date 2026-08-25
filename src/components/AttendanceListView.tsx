@@ -1,16 +1,30 @@
 import React, { useState, useMemo } from "react";
-import { CollaboratorInfo, BuildingInfo, UserProfile } from "../types";
+import { CollaboratorInfo, BuildingInfo, EventConfigInfo } from "../types";
 import FiscalAvatar from "./FiscalAvatar";
 import { 
-  ClipboardCheck, Users, CheckCircle2, XCircle, AlertTriangle, 
-  Search, Phone, MessageSquare, Printer, Check, X, 
-  Sparkles, Clock, MapPin, UserCheck, UserX, ShieldAlert,
-  ArrowRightLeft, Filter, RefreshCw, Send, CheckSquare, Layers, Download
+  ClipboardCheck, 
+  Calendar, 
+  CheckCircle2, 
+  Search, 
+  Printer, 
+  Check, 
+  Filter, 
+  RefreshCw, 
+  CheckSquare, 
+  MapPin, 
+  UserCheck, 
+  UserX, 
+  Users, 
+  Clock, 
+  ShieldAlert,
+  Sparkles,
+  ChevronRight
 } from "lucide-react";
 
 interface AttendanceListViewProps {
   collaborators: CollaboratorInfo[];
   building: BuildingInfo | null;
+  eventConfig?: EventConfigInfo | null;
   onUpdateCollaborator: (id: string, updates: Partial<CollaboratorInfo>) => Promise<void>;
   readOnly?: boolean;
 }
@@ -18,139 +32,186 @@ interface AttendanceListViewProps {
 export default function AttendanceListView({
   collaborators,
   building,
+  eventConfig,
   onUpdateCollaborator,
   readOnly = false
 }: AttendanceListViewProps) {
+  // Selected Exam Day (Dia 1 ou Dia 2)
+  const [activeDay, setActiveDay] = useState<"day1" | "day2">("day1");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "present" | "absent">("all");
-  const [roomFilter, setRoomFilter] = useState<string>("all");
-  const [activeExamDay, setActiveExamDay] = useState<"day1" | "day2">("day1");
+  const [roleFilter, setRoleFilter] = useState("all");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [batchLoading, setBatchLoading] = useState(false);
 
-  // Filter ONLY collaborators who are allocated to a specific room for the exam
-  // (strictly allocated to a room: not in reserve and having assignedRoom)
+  // Exam Dates & Themes
+  const examDay1Label = eventConfig?.examDates?.[0] || "01/11/2026";
+  const examDay2Label = eventConfig?.examDates?.[1] || "08/11/2026";
+
+  // Filter ONLY allocated collaborators (allocated to a role or room) and sort alphabetically
   const allocatedCollaborators = useMemo(() => {
-    return collaborators.filter(c => {
-      // Must not be refused or cancelled
-      if (c.status === "Recusado" || c.status === "Cancelado") return false;
-      // Strictly must be allocated to a room
-      return Boolean(!c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "");
-    });
+    return (collaborators || [])
+      .filter(c => {
+        if (c.status === "Recusado" || c.status === "Cancelado") return false;
+        const hasRole = Boolean(c.assignedRole && c.assignedRole.trim() !== "");
+        const hasRoom = Boolean(c.assignedRoom && c.assignedRoom.trim() !== "");
+        return hasRole || hasRoom;
+      })
+      .sort((a, b) => (a.name || "").localeCompare(b.name || "", "pt-BR", { sensitivity: "base" }));
   }, [collaborators]);
 
-  // Extract list of all unique assigned rooms for filter dropdown
-  const uniqueRooms = useMemo(() => {
-    const rooms = new Set<string>();
+  // Extract unique roles for the filter dropdown
+  const uniqueRoles = useMemo(() => {
+    const roles = new Set<string>();
     allocatedCollaborators.forEach(c => {
-      if (c.assignedRoom) rooms.add(c.assignedRoom);
+      if (c.assignedRole && c.assignedRole.trim() !== "") {
+        roles.add(c.assignedRole);
+      }
     });
-    return Array.from(rooms).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return Array.from(roles).sort();
   }, [allocatedCollaborators]);
 
-  // Quantitative stats calculation
+  // Helper to check if collaborator is present on active day
+  const isCollaboratorPresentOnActiveDay = (c: CollaboratorInfo): boolean => {
+    if (activeDay === "day1") {
+      return Boolean(c.isPresentDay1 !== undefined ? c.isPresentDay1 : c.isPresent);
+    } else {
+      return Boolean(c.isPresentDay2);
+    }
+  };
+
+  // Helper to get presence timestamp on active day
+  const getPresenceTimestampOnActiveDay = (c: CollaboratorInfo): string | undefined => {
+    if (activeDay === "day1") {
+      return c.presenceCheckedAtDay1 || c.presenceCheckedAt;
+    } else {
+      return c.presenceCheckedAtDay2;
+    }
+  };
+
+  // Statistics for the active day
   const totalAllocated = allocatedCollaborators.length;
   
-  const presentCollaborators = useMemo(() => {
-    return allocatedCollaborators.filter(c => Boolean(c.isPresent));
-  }, [allocatedCollaborators]);
+  const presentCount = useMemo(() => {
+    return allocatedCollaborators.filter(c => isCollaboratorPresentOnActiveDay(c)).length;
+  }, [allocatedCollaborators, activeDay]);
 
-  const absentCollaborators = useMemo(() => {
-    return allocatedCollaborators.filter(c => !c.isPresent);
-  }, [allocatedCollaborators]);
+  const absentCount = totalAllocated - presentCount;
+  const presencePercentage = totalAllocated > 0 ? Math.round((presentCount / totalAllocated) * 100) : 0;
 
-  const totalPresent = presentCollaborators.length;
-  const totalAbsent = absentCollaborators.length;
-  const presencePercentage = totalAllocated > 0 ? Math.round((totalPresent / totalAllocated) * 100) : 0;
-
-  // Available reserves for quick dispatch
-  const availableReserves = useMemo(() => {
-    return collaborators.filter(c => c.isReserve && c.isPresent && !c.assignedRoom);
-  }, [collaborators]);
-
-  // Filtered list based on active filters and search query
-  const filteredCollaborators = useMemo(() => {
+  // Filtered List based on search and role filter
+  const filteredList = useMemo(() => {
     return allocatedCollaborators.filter(c => {
-      // Status filter
-      if (statusFilter === "present" && !c.isPresent) return false;
-      if (statusFilter === "absent" && c.isPresent) return false;
-      if (statusFilter === "reserves" && !c.isReserve) return false;
+      // Role Filter
+      if (roleFilter !== "all" && c.assignedRole !== roleFilter) {
+        return false;
+      }
 
-      // Room filter
-      if (roomFilter !== "all" && c.assignedRoom !== roomFilter) return false;
-
-      // Search query filter
+      // Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const nameMatch = (c.name || "").toLowerCase().includes(q);
         const cpfMatch = (c.cpf || "").toLowerCase().includes(q);
-        const roomMatch = (c.assignedRoom || "").toLowerCase().includes(q);
         const roleMatch = (c.assignedRole || "").toLowerCase().includes(q);
-        const phoneMatch = (c.whatsapp || "").toLowerCase().includes(q);
-        if (!nameMatch && !cpfMatch && !roomMatch && !roleMatch && !phoneMatch) {
+        const roomMatch = (c.assignedRoom || "").toLowerCase().includes(q);
+        if (!nameMatch && !cpfMatch && !roleMatch && !roomMatch) {
           return false;
         }
       }
 
       return true;
     });
-  }, [allocatedCollaborators, statusFilter, roomFilter, searchQuery]);
+  }, [allocatedCollaborators, roleFilter, searchQuery]);
 
-  // Toggle single presence
+  // Toggle single presence on active day
   const handleTogglePresence = async (collaborator: CollaboratorInfo) => {
     if (readOnly || !collaborator.id) return;
     setUpdatingId(collaborator.id);
+
     try {
-      const newPresenceState = !collaborator.isPresent;
-      await onUpdateCollaborator(collaborator.id, {
-        isPresent: newPresenceState,
-        presenceCheckedAt: newPresenceState ? new Date().toISOString() : undefined
-      });
+      const isCurrentlyPresent = isCollaboratorPresentOnActiveDay(collaborator);
+      const newPresenceState = !isCurrentlyPresent;
+      const now = new Date().toISOString();
+
+      if (activeDay === "day1") {
+        await onUpdateCollaborator(collaborator.id, {
+          isPresent: newPresenceState,
+          presenceCheckedAt: newPresenceState ? now : undefined,
+          isPresentDay1: newPresenceState,
+          presenceCheckedAtDay1: newPresenceState ? now : undefined
+        });
+      } else {
+        await onUpdateCollaborator(collaborator.id, {
+          isPresentDay2: newPresenceState,
+          presenceCheckedAtDay2: newPresenceState ? now : undefined
+        });
+      }
     } catch (err) {
-      console.error("Erro ao alternar presença:", err);
+      console.error("Erro ao registrar presença:", err);
     } finally {
       setUpdatingId(null);
     }
   };
 
-  // Batch action: Mark all as present
+  // Batch action: Mark all filtered as present on active day
   const handleMarkAllPresent = async () => {
-    if (readOnly || batchLoading) return;
-    const confirmAction = window.confirm(`Deseja marcar a presença de TODOS os ${allocatedCollaborators.length} colaboradores alocados?`);
+    if (readOnly || batchLoading || filteredList.length === 0) return;
+    const confirmAction = window.confirm(
+      `Deseja confirmar a presença de TODOS os ${filteredList.length} colaboradores listados para o ${activeDay === "day1" ? "1º Dia" : "2º Dia"} do ENEM?`
+    );
     if (!confirmAction) return;
 
     setBatchLoading(true);
     try {
       const now = new Date().toISOString();
-      for (const c of allocatedCollaborators) {
-        if (!c.isPresent && c.id) {
-          await onUpdateCollaborator(c.id, {
-            isPresent: true,
-            presenceCheckedAt: now
-          });
+      for (const c of filteredList) {
+        if (!isCollaboratorPresentOnActiveDay(c) && c.id) {
+          if (activeDay === "day1") {
+            await onUpdateCollaborator(c.id, {
+              isPresent: true,
+              presenceCheckedAt: now,
+              isPresentDay1: true,
+              presenceCheckedAtDay1: now
+            });
+          } else {
+            await onUpdateCollaborator(c.id, {
+              isPresentDay2: true,
+              presenceCheckedAtDay2: now
+            });
+          }
         }
       }
     } catch (err) {
-      console.error("Erro ao marcar todos como presentes:", err);
+      console.error("Erro ao marcar presenças em lote:", err);
     } finally {
       setBatchLoading(false);
     }
   };
 
-  // Batch action: Clear all presence marks
+  // Batch action: Clear all presence on active day
   const handleClearAllPresence = async () => {
-    if (readOnly || batchLoading) return;
-    const confirmAction = window.confirm("Deseja desmarcar a presença de todos os colaboradores alocados?");
+    if (readOnly || batchLoading || presentCount === 0) return;
+    const confirmAction = window.confirm(
+      `Deseja desmarcar todas as presenças do ${activeDay === "day1" ? "1º Dia" : "2º Dia"} do ENEM?`
+    );
     if (!confirmAction) return;
 
     setBatchLoading(true);
     try {
       for (const c of allocatedCollaborators) {
-        if (c.isPresent && c.id) {
-          await onUpdateCollaborator(c.id, {
-            isPresent: false,
-            presenceCheckedAt: undefined
-          });
+        if (isCollaboratorPresentOnActiveDay(c) && c.id) {
+          if (activeDay === "day1") {
+            await onUpdateCollaborator(c.id, {
+              isPresent: false,
+              presenceCheckedAt: undefined,
+              isPresentDay1: false,
+              presenceCheckedAtDay1: undefined
+            });
+          } else {
+            await onUpdateCollaborator(c.id, {
+              isPresentDay2: false,
+              presenceCheckedAtDay2: undefined
+            });
+          }
         }
       }
     } catch (err) {
@@ -165,66 +226,56 @@ export default function AttendanceListView({
     window.print();
   };
 
-  // Format WhatsApp Link
-  const getWhatsAppLink = (phone: string, name: string, role?: string, room?: string) => {
-    const cleanPhone = phone.replace(/\D/g, "");
-    const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-    const text = encodeURIComponent(
-      `Olá ${name}, aqui é da Coordenação do ENEM (${building?.name || "Local de Aplicação"}). Estamos iniciando o credenciamento para o exame hoje. Você está alocado como *${role || "Fiscal"}* na *${room || "Coordenação"}*. Favor confirmar sua chegada ao local!`
-    );
-    return `https://wa.me/${formattedPhone}?text=${text}`;
-  };
-
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
+    <div className="space-y-6 animate-fade-in pb-12">
       
-      {/* 1. TOP HEADER & DIRECT ACTIONS */}
-      <div className="no-print bg-white dark:bg-[#0c1220]/95 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_#e2e8f0] dark:shadow-[4px_4px_0px_0px_#10b981]/25 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-gradient-to-tr from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center text-white shadow-md">
-              <ClipboardCheck className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-display font-black text-slate-900 dark:text-white flex items-center gap-2">
+      {/* 1. TOP HEADER */}
+      <div className="no-print bg-white dark:bg-[#0c1220]/95 p-5 sm:p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_#e2e8f0] dark:shadow-[4px_4px_0px_0px_#10b981]/25 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 bg-gradient-to-tr from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center text-white shadow-md shrink-0">
+            <ClipboardCheck className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-display font-black text-slate-900 dark:text-white">
                 Lista de Presença
-                <span className="text-[11px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                  ENEM 2026
-                </span>
               </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Controle de chamada em tempo real, validação de presença e gestão imediata de ausências e faltosos.
-              </p>
+              <span className="text-[11px] font-mono bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                Menu 5 • ENEM 2026
+              </span>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+              Selecione o dia do exame e confirme a presença dos colaboradores alocados em ordem alfabética.
+            </p>
           </div>
         </div>
 
-        {/* Action buttons cluster */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Global Print & Batch Actions */}
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleMarkAllPresent}
-            disabled={readOnly || batchLoading || totalAllocated === 0}
-            className="px-3.5 py-2.5 rounded-xl border-2 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-black text-xs flex items-center gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] transition cursor-pointer disabled:opacity-50"
-            title="Marcar presença para todos os alocados"
+            disabled={readOnly || batchLoading || filteredList.length === 0}
+            className="px-3.5 py-2.5 rounded-xl border-2 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50"
+            title="Confirmar presença de todos os listados"
           >
             <CheckSquare className="w-4 h-4 shrink-0" />
-            <span>{batchLoading ? "Atualizando..." : "Marcar Todos Presentes"}</span>
+            <span>{batchLoading ? "Salvando..." : "Confirmar Todos"}</span>
           </button>
 
           <button
             onClick={handleClearAllPresence}
-            disabled={readOnly || batchLoading || totalPresent === 0}
-            className="px-3.5 py-2.5 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 font-bold text-xs flex items-center gap-2 transition cursor-pointer disabled:opacity-50"
-            title="Limpar todas as confirmações de presença"
+            disabled={readOnly || batchLoading || presentCount === 0}
+            className="px-3 py-2.5 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+            title="Desmarcar todas as presenças deste dia"
           >
             <RefreshCw className="w-4 h-4 shrink-0" />
-            <span>Limpar Presenças</span>
+            <span className="hidden sm:inline">Desmarcar Todos</span>
           </button>
 
           <button
             onClick={handlePrintAttendance}
-            className="px-3.5 py-2.5 rounded-xl border-2 border-indigo-400/40 bg-indigo-500/10 hover:bg-indigo-500/20 active:scale-95 text-indigo-600 dark:text-indigo-400 font-black text-xs flex items-center gap-2 shadow-xs transition cursor-pointer"
-            title="Imprimir folha de presença para assinatura física"
+            className="px-4 py-2.5 rounded-xl border-2 border-indigo-400/40 bg-indigo-500/10 hover:bg-indigo-500/20 active:scale-95 text-indigo-600 dark:text-indigo-400 font-black text-xs flex items-center gap-2 shadow-xs transition cursor-pointer"
+            title="Imprimir lista oficial para assinatura física"
           >
             <Printer className="w-4 h-4 shrink-0" />
             <span>Imprimir Folha</span>
@@ -232,293 +283,254 @@ export default function AttendanceListView({
         </div>
       </div>
 
-      {/* 2. QUANTITATIVE STATS METRICS BAR */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* 2. ENEM DAYS SELECTOR (MOSTRARÁ OS DIAS DO ENEM) */}
+      <div className="no-print grid grid-cols-1 md:grid-cols-2 gap-4">
         
-        {/* Metric 1: Total Alocados */}
-        <div 
-          onClick={() => setStatusFilter("all")}
-          className={`p-5 rounded-2xl border-2 transition-all cursor-pointer select-none ${
-            statusFilter === "all"
-              ? "bg-sky-500/10 border-sky-500 shadow-[4px_4px_0px_0px_#0284c7]"
-              : "bg-white dark:bg-[#0c1220]/80 border-slate-200 dark:border-slate-800 hover:border-sky-400"
+        {/* Dia 1 Card / Button */}
+        <button
+          onClick={() => setActiveDay("day1")}
+          className={`p-5 rounded-2xl border-2 text-left transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col justify-between gap-3 ${
+            activeDay === "day1"
+              ? "bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-transparent border-emerald-500 shadow-[4px_4px_0px_0px_#10b981] dark:shadow-[4px_4px_0px_0px_#10b981]/50"
+              : "bg-white dark:bg-[#0c1220]/80 border-slate-200 dark:border-slate-800 hover:border-emerald-400/60 opacity-80 hover:opacity-100"
           }`}
         >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Total Alocados
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center">
-              <Users className="w-4 h-4" />
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${
+                activeDay === "day1"
+                  ? "bg-emerald-500 text-white shadow-sm"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+              }`}>
+                1º
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-black tracking-widest text-emerald-600 dark:text-emerald-400 block">
+                  Primeiro Domingo de Prova
+                </span>
+                <h2 className="text-base font-display font-black text-slate-900 dark:text-white">
+                  Dia 1 — {examDay1Label}
+                </h2>
+              </div>
             </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-mono font-black text-slate-900 dark:text-white">
-              {totalAllocated}
-            </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">
-              colaboradores
-            </span>
-          </div>
-          <div className="mt-3 text-[11px] text-sky-600 dark:text-sky-400 font-semibold flex items-center gap-1">
-            <span>Escola:</span>
-            <strong className="truncate">{building?.name || "Local não configurado"}</strong>
-          </div>
-        </div>
-
-        {/* Metric 2: Presentes */}
-        <div 
-          onClick={() => setStatusFilter("present")}
-          className={`p-5 rounded-2xl border-2 transition-all cursor-pointer select-none ${
-            statusFilter === "present"
-              ? "bg-emerald-500/10 border-emerald-500 shadow-[4px_4px_0px_0px_#10b981]"
-              : "bg-white dark:bg-[#0c1220]/80 border-slate-200 dark:border-slate-800 hover:border-emerald-400"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-              Presentes
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <UserCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-mono font-black text-emerald-600 dark:text-emerald-400">
-                {totalPresent}
-              </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">
-                validados
-              </span>
-            </div>
-            <span className="text-xs font-mono font-black px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-              {presencePercentage}%
-            </span>
-          </div>
-          <div className="mt-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-            <div 
-              className="bg-emerald-500 h-2 rounded-full transition-all duration-500" 
-              style={{ width: `${presencePercentage}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Metric 3: Faltosos */}
-        <div 
-          onClick={() => setStatusFilter("absent")}
-          className={`p-5 rounded-2xl border-2 transition-all cursor-pointer select-none ${
-            statusFilter === "absent"
-              ? "bg-rose-500/10 border-rose-500 shadow-[4px_4px_0px_0px_#f43f5e]"
-              : "bg-white dark:bg-[#0c1220]/80 border-slate-200 dark:border-slate-800 hover:border-rose-400"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-              Faltosos / Ausentes
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
-              <UserX className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-mono font-black text-rose-600 dark:text-rose-400">
-                {totalAbsent}
-              </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">
-                pendentes
-              </span>
-            </div>
-            {totalAbsent > 0 ? (
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-700 dark:text-rose-300 animate-pulse">
-                Atenção
-              </span>
-            ) : (
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
-                Completo
+            {activeDay === "day1" && (
+              <span className="text-[10px] font-black uppercase bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-xs">
+                Ativo
               </span>
             )}
           </div>
-          <div className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-            {totalAbsent > 0 
-              ? `${totalAbsent} vaga(s) necessitam de fiscal ou substituição.` 
-              : "Nenhuma falta registrada no momento."}
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            Linguagens, Códigos e suas Tecnologias • Redação • Ciências Humanas e suas Tecnologias
+          </p>
+
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold">
+            <span className="text-slate-500 dark:text-slate-400">
+              Chamada: <strong className="text-emerald-600 dark:text-emerald-400">{activeDay === "day1" ? presentCount : allocatedCollaborators.filter(c => Boolean(c.isPresentDay1 !== undefined ? c.isPresentDay1 : c.isPresent)).length} de {totalAllocated}</strong>
+            </span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-mono">
+              {totalAllocated > 0 ? Math.round(((activeDay === "day1" ? presentCount : allocatedCollaborators.filter(c => Boolean(c.isPresentDay1 !== undefined ? c.isPresentDay1 : c.isPresent)).length) / totalAllocated) * 100) : 0}% Confirmado
+            </span>
           </div>
-        </div>
+        </button>
+
+        {/* Dia 2 Card / Button */}
+        <button
+          onClick={() => setActiveDay("day2")}
+          className={`p-5 rounded-2xl border-2 text-left transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col justify-between gap-3 ${
+            activeDay === "day2"
+              ? "bg-gradient-to-br from-indigo-500/15 via-teal-500/10 to-transparent border-indigo-500 shadow-[4px_4px_0px_0px_#6366f1] dark:shadow-[4px_4px_0px_0px_#6366f1]/50"
+              : "bg-white dark:bg-[#0c1220]/80 border-slate-200 dark:border-slate-800 hover:border-indigo-400/60 opacity-80 hover:opacity-100"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${
+                activeDay === "day2"
+                  ? "bg-indigo-500 text-white shadow-sm"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+              }`}>
+                2º
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-black tracking-widest text-indigo-600 dark:text-indigo-400 block">
+                  Segundo Domingo de Prova
+                </span>
+                <h2 className="text-base font-display font-black text-slate-900 dark:text-white">
+                  Dia 2 — {examDay2Label}
+                </h2>
+              </div>
+            </div>
+            {activeDay === "day2" && (
+              <span className="text-[10px] font-black uppercase bg-indigo-500 text-white px-2 py-0.5 rounded-full shadow-xs">
+                Ativo
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            Ciências da Natureza e suas Tecnologias • Matemática e suas Tecnologias
+          </p>
+
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold">
+            <span className="text-slate-500 dark:text-slate-400">
+              Chamada: <strong className="text-indigo-600 dark:text-indigo-400">{activeDay === "day2" ? presentCount : allocatedCollaborators.filter(c => Boolean(c.isPresentDay2)).length} de {totalAllocated}</strong>
+            </span>
+            <span className="text-indigo-600 dark:text-indigo-400 font-mono">
+              {totalAllocated > 0 ? Math.round(((activeDay === "day2" ? presentCount : allocatedCollaborators.filter(c => Boolean(c.isPresentDay2)).length) / totalAllocated) * 100) : 0}% Confirmado
+            </span>
+          </div>
+        </button>
 
       </div>
 
-      {/* 3. FILTERS, SEARCH AND ROOM SELECTOR */}
-      <div className="no-print bg-white dark:bg-[#0c1220]/80 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
+      {/* 3. FILTROS: BUSCA E FILTRO POR FUNÇÃO */}
+      <div className="no-print bg-white dark:bg-[#0c1220]/90 p-4 sm:p-5 rounded-2xl border-2 border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
         
-        {/* Search bar */}
+        {/* Search by Name / CPF */}
         <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por nome, CPF, sala ou função..."
+            placeholder="Buscar fiscal por nome ou CPF..."
             className="w-full pl-10 pr-4 py-2.5 text-xs font-semibold rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-hidden focus:border-emerald-500 transition"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
             >
-              <X className="w-3.5 h-3.5" />
+              ✕
             </button>
           )}
         </div>
 
-        {/* Filter Badges & Room Select */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {/* Status buttons */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold">
-            <button
-              onClick={() => setStatusFilter("all")}
-              className={`px-3 py-1.5 rounded-lg transition text-xs font-bold cursor-pointer ${
-                statusFilter === "all"
-                  ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
-                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-              }`}
-            >
-              Todos ({totalAllocated})
-            </button>
-            <button
-              onClick={() => setStatusFilter("present")}
-              className={`px-3 py-1.5 rounded-lg transition text-xs font-bold cursor-pointer ${
-                statusFilter === "present"
-                  ? "bg-emerald-500 text-white shadow-xs"
-                  : "text-slate-500 hover:text-emerald-500"
-              }`}
-            >
-              Presentes ({totalPresent})
-            </button>
-            <button
-              onClick={() => setStatusFilter("absent")}
-              className={`px-3 py-1.5 rounded-lg transition text-xs font-bold cursor-pointer ${
-                statusFilter === "absent"
-                  ? "bg-rose-500 text-white shadow-xs"
-                  : "text-slate-500 hover:text-rose-500"
-              }`}
-            >
-              Faltosos ({totalAbsent})
-            </button>
-          </div>
-
-          {/* Room filter select */}
-          {uniqueRooms.length > 0 && (
+        {/* Filter by Role & Counters */}
+        <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 w-full md:w-auto">
+          {/* Role Filter Select */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-slate-400" />
             <select
-              value={roomFilter}
-              onChange={(e) => setRoomFilter(e.target.value)}
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
               className="px-3 py-2 text-xs font-bold rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:border-emerald-500 cursor-pointer"
             >
-              <option value="all">Todas as Salas</option>
-              {uniqueRooms.map(r => (
-                <option key={r} value={r}>{r}</option>
+              <option value="all">Todas as Funções ({allocatedCollaborators.length})</option>
+              {uniqueRoles.map(r => (
+                <option key={r} value={r}>
+                  {r} ({allocatedCollaborators.filter(c => c.assignedRole === r).length})
+                </option>
               ))}
             </select>
-          )}
+          </div>
+
+          {/* Stat Pill */}
+          <div className="flex items-center gap-2 text-xs font-bold font-mono">
+            <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+              Presentes: {presentCount} / {totalAllocated}
+            </span>
+            {absentCount > 0 && (
+              <span className="px-3 py-1.5 rounded-xl bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30">
+                Faltam: {absentCount}
+              </span>
+            )}
+          </div>
         </div>
+
       </div>
 
-      {/* 4. MAIN ATTENDANCE TABLE / ROSTER */}
-      <div className="bg-white dark:bg-[#0c1220]/95 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_#e2e8f0] dark:shadow-[4px_4px_0px_0px_#10b981]/20 overflow-hidden">
+      {/* 4. LISTA DE COLABORADORES ALOCADOS POR ORDEM ALFABÉTICA (APENAS BOTÃO DE CONFIRMAR PRESENÇA) */}
+      <div className="no-print bg-white dark:bg-[#0c1220]/95 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_#e2e8f0] dark:shadow-[4px_4px_0px_0px_#10b981]/20 overflow-hidden">
         
         {/* Table Title Bar */}
-        <div className="p-4 sm:px-6 border-b-2 border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+        <div className="p-4 sm:px-6 border-b-2 border-slate-100 dark:border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
             <UserCheck className="w-5 h-5 text-emerald-500" />
             <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-              Chamada e Validação de Presença
+              {activeDay === "day1" ? `1º Dia (${examDay1Label})` : `2º Dia (${examDay2Label})`} — Ordem Alfabética
             </h2>
           </div>
           <span className="text-xs text-slate-400 font-mono font-bold">
-            Exibindo {filteredCollaborators.length} de {totalAllocated}
+            Exibindo {filteredList.length} de {totalAllocated} colaboradores alocados
           </span>
         </div>
 
-        {/* Table / List */}
-        {filteredCollaborators.length === 0 ? (
+        {/* Empty State */}
+        {allocatedCollaborators.length === 0 ? (
           <div className="p-12 text-center space-y-3">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-display font-black text-slate-800 dark:text-white">
+              Nenhum Colaborador Alocado no Momento
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              A lista de presença exibe exclusivamente os colaboradores que foram <strong>alocados em função ou sala</strong> (Menu 3 e Menu 4). Realize as alocações para iniciar a chamada.
+            </p>
+          </div>
+        ) : filteredList.length === 0 ? (
+          <div className="p-12 text-center space-y-2">
             <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center">
               <Search className="w-6 h-6" />
             </div>
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              Nenhum colaborador encontrado com os filtros selecionados.
+              Nenhum colaborador encontrado com os filtros informados.
             </p>
             <p className="text-xs text-slate-400">
-              Tente redefinir a busca ou alternar os filtros de status e sala.
+              Tente redefinir o campo de busca ou selecionar outra função.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-black tracking-wider text-slate-400">
-                  <th className="py-3 px-4 text-center w-16">Presença</th>
-                  <th className="py-3 px-4">Colaborador</th>
-                  <th className="py-3 px-4">Função Alocada</th>
-                  <th className="py-3 px-4">Sala</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right no-print">Contato / Ações</th>
+                <tr className="bg-slate-50 dark:bg-slate-900/70 border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-black tracking-wider text-slate-400">
+                  <th className="py-3.5 px-4 text-center w-12 font-mono">Nº</th>
+                  <th className="py-3.5 px-4">Nome do Colaborador (Ordem Alfabética)</th>
+                  <th className="py-3.5 px-4">Função Alocada</th>
+                  <th className="py-3.5 px-4">Sala / Posto</th>
+                  <th className="py-3.5 px-4 text-right">Confirmação de Presença</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
-                {filteredCollaborators.map((c) => {
-                  const isChecked = Boolean(c.isPresent);
-                  const isUpdating = updatingId === c.id;
+                {filteredList.map((collab, index) => {
+                  const isPresent = isCollaboratorPresentOnActiveDay(collab);
+                  const presenceTime = getPresenceTimestampOnActiveDay(collab);
+                  const isUpdating = updatingId === collab.id;
 
                   return (
                     <tr
-                      key={c.id || c.cpf}
+                      key={collab.id || collab.cpf}
                       className={`transition-colors duration-150 ${
-                        isChecked 
-                          ? "bg-emerald-500/[0.03] hover:bg-emerald-500/[0.08]" 
+                        isPresent 
+                          ? "bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08]" 
                           : "hover:bg-slate-50 dark:hover:bg-slate-900/40"
                       }`}
                     >
-                      {/* Checkbox Presença */}
-                      <td className="py-3 px-4 text-center">
-                        <label className="relative flex items-center justify-center cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            disabled={readOnly || isUpdating}
-                            onChange={() => handleTogglePresence(c)}
-                            className="sr-only"
-                          />
-                          <div
-                            className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
-                              isChecked
-                                ? "bg-emerald-500 border-emerald-500 text-white shadow-xs scale-105"
-                                : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 hover:border-emerald-500"
-                            } ${isUpdating ? "opacity-50 animate-pulse" : ""}`}
-                          >
-                            {isChecked && <Check className="w-4 h-4 stroke-[3]" />}
-                          </div>
-                        </label>
+                      {/* Alphabetical Order Number */}
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-400 text-[11px]">
+                        {String(index + 1).padStart(2, "0")}
                       </td>
 
                       {/* Colaborador Info */}
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <FiscalAvatar
-                            photoUrl={c.photoUrl}
-                            name={c.name}
-                            role={c.assignedRole || "Fiscal"}
+                            photoUrl={collab.photoUrl}
+                            name={collab.name}
+                            role={collab.assignedRole || "Fiscal"}
                             size="sm"
                           />
                           <div className="min-w-0">
-                            <span className="font-extrabold text-slate-900 dark:text-white block truncate">
-                              {c.name}
+                            <span className="font-extrabold text-slate-900 dark:text-white block truncate text-sm">
+                              {collab.name}
                             </span>
                             <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-                              <span>CPF: {c.cpf}</span>
-                              {c.whatsapp && (
-                                <span className="hidden sm:inline">• {c.whatsapp}</span>
+                              <span>CPF: {collab.cpf}</span>
+                              {collab.whatsapp && (
+                                <span className="hidden sm:inline">• Tel: {collab.whatsapp}</span>
                               )}
                             </div>
                           </div>
@@ -526,74 +538,56 @@ export default function AttendanceListView({
                       </td>
 
                       {/* Função Alocada */}
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                          {c.assignedRole || "Não associada"}
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                          {collab.assignedRole || "Não associada"}
                         </span>
-                        {c.isReserve && (
-                          <span className="ml-1.5 inline-block text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded-sm bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                            Reserva
-                          </span>
-                        )}
                       </td>
 
-                      {/* Sala */}
-                      <td className="py-3 px-4">
-                        {c.assignedRoom ? (
-                          <span className="inline-flex items-center gap-1 font-bold text-slate-900 dark:text-white bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                            <MapPin className="w-3 h-3 shrink-0" />
-                            {c.assignedRoom}
+                      {/* Sala / Posto */}
+                      <td className="py-3.5 px-4">
+                        {collab.assignedRoom ? (
+                          <span className="inline-flex items-center gap-1 font-bold text-slate-900 dark:text-white bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/20 text-xs">
+                            <MapPin className="w-3.5 h-3.5 shrink-0" />
+                            {collab.assignedRoom}
                           </span>
                         ) : (
                           <span className="text-slate-400 font-semibold text-[11px] italic">
-                            Coordenação / Geral
+                            Coordenação
                           </span>
                         )}
                       </td>
 
-                      {/* Status de Presença */}
-                      <td className="py-3 px-4">
-                        {isChecked ? (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
-                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                            <span>Presente</span>
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30">
-                            <XCircle className="w-3.5 h-3.5 shrink-0" />
-                            <span>Faltoso</span>
-                          </div>
-                        )}
-                        {c.presenceCheckedAt && (
-                          <span className="block text-[9px] text-slate-400 font-mono mt-0.5">
-                            {new Date(c.presenceCheckedAt).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Contato / Ações */}
-                      <td className="py-3 px-4 text-right no-print">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {c.whatsapp && (
-                            <a
-                              href={getWhatsAppLink(c.whatsapp, c.name, c.assignedRole, c.assignedRoom)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer"
-                              title={`Enviar WhatsApp para ${c.name}`}
-                            >
-                              <MessageSquare className="w-4 h-4" />
-                            </a>
-                          )}
-                          {c.whatsapp && (
-                            <a
-                              href={`tel:${c.whatsapp.replace(/\D/g, "")}`}
-                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer"
-                              title={`Ligar para ${c.name}`}
-                            >
-                              <Phone className="w-4 h-4" />
-                            </a>
-                          )}
+                      {/* APENAS O BOTÃO DE CONFIRMA PRESENÇA */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleTogglePresence(collab)}
+                            disabled={readOnly || isUpdating}
+                            className={`px-4 py-2 rounded-xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 ${
+                              isPresent
+                                ? "bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-emerald-700"
+                                : "bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400"
+                            } ${isUpdating ? "opacity-50 animate-pulse" : ""}`}
+                            title={isPresent ? "Clique para desmarcar presença" : "Clique para confirmar presença do fiscal"}
+                          >
+                            {isPresent ? (
+                              <>
+                                <Check className="w-4 h-4 stroke-[3]" />
+                                <span>Presença Confirmada</span>
+                                {presenceTime && (
+                                  <span className="text-[10px] font-mono opacity-90 ml-1">
+                                    ({new Date(presenceTime).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })})
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <CheckSquare className="w-4 h-4" />
+                                <span>Confirmar Presença</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                       </td>
 
@@ -606,120 +600,78 @@ export default function AttendanceListView({
         )}
       </div>
 
-      {/* 5. MANDATORY BOTTOM SECTION: QUADRO DE FALTOSOS */}
-      <div className="bg-white dark:bg-[#0c1220]/95 p-6 rounded-2xl border-2 border-rose-300/80 dark:border-rose-900/60 shadow-[4px_4px_0px_0px_#f43f5e]/30 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b-2 border-rose-100 dark:border-rose-950">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shadow-xs">
-              <ShieldAlert className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-display font-black text-slate-900 dark:text-white flex items-center gap-2">
-                Quadro de Faltosos / Ausentes para o Exame
-                <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-rose-500 text-white font-bold">
-                  {totalAbsent}
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Lista detalhada dos colaboradores alocados que ainda não validaram presença no local de prova.
-              </p>
+      {/* ========================================================================= */}
+      {/* 5. IMPRESSÃO OFICIAL DA LISTA DE PRESENÇA (MANTÉM O MESMO PADRÃO OFICIAL) */}
+      {/* ========================================================================= */}
+      <div className="hidden print:block print:w-full print:p-6 print:m-0 bg-white text-black font-sans text-xs">
+        {/* Print Header */}
+        <div className="border-b-2 border-black pb-4 mb-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-black uppercase tracking-tight">ENEM 2026 — LISTA OFICIAL DE PRESENÇA</h1>
+            <p className="text-xs font-bold uppercase mt-0.5">
+              INSTITUTO NACIONAL DE ESTUDOS E PESQUISAS EDUCACIONAIS ANÍSIO TEIXEIRA (INEP) • CEBRASPE
+            </p>
+            <div className="mt-2 text-xs flex gap-4 font-semibold">
+              <span><strong>Local de Aplicação:</strong> {building?.name || "Local de Aplicação"}</span>
+              <span><strong>Coordenação:</strong> {building?.coordRoom || "—"}</span>
+              <span><strong>Exame:</strong> {activeDay === "day1" ? `1º Dia (${examDay1Label})` : `2º Dia (${examDay2Label})`}</span>
             </div>
           </div>
-
-          {availableReserves.length > 0 && totalAbsent > 0 && (
-            <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-500/20 flex items-center gap-1.5 self-start sm:self-auto">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{availableReserves.length} Fiscais de Reserva disponíveis para substituição</span>
-            </div>
-          )}
+          <div className="text-right font-mono text-[10px] border-2 border-black p-2 rounded">
+            <span className="block font-black text-xs">CALANGUS v2.3</span>
+            <span className="block">Emissão: {new Date().toLocaleDateString("pt-BR")}</span>
+            <span className="block font-bold">Total: {allocatedCollaborators.length} fiscais</span>
+          </div>
         </div>
 
-        {/* Absent List Content */}
-        {absentCollaborators.length === 0 ? (
-          <div className="p-6 rounded-xl bg-emerald-500/10 border-2 border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-center space-y-1">
-            <div className="flex items-center justify-center gap-2 font-black text-sm">
-              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-              <span>100% DE PRESENÇA CONFIRMADA</span>
-            </div>
-            <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
-              Todos os {totalAllocated} colaboradores associados e alocados já tiveram a presença validada!
-            </p>
+        {/* Printable Table sorted alphabetically */}
+        <table className="w-full border-collapse border border-black text-[11px]">
+          <thead>
+            <tr className="bg-gray-100 border-b border-black text-left font-black uppercase">
+              <th className="border border-black p-1.5 text-center w-8">Nº</th>
+              <th className="border border-black p-1.5">Nome do Colaborador</th>
+              <th className="border border-black p-1.5 w-28">CPF</th>
+              <th className="border border-black p-1.5 w-32">Função</th>
+              <th className="border border-black p-1.5 w-24">Sala</th>
+              <th className="border border-black p-1.5 w-20 text-center">Chegada</th>
+              <th className="border border-black p-1.5 w-44">Assinatura do Fiscal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allocatedCollaborators.map((collab, idx) => {
+              const isPresent = isCollaboratorPresentOnActiveDay(collab);
+              const pTime = getPresenceTimestampOnActiveDay(collab);
+
+              return (
+                <tr key={collab.id || collab.cpf} className="border-b border-black">
+                  <td className="border border-black p-1.5 text-center font-mono font-bold">{idx + 1}</td>
+                  <td className="border border-black p-1.5 font-bold uppercase">{collab.name}</td>
+                  <td className="border border-black p-1.5 font-mono">{collab.cpf}</td>
+                  <td className="border border-black p-1.5 font-semibold">{collab.assignedRole || "Fiscal"}</td>
+                  <td className="border border-black p-1.5 font-bold">{collab.assignedRoom || "Coordenação"}</td>
+                  <td className="border border-black p-1.5 text-center font-mono text-[10px]">
+                    {isPresent && pTime ? new Date(pTime).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' }) : "____:____"}
+                  </td>
+                  <td className="border border-black p-1.5 text-center">
+                    <div className="w-full border-b border-gray-400 mt-3"></div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* Print Sign-off block */}
+        <div className="mt-8 pt-6 border-t-2 border-black flex justify-between items-end text-xs">
+          <div>
+            <p className="font-bold">Coordenação de Local de Aplicação (CLA)</p>
+            <p className="text-[10px] text-gray-600 mt-1">Declaro para os devidos fins que a lista acima reflete fielmente a presença dos colaboradores.</p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {absentCollaborators.map((absent) => (
-              <div
-                key={absent.id || absent.cpf}
-                className="p-4 rounded-xl border-2 border-rose-200 dark:border-rose-900/40 bg-rose-500/[0.03] dark:bg-rose-500/[0.06] hover:bg-rose-500/[0.08] transition space-y-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <FiscalAvatar
-                      photoUrl={absent.photoUrl}
-                      name={absent.name}
-                      role={absent.assignedRole || "Fiscal"}
-                      size="sm"
-                    />
-                    <div className="min-w-0">
-                      <span className="font-extrabold text-xs text-slate-900 dark:text-white block truncate">
-                        {absent.name}
-                      </span>
-                      <span className="text-[11px] font-mono text-slate-400 block">
-                        CPF: {absent.cpf}
-                      </span>
-                    </div>
-                  </div>
-
-                  <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
-                    Ausente
-                  </span>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-[11px] space-y-1">
-                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span className="text-slate-400 font-semibold">Função:</span>
-                    <strong className="text-slate-900 dark:text-white">{absent.assignedRole || "Não atribuída"}</strong>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span className="text-slate-400 font-semibold">Sala Designada:</span>
-                    <strong className="text-emerald-600 dark:text-emerald-400">{absent.assignedRoom || "Coordenação"}</strong>
-                  </div>
-                  {absent.whatsapp && (
-                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                      <span className="text-slate-400 font-semibold">Telefone:</span>
-                      <span className="font-mono text-[10px]">{absent.whatsapp}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Quick actions for absent fiscal */}
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={() => handleTogglePresence(absent)}
-                    disabled={readOnly}
-                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Validar Agora</span>
-                  </button>
-
-                  {absent.whatsapp && (
-                    <a
-                      href={getWhatsAppLink(absent.whatsapp, absent.name, absent.assignedRole, absent.assignedRoom)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="py-1.5 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] flex items-center gap-1 hover:bg-emerald-500/20 transition cursor-pointer"
-                      title="Contatar no WhatsApp"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>Cobrar</span>
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="text-center w-64">
+            <div className="border-b border-black w-full mb-1"></div>
+            <p className="font-black uppercase text-[10px]">{building?.claId || "Assinatura do Coordenador CLA"}</p>
           </div>
-        )}
+        </div>
       </div>
 
     </div>
