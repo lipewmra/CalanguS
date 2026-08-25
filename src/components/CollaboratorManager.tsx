@@ -155,7 +155,17 @@ export default function CollaboratorManager({
 }: CollaboratorManagerProps) {
   
   const [activeSubTab, setActiveSubTab] = useState<"list" | "network_reserves" | "add" | "import" | "edit">("list");
-  const [filterType, setFilterType] = useState<"todos" | "confirmados" | "pendentes" | "efetivos" | "reservas" | "recusados" | "com_erro">("todos");
+  const [filterType, setFilterType] = useState<
+    | "todos"
+    | "com_funcao_sem_sala"
+    | "sem_funcao"
+    | "confirmados"
+    | "pendentes"
+    | "efetivos"
+    | "reservas"
+    | "recusados"
+    | "com_erro"
+  >("todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchField, setSearchField] = useState<
     | "all"
@@ -703,10 +713,16 @@ export default function CollaboratorManager({
     // 1. Status Filter
     if (filterType === "confirmados") {
       result = result.filter(c => c.status === "Confirmado");
+    } else if (filterType === "com_funcao_sem_sala") {
+      // Tem função mas não está associado a sala/posto
+      result = result.filter(c => c.status === "Confirmado" && c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === ""));
+    } else if (filterType === "sem_funcao") {
+      // Não tem função atribuída
+      result = result.filter(c => c.status === "Confirmado" && (!c.assignedRole || c.assignedRole.trim() === ""));
     } else if (filterType === "pendentes") {
       result = result.filter(c => c.status === "Pendente");
     } else if (filterType === "efetivos") {
-      result = result.filter(c => !c.isReserve && c.status === "Confirmado");
+      result = result.filter(c => !c.isReserve && c.status === "Confirmado" && c.assignedRoom && c.assignedRoom.trim() !== "");
     } else if (filterType === "reservas") {
       result = result.filter(c => c.isReserve && c.status === "Confirmado");
     } else if (filterType === "recusados") {
@@ -1579,10 +1595,12 @@ function activeTabSubList(
         <div className="flex gap-1.5 flex-wrap pt-2 border-t border-slate-200 dark:border-slate-800">
           {[
             { id: "todos", label: `Todos (${allCollaborators.length})` },
+            { id: "com_funcao_sem_sala", label: `Com Função (Não Ensalados) (${allCollaborators.filter(c => c.status === "Confirmado" && c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === "")).length})` },
+            { id: "sem_funcao", label: `Sem Função Atribuída (${allCollaborators.filter(c => c.status === "Confirmado" && (!c.assignedRole || c.assignedRole.trim() === "")).length})` },
             { id: "confirmados", label: `Confirmados (${allCollaborators.filter(c => c.status === "Confirmado").length})` },
-            { id: "pendentes", label: `Pendentes (${allCollaborators.filter(c => c.status === "Pendente").length})` },
-            { id: "efetivos", label: `Efetivos c/ Sala (${allCollaborators.filter(c => !c.isReserve && c.status === "Confirmado").length})` },
+            { id: "efetivos", label: `Efetivos c/ Sala (${allCollaborators.filter(c => !c.isReserve && c.status === "Confirmado" && c.assignedRoom && c.assignedRoom.trim() !== "").length})` },
             { id: "reservas", label: `Reservas (${allCollaborators.filter(c => c.isReserve && c.status === "Confirmado").length})` },
+            { id: "pendentes", label: `Pendentes (${allCollaborators.filter(c => c.status === "Pendente").length})` },
             { id: "recusados", label: `Recusados (${refusedCollabs.length})` },
             { id: "com_erro", label: `⚠ Inconsistência (${allCollaborators.filter(c => c.orionStatus === "Erro").length})` }
           ].map(f => (

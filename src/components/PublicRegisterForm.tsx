@@ -356,11 +356,11 @@ export default function PublicRegisterForm({
                     Pré-Inscrição de Fiscais — ENEM 2026
                   </h1>
                   <span className="text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                    v2.0
+                    v2.3
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                  Portal Público CalanguS v2.0. Preencha seus dados abaixo para se credenciar à equipe de fiscais de sala e pessoal de apoio técnico.
+                  Portal Público CalanguS v2.3. Preencha seus dados abaixo para se credenciar à equipe de fiscais de sala e pessoal de apoio técnico.
                 </p>
               </div>
             </div>

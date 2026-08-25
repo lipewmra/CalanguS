@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { CollaboratorInfo, RoomDetails, BuildingInfo, EventConfigInfo } from "../types";
-import { getRoomTargetRequirements } from "../lib/metrics-calculator";
+import { getRoomTargetRequirements, calculateBuildingTargetQuantities, calculateOfficialTier } from "../lib/metrics-calculator";
 import CollaboratorFailureModal from "./CollaboratorFailureModal";
 import FiscalAvatar from "./FiscalAvatar";
 import ImageLightboxModal, { LightboxData } from "./ImageLightboxModal";
@@ -10,9 +10,292 @@ import {
   AlertCircle, Printer, Download, Sparkles, X, UserPlus, ArrowRightLeft,
   FileSpreadsheet, FileText, CheckCircle2, ChevronRight, Search, Shield,
   ExternalLink, Copy, CheckCheck, Eye, Filter, Footprints, Bath, Award,
-  ChevronDown, ChevronUp, Layers, SlidersHorizontal
+  ChevronDown, ChevronUp, Layers, SlidersHorizontal, Trash2, KeyRound,
+  DoorClosed, Settings2, Phone, CheckSquare, Square, TableProperties
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
+
+export type ExportTemplateType = 
+  | "chefe_de_sala" 
+  | "aplicadores" 
+  | "volantes" 
+  | "banheiro" 
+  | "limpeza" 
+  | "porteiro" 
+  | "ensalamento" 
+  | "predio" 
+  | "personalizado";
+
+export interface CustomExportConfig {
+  selectedRoles: string[];
+  selectedColumns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "assinatura")[];
+  allocationStatusFilter: "all" | "allocated" | "unallocated";
+  groupBy: "room" | "role" | "none";
+}
+
+export interface OperationalSectorConfig {
+  id: string;
+  name: string;
+  shortName: string;
+  defaultRole: string;
+  icon: string;
+  iconBg: string;
+  themeColor: "indigo" | "cyan" | "amber" | "emerald" | "rose" | "sky";
+  desc: string;
+}
+
+export const OPERATIONAL_SECTORS: OperationalSectorConfig[] = [
+  {
+    id: "volante",
+    name: "Fiscal Volante / Corredor",
+    shortName: "Fiscal Volante",
+    defaultRole: "Fiscal Volante / Corredor",
+    icon: "🏃",
+    iconBg: "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+    themeColor: "indigo",
+    desc: "Circulação nas áreas comuns, apoio nos corredores e condução de participantes.",
+  },
+  {
+    id: "banheiro",
+    name: "Fiscal de Banheiro",
+    shortName: "Fiscal de Banheiro",
+    defaultRole: "Fiscal de Banheiro",
+    icon: "🚻",
+    iconBg: "bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500/30",
+    themeColor: "cyan",
+    desc: "Inspeção e vistoria eletrônica com detector de metais nos sanitários masculino e feminino.",
+  },
+  {
+    id: "limpeza",
+    name: "Auxiliar de Limpeza",
+    shortName: "Auxiliar de Limpeza",
+    defaultRole: "Auxiliar de Limpeza",
+    icon: "🧹",
+    iconBg: "bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30",
+    themeColor: "amber",
+    desc: "Higienização periódica contínua dos banheiros, salas de prova e descarte de resíduos.",
+  },
+  {
+    id: "porteiro",
+    name: "Porteiro",
+    shortName: "Porteiro",
+    defaultRole: "Porteiro",
+    icon: "🚪",
+    iconBg: "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+    themeColor: "emerald",
+    desc: "Controle de abertura/fechamento pontual dos portões de acesso do prédio e triagem inicial.",
+  },
+  {
+    id: "representante",
+    name: "Representante do Local",
+    shortName: "Representante do Local",
+    defaultRole: "Representante do Local",
+    icon: "🏛️",
+    iconBg: "bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/30",
+    themeColor: "rose",
+    desc: "Responsável institucional pelo prédio escolar, infraestrutura predial e apoio de ligação ao CLA.",
+  },
+  {
+    id: "informatica",
+    name: "Técnico de Informática",
+    shortName: "Técnico de Informática",
+    defaultRole: "Técnico de Informática",
+    icon: "💻",
+    iconBg: "bg-sky-500/20 text-sky-600 dark:text-sky-400 border-sky-500/30",
+    themeColor: "sky",
+    desc: "Suporte especializado aos computadores, videoprova em Libras e tecnologia do prédio.",
+  }
+];
+
+export interface TemplateMeta {
+  id: ExportTemplateType;
+  title: string;
+  shortTitle: string;
+  badge: string;
+  iconName: "award" | "user-check" | "footprints" | "bath" | "sparkles" | "door" | "layers" | "building" | "sliders";
+  fieldsDescription: string;
+  description: string;
+  defaultColumns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "assinatura")[];
+  colorScheme: "amber" | "indigo" | "sky" | "cyan" | "emerald" | "slate" | "teal" | "purple" | "rose";
+}
+
+export const EXPORT_TEMPLATES: TemplateMeta[] = [
+  {
+    id: "chefe_de_sala",
+    title: "Chefe de Salas",
+    shortTitle: "Chefes de Sala",
+    badge: "Liderança de Sala",
+    iconName: "award",
+    fieldsDescription: "Nome, CPF, Telefone, Sala alocada",
+    description: "Lista de Chefes de Sala com contatos telefônicos e salas designadas.",
+    defaultColumns: ["nome", "cpf", "telefone", "sala", "assinatura"],
+    colorScheme: "amber"
+  },
+  {
+    id: "aplicadores",
+    title: "Aplicadores",
+    shortTitle: "Aplicadores de Sala",
+    badge: "Fiscais de Sala",
+    iconName: "user-check",
+    fieldsDescription: "Nome, CPF, Telefone, Sala alocada",
+    description: "Lista completa de Fiscais Aplicadores e respectivas salas de prova.",
+    defaultColumns: ["nome", "cpf", "telefone", "sala", "assinatura"],
+    colorScheme: "indigo"
+  },
+  {
+    id: "volantes",
+    title: "Volantes",
+    shortTitle: "Fiscais Volantes",
+    badge: "Corredor & Apoio",
+    iconName: "footprints",
+    fieldsDescription: "Nome, CPF, Telefone, Sala alocada",
+    description: "Equipe de Fiscais Volantes para apoio nos corredores e trânsito de participantes.",
+    defaultColumns: ["nome", "cpf", "telefone", "sala", "assinatura"],
+    colorScheme: "sky"
+  },
+  {
+    id: "banheiro",
+    title: "Banheiro",
+    shortTitle: "Fiscais de Banheiro",
+    badge: "Vistoria Eletrônica",
+    iconName: "bath",
+    fieldsDescription: "Nome, CPF, Telefone, Sala alocada",
+    description: "Fiscais de Banheiro encarregados da vistoria eletrônica e sanitários.",
+    defaultColumns: ["nome", "cpf", "telefone", "sala", "assinatura"],
+    colorScheme: "cyan"
+  },
+  {
+    id: "limpeza",
+    title: "Limpeza",
+    shortTitle: "Auxiliares de Limpeza",
+    badge: "Conservação Predial",
+    iconName: "sparkles",
+    fieldsDescription: "Nome, CPF, Telefone, Sala alocada",
+    description: "Auxiliares de limpeza e higienização durante todo o período do exame.",
+    defaultColumns: ["nome", "cpf", "telefone", "sala", "assinatura"],
+    colorScheme: "emerald"
+  },
+  {
+    id: "porteiro",
+    title: "Porteiro",
+    shortTitle: "Porteiros & Acesso",
+    badge: "Controle de Portaria",
+    iconName: "door",
+    fieldsDescription: "Nome, CPF, Telefone, Sala alocada",
+    description: "Equipe de Portaria para abertura, triagem e controle de acesso aos portões.",
+    defaultColumns: ["nome", "cpf", "telefone", "sala", "assinatura"],
+    colorScheme: "slate"
+  },
+  {
+    id: "ensalamento",
+    title: "Ensalamento Geral",
+    shortTitle: "Chefes + Aplicadores",
+    badge: "União das Salas",
+    iconName: "layers",
+    fieldsDescription: "Chefes de Sala + Aplicadores (Nome, CPF, Telefone, Sala alocada)",
+    description: "União completa de Chefes de Sala e Aplicadores agrupados por sala de aula.",
+    defaultColumns: ["nome", "cpf", "telefone", "funcao", "sala", "andar", "assinatura"],
+    colorScheme: "teal"
+  },
+  {
+    id: "predio",
+    title: "Prédio Completo",
+    shortTitle: "Equipe do Prédio",
+    badge: "Chefes + Aplic. + Volantes + Banheiro",
+    iconName: "building",
+    fieldsDescription: "Chefes + Aplicador + Volantes + Banheiro (+ Apoio)",
+    description: "Consolidado geral unindo todas as funções operacionais do prédio de provas.",
+    defaultColumns: ["nome", "cpf", "telefone", "funcao", "sala", "assinatura"],
+    colorScheme: "purple"
+  },
+  {
+    id: "personalizado",
+    title: "Personalizado",
+    shortTitle: "Customizado",
+    badge: "Configuração Livre",
+    iconName: "sliders",
+    fieldsDescription: "Deixar o usuário escolher cargos, colunas e filtros",
+    description: "Filtre funções, colunas e status de alocação de forma totalmente flexível.",
+    defaultColumns: ["nome", "cpf", "telefone", "funcao", "sala", "assinatura"],
+    colorScheme: "rose"
+  }
+];
+
+function isCollabInTemplate(
+  c: CollaboratorInfo,
+  template: ExportTemplateType,
+  customCfg: CustomExportConfig,
+  rooms: RoomDetails[],
+  isChefeDeSalaRole: (r?: string) => boolean,
+  isAplicadorRole: (r?: string) => boolean,
+  isRoleMatchingSector: (r: string | undefined, sectorId: string) => boolean,
+  isCollabInSector: (c: CollaboratorInfo, s: OperationalSectorConfig) => boolean
+): boolean {
+  if (template === "chefe_de_sala") {
+    return isChefeDeSalaRole(c.assignedRole);
+  }
+  if (template === "aplicadores") {
+    return isAplicadorRole(c.assignedRole);
+  }
+  if (template === "volantes") {
+    return isRoleMatchingSector(c.assignedRole, "volante") || isCollabInSector(c, OPERATIONAL_SECTORS[0]);
+  }
+  if (template === "banheiro") {
+    return isRoleMatchingSector(c.assignedRole, "banheiro") || isCollabInSector(c, OPERATIONAL_SECTORS[1]);
+  }
+  if (template === "limpeza") {
+    return isRoleMatchingSector(c.assignedRole, "limpeza") || isCollabInSector(c, OPERATIONAL_SECTORS[2]);
+  }
+  if (template === "porteiro") {
+    return isRoleMatchingSector(c.assignedRole, "porteiro") || isCollabInSector(c, OPERATIONAL_SECTORS[3]);
+  }
+  if (template === "ensalamento") {
+    // Unir Chefes de Sala + Aplicadores
+    return (
+      isChefeDeSalaRole(c.assignedRole) ||
+      isAplicadorRole(c.assignedRole) ||
+      (!c.isReserve && !!c.assignedRoom && rooms.some(r => r.number === c.assignedRoom))
+    );
+  }
+  if (template === "predio") {
+    // Unir Chefes + Aplicador + Volantes + Banheiro (+ Limpeza/Porteiro/Representante/TI se houver)
+    return (
+      isChefeDeSalaRole(c.assignedRole) ||
+      isAplicadorRole(c.assignedRole) ||
+      isRoleMatchingSector(c.assignedRole, "volante") ||
+      isRoleMatchingSector(c.assignedRole, "banheiro") ||
+      isRoleMatchingSector(c.assignedRole, "limpeza") ||
+      isRoleMatchingSector(c.assignedRole, "porteiro") ||
+      isRoleMatchingSector(c.assignedRole, "representante") ||
+      isRoleMatchingSector(c.assignedRole, "informatica") ||
+      (!c.isReserve && !!c.assignedRoom && c.assignedRoom.trim() !== "")
+    );
+  }
+  if (template === "personalizado") {
+    let roleMatches = false;
+    if (customCfg.selectedRoles.includes("Chefe de Sala") && isChefeDeSalaRole(c.assignedRole)) roleMatches = true;
+    if (customCfg.selectedRoles.includes("Aplicador") && isAplicadorRole(c.assignedRole)) roleMatches = true;
+    if (customCfg.selectedRoles.includes("Volante") && (isRoleMatchingSector(c.assignedRole, "volante") || isCollabInSector(c, OPERATIONAL_SECTORS[0]))) roleMatches = true;
+    if (customCfg.selectedRoles.includes("Banheiro") && (isRoleMatchingSector(c.assignedRole, "banheiro") || isCollabInSector(c, OPERATIONAL_SECTORS[1]))) roleMatches = true;
+    if (customCfg.selectedRoles.includes("Limpeza") && (isRoleMatchingSector(c.assignedRole, "limpeza") || isCollabInSector(c, OPERATIONAL_SECTORS[2]))) roleMatches = true;
+    if (customCfg.selectedRoles.includes("Porteiro") && (isRoleMatchingSector(c.assignedRole, "porteiro") || isCollabInSector(c, OPERATIONAL_SECTORS[3]))) roleMatches = true;
+    if (customCfg.selectedRoles.includes("Representante") && (isRoleMatchingSector(c.assignedRole, "representante") || isCollabInSector(c, OPERATIONAL_SECTORS[4]))) roleMatches = true;
+    if (customCfg.selectedRoles.includes("TI") && (isRoleMatchingSector(c.assignedRole, "informatica") || isCollabInSector(c, OPERATIONAL_SECTORS[5]))) roleMatches = true;
+    if (customCfg.selectedRoles.includes("Reservas") && (c.isReserve || !c.assignedRole)) roleMatches = true;
+    if (customCfg.selectedRoles.includes("Outros") && c.assignedRole && !isChefeDeSalaRole(c.assignedRole) && !isAplicadorRole(c.assignedRole)) roleMatches = true;
+
+    if (!roleMatches) return false;
+
+    if (customCfg.allocationStatusFilter === "allocated") {
+      return !c.isReserve && !!c.assignedRoom && c.assignedRoom.trim() !== "";
+    }
+    if (customCfg.allocationStatusFilter === "unallocated") {
+      return !c.assignedRoom || c.assignedRoom.trim() === "" || c.isReserve;
+    }
+    return true;
+  }
+  return true;
+}
 
 interface DragAndDropProps {
   collaborators: CollaboratorInfo[];
@@ -43,19 +326,37 @@ export default function DragAndDropReserves({
   const [lightboxData, setLightboxData] = useState<LightboxData | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
 
-  // Selected filter: "all" | "reserva" | specific role name
+  // Selected filter: "all" | "available" | "allocated" | "unallocated_with_role" | "sem_funcao" | specific role name
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>("all");
   const [searchFilter, setSearchFilter] = useState<string>("");
-  const [showAllocatedInFilter, setShowAllocatedInFilter] = useState<boolean>(true);
+  const [onlyUnallocatedToggle, setOnlyUnallocatedToggle] = useState<boolean>(false);
+
+  // Export Templates State
+  const [selectedExportTemplate, setSelectedExportTemplate] = useState<ExportTemplateType>("ensalamento");
+  const [exportSearchQuery, setExportSearchQuery] = useState<string>("");
+  const [customExportConfig, setCustomExportConfig] = useState<CustomExportConfig>({
+    selectedRoles: ["Chefe de Sala", "Aplicador", "Volante", "Banheiro", "Limpeza", "Porteiro"],
+    selectedColumns: ["nome", "cpf", "telefone", "funcao", "sala", "assinatura"],
+    allocationStatusFilter: "all",
+    groupBy: "room"
+  });
 
   // Modals state
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [allocatingCollab, setAllocatingCollab] = useState<CollaboratorInfo | null>(null);
   const [substitutingTarget, setSubstitutingTarget] = useState<{ collab: CollaboratorInfo; roomNumber: string } | null>(null);
+  
+  // Managing Room modal
   const [managingRoom, setManagingRoom] = useState<RoomDetails | null>(null);
   const [roomModalRoleFilter, setRoomModalRoleFilter] = useState<string>("all");
   const [roomModalSearch, setRoomModalSearch] = useState<string>("");
   const [roomModalOnlyUnallocated, setRoomModalOnlyUnallocated] = useState<boolean>(false);
+
+  // Managing Operational Sector modal (Volantes, Banheiro, Limpeza, Porteiro, Representante, TI)
+  const [managingSector, setManagingSector] = useState<OperationalSectorConfig | null>(null);
+  const [sectorModalRoleFilter, setSectorModalRoleFilter] = useState<string>("all");
+  const [sectorModalSearch, setSectorModalSearch] = useState<string>("");
+  const [sectorModalOnlyUnallocated, setSectorModalOnlyUnallocated] = useState<boolean>(false);
 
   // Form states for Allocation modal
   const [selectedTargetRoom, setSelectedTargetRoom] = useState<string>("");
@@ -85,10 +386,10 @@ export default function DragAndDropReserves({
     return unallocated.filter(c => c.isReserve || !c.assignedRole || c.assignedRole.trim() === "");
   }, [unallocated]);
 
-  // Total allocated across all rooms
-  const totalAllocated = useMemo(() => {
-    return approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
-  }, [approvedCollaborators]);
+  // Target Quantities calculated from building inventory and official metrics
+  const buildingTargetQuantities = useMemo(() => {
+    return calculateBuildingTargetQuantities(building || null, eventConfig?.collaboratorMetrics || undefined);
+  }, [building, eventConfig]);
 
   // Helper to test if a role is Chefe de Sala
   const isChefeDeSalaRole = (role?: string) => {
@@ -104,20 +405,96 @@ export default function DragAndDropReserves({
     return (r.includes("aplicador") || r.includes("fiscal de sala")) && !r.includes("chefe de sala");
   };
 
-  // Quantitative Stats: Fiscais, Chefes de Sala, Aplicadores, Alocados e Reservas
+  // Helper to test if a role matches a sector
+  const isRoleMatchingSector = (role: string | undefined, sectorId: string) => {
+    if (!role) return false;
+    const r = role.toLowerCase();
+    if (sectorId === "volante") return r.includes("volante") || r.includes("corredor");
+    if (sectorId === "banheiro") return r.includes("banheiro");
+    if (sectorId === "limpeza") return r.includes("limpeza");
+    if (sectorId === "porteiro") return r.includes("porteiro") || r.includes("portaria");
+    if (sectorId === "representante") return r.includes("representante");
+    if (sectorId === "informatica") return r.includes("informática") || r.includes("informatica") || r.includes("ti");
+    return false;
+  };
+
+  // Helper to test if collaborator is in a specific sector
+  const isCollabInSector = (collab: CollaboratorInfo, sector: OperationalSectorConfig) => {
+    if (collab.isReserve) return false;
+    const room = (collab.assignedRoom || "").trim().toLowerCase();
+    const sectorName = sector.name.toLowerCase();
+    const sectorShort = sector.shortName.toLowerCase();
+    if (room === sectorName || room === sectorShort) return true;
+    if (sector.id === "volante" && (room.includes("volante") || room.includes("corredor"))) return true;
+    if (sector.id === "banheiro" && room.includes("banheiro")) return true;
+    if (sector.id === "limpeza" && room.includes("limpeza")) return true;
+    if (sector.id === "porteiro" && room.includes("porteiro")) return true;
+    if (sector.id === "representante" && room.includes("representante")) return true;
+    if (sector.id === "informatica" && (room.includes("informática") || room.includes("informatica") || room.includes("ti"))) return true;
+    return false;
+  };
+
+  // Quantitative Stats: Fiscais, Chefes de Sala, Aplicadores, Volantes, Banheiro, Alocados e Reservas
   const stats = useMemo(() => {
     const totalApproved = approvedCollaborators.length;
     
+    // 1. Chefes de Sala
     const chefesDeSala = approvedCollaborators.filter(c => isChefeDeSalaRole(c.assignedRole));
     const chefesDeSalaAssigned = chefesDeSala.length;
     const chefesDeSalaAllocated = chefesDeSala.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
     const chefesDeSalaAvailable = chefesDeSala.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
+    const targetChefes = buildingTargetQuantities["Chefe de Sala"] ?? rooms.length;
 
+    // 2. Aplicadores
     const aplicadores = approvedCollaborators.filter(c => isAplicadorRole(c.assignedRole));
     const aplicadoresAssigned = aplicadores.length;
     const aplicadoresAllocated = aplicadores.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
     const aplicadoresAvailable = aplicadores.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
+    const targetAplicadores = buildingTargetQuantities["Aplicador"] ?? rooms.length;
 
+    // 3. Volantes / Corredor
+    const volantes = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "volante"));
+    const volantesAssigned = volantes.length;
+    const volantesAllocated = approvedCollaborators.filter(c => isCollabInSector(c, OPERATIONAL_SECTORS[0])).length;
+    const volantesAvailable = volantes.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
+    const targetVolantes = buildingTargetQuantities["Fiscal Volante / Corredor"] ?? calculateOfficialTier(rooms.length);
+
+    // 4. Banheiro
+    const banheiro = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "banheiro"));
+    const banheiroAssigned = banheiro.length;
+    const banheiroAllocated = approvedCollaborators.filter(c => isCollabInSector(c, OPERATIONAL_SECTORS[1])).length;
+    const banheiroAvailable = banheiro.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
+    const targetBanheiro = buildingTargetQuantities["Fiscal de Banheiro"] ?? calculateOfficialTier(rooms.length);
+
+    // 5. Limpeza
+    const limpeza = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "limpeza"));
+    const limpezaAssigned = limpeza.length;
+    const limpezaAllocated = approvedCollaborators.filter(c => isCollabInSector(c, OPERATIONAL_SECTORS[2])).length;
+    const limpezaAvailable = limpeza.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
+    const targetLimpeza = buildingTargetQuantities["Auxiliar de Limpeza"] ?? 2;
+
+    // 6. Porteiro
+    const porteiro = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "porteiro"));
+    const porteiroAssigned = porteiro.length;
+    const porteiroAllocated = approvedCollaborators.filter(c => isCollabInSector(c, OPERATIONAL_SECTORS[3])).length;
+    const porteiroAvailable = porteiro.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
+    const targetPorteiro = buildingTargetQuantities["Porteiro"] ?? 2;
+
+    // 7. Representante
+    const representante = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "representante"));
+    const representanteAssigned = representante.length;
+    const representanteAllocated = approvedCollaborators.filter(c => isCollabInSector(c, OPERATIONAL_SECTORS[4])).length;
+    const representanteAvailable = representante.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
+    const targetRepresentante = buildingTargetQuantities["Representante do Local"] ?? 1;
+
+    // 8. TI
+    const ti = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "informatica"));
+    const tiAssigned = ti.length;
+    const tiAllocated = approvedCollaborators.filter(c => isCollabInSector(c, OPERATIONAL_SECTORS[5])).length;
+    const tiAvailable = ti.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
+    const targetTI = buildingTargetQuantities["Técnico de Informática"] ?? 1;
+
+    // Demais Fiscais (especializados ou outros)
     const demaisFiscais = approvedCollaborators.filter(c => 
       c.assignedRole && 
       c.assignedRole.trim() !== "" && 
@@ -128,28 +505,64 @@ export default function DragAndDropReserves({
     const demaisFiscaisAllocated = demaisFiscais.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
     const demaisFiscaisAvailable = demaisFiscais.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
 
-    const totalAllocatedRooms = approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
+    const totalAllocatedRooms = approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && !OPERATIONAL_SECTORS.some(s => isCollabInSector(c, s))).length;
+    const totalAllocatedSectors = approvedCollaborators.filter(c => !c.isReserve && OPERATIONAL_SECTORS.some(s => isCollabInSector(c, s))).length;
     const totalReserves = approvedCollaborators.filter(c => c.isReserve || !c.assignedRole || c.assignedRole.trim() === "").length;
     
+    // Collaborators with assigned role but no room / unallocated
+    const unallocatedWithRole = approvedCollaborators.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === "")).length;
+    const unallocatedNoRole = approvedCollaborators.filter(c => !c.assignedRole || c.assignedRole.trim() === "").length;
+
     // Rooms with at least 1 allocated collaborator
-    const roomsOccupied = new Set(approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").map(c => c.assignedRoom)).size;
+    const roomsOccupied = new Set(approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && !OPERATIONAL_SECTORS.some(s => isCollabInSector(c, s))).map(c => c.assignedRoom)).size;
+    const sectorsOccupied = OPERATIONAL_SECTORS.filter(s => approvedCollaborators.some(c => isCollabInSector(c, s))).length;
 
     return {
       totalApproved,
       chefesDeSalaAssigned,
       chefesDeSalaAllocated,
       chefesDeSalaAvailable,
+      targetChefes,
       aplicadoresAssigned,
       aplicadoresAllocated,
       aplicadoresAvailable,
+      targetAplicadores,
+      volantesAssigned,
+      volantesAllocated,
+      volantesAvailable,
+      targetVolantes,
+      banheiroAssigned,
+      banheiroAllocated,
+      banheiroAvailable,
+      targetBanheiro,
+      limpezaAssigned,
+      limpezaAllocated,
+      limpezaAvailable,
+      targetLimpeza,
+      porteiroAssigned,
+      porteiroAllocated,
+      porteiroAvailable,
+      targetPorteiro,
+      representanteAssigned,
+      representanteAllocated,
+      representanteAvailable,
+      targetRepresentante,
+      tiAssigned,
+      tiAllocated,
+      tiAvailable,
+      targetTI,
       demaisFiscaisAssigned,
       demaisFiscaisAllocated,
       demaisFiscaisAvailable,
       totalAllocatedRooms,
+      totalAllocatedSectors,
       totalReserves,
-      roomsOccupied
+      unallocatedWithRole,
+      unallocatedNoRole,
+      roomsOccupied,
+      sectorsOccupied
     };
-  }, [approvedCollaborators]);
+  }, [approvedCollaborators, buildingTargetQuantities, rooms.length]);
 
   // Dynamic active roles list mapped with Menu 3 Quantitativo & Collaborators Count
   const activeRolesList = useMemo(() => {
@@ -158,7 +571,7 @@ export default function DragAndDropReserves({
       : ENEM_ROLES.map(r => ({ name: r.name, desc: r.desc }));
 
     return baseRoles.map(r => {
-      const targetQty = building?.rolesTargetQuantities?.[r.name] || 0;
+      const targetQty = buildingTargetQuantities[r.name] ?? building?.rolesTargetQuantities?.[r.name] ?? 0;
       const allAssigned = approvedCollaborators.filter(c => c.assignedRole === r.name);
       const unallocatedMembers = allAssigned.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "");
       const allocatedMembers = allAssigned.filter(c => c.assignedRoom && c.assignedRoom.trim() !== "");
@@ -175,7 +588,7 @@ export default function DragAndDropReserves({
         allocatedMembers
       };
     });
-  }, [building, approvedCollaborators]);
+  }, [building, approvedCollaborators, buildingTargetQuantities]);
 
   // Functions that have > 0 assigned in Menu 3 OR target quantity > 0 in Menu 3
   const rolesWithQuantity = useMemo(() => {
@@ -192,16 +605,39 @@ export default function DragAndDropReserves({
       list = unallocated;
     } else if (selectedRoleFilter === "allocated") {
       list = approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "");
+    } else if (selectedRoleFilter === "unallocated_with_role") {
+      // Tem função mas não está associado a sala/posto
+      list = approvedCollaborators.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === ""));
+    } else if (selectedRoleFilter === "sem_funcao") {
+      // Não tem função associada
+      list = approvedCollaborators.filter(c => !c.assignedRole || c.assignedRole.trim() === "");
     } else if (selectedRoleFilter === "chefe_de_sala" || selectedRoleFilter === "Chefe de Sala") {
       list = approvedCollaborators.filter(c => isChefeDeSalaRole(c.assignedRole));
     } else if (selectedRoleFilter === "aplicadores" || selectedRoleFilter === "Aplicador") {
       list = approvedCollaborators.filter(c => isAplicadorRole(c.assignedRole));
+    } else if (selectedRoleFilter === "volantes") {
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "volante"));
+    } else if (selectedRoleFilter === "banheiro") {
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "banheiro"));
+    } else if (selectedRoleFilter === "limpeza") {
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "limpeza"));
+    } else if (selectedRoleFilter === "porteiro") {
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "porteiro"));
+    } else if (selectedRoleFilter === "representante") {
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "representante"));
+    } else if (selectedRoleFilter === "ti") {
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "informatica"));
     } else if (selectedRoleFilter === "demais_fiscais") {
       list = approvedCollaborators.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && !isChefeDeSalaRole(c.assignedRole) && !isAplicadorRole(c.assignedRole));
     } else if (selectedRoleFilter === "reserva") {
       list = unallocatedReservas;
     } else {
       list = approvedCollaborators.filter(c => c.assignedRole === selectedRoleFilter);
+    }
+
+    // Apply quick toggle: only unallocated / unassigned
+    if (onlyUnallocatedToggle) {
+      list = list.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "");
     }
 
     // Apply text search
@@ -217,7 +653,7 @@ export default function DragAndDropReserves({
     }
 
     return list;
-  }, [selectedRoleFilter, approvedCollaborators, unallocated, unallocatedReservas, searchFilter]);
+  }, [selectedRoleFilter, approvedCollaborators, unallocated, unallocatedReservas, searchFilter, onlyUnallocatedToggle]);
 
   // Map of room number -> { total, chefes, aplicadores } count of allocated collaborators
   const roomOccupancyMap = useMemo(() => {
@@ -251,6 +687,10 @@ export default function DragAndDropReserves({
       list = approvedCollaborators;
     } else if (roomModalRoleFilter === "unallocated") {
       list = unallocated;
+    } else if (roomModalRoleFilter === "unallocated_with_role") {
+      list = approvedCollaborators.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === ""));
+    } else if (roomModalRoleFilter === "sem_funcao") {
+      list = approvedCollaborators.filter(c => !c.assignedRole || c.assignedRole.trim() === "");
     } else if (roomModalRoleFilter === "current_room") {
       list = approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom === managingRoom.number);
     } else if (roomModalRoleFilter === "reserva") {
@@ -279,6 +719,59 @@ export default function DragAndDropReserves({
 
     return list;
   }, [managingRoom, approvedCollaborators, unallocated, unallocatedReservas, roomModalRoleFilter, roomModalOnlyUnallocated, roomModalSearch]);
+
+  // Filtered collaborators list inside Direct Sector Management Modal
+  const sectorModalFilteredCollabs = useMemo(() => {
+    if (!managingSector) return [];
+
+    let list: CollaboratorInfo[] = [];
+
+    if (sectorModalRoleFilter === "all") {
+      list = approvedCollaborators;
+    } else if (sectorModalRoleFilter === "unallocated") {
+      list = unallocated;
+    } else if (sectorModalRoleFilter === "unallocated_with_role") {
+      list = approvedCollaborators.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === ""));
+    } else if (sectorModalRoleFilter === "sem_funcao") {
+      list = approvedCollaborators.filter(c => !c.assignedRole || c.assignedRole.trim() === "");
+    } else if (sectorModalRoleFilter === "current_sector") {
+      list = approvedCollaborators.filter(c => isCollabInSector(c, managingSector));
+    } else if (sectorModalRoleFilter === "reserva") {
+      list = unallocatedReservas;
+    } else if (sectorModalRoleFilter === "sector_default") {
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, managingSector.id));
+    } else {
+      list = approvedCollaborators.filter(c => c.assignedRole === sectorModalRoleFilter);
+    }
+
+    if (sectorModalOnlyUnallocated) {
+      list = list.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "" || isCollabInSector(c, managingSector));
+    }
+
+    if (sectorModalSearch.trim()) {
+      const q = sectorModalSearch.toLowerCase().trim();
+      list = list.filter(c => 
+        (c.name || "").toLowerCase().includes(q) ||
+        (c.cpf || "").toLowerCase().includes(q) ||
+        (c.assignedRole || "").toLowerCase().includes(q) ||
+        (c.assignedRoom || "").toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [managingSector, approvedCollaborators, unallocated, unallocatedReservas, sectorModalRoleFilter, sectorModalOnlyUnallocated, sectorModalSearch]);
+
+  const getSectorTarget = (sectorId: string) => {
+    switch (sectorId) {
+      case "volante": return stats.targetVolantes;
+      case "banheiro": return stats.targetBanheiro;
+      case "limpeza": return stats.targetLimpeza;
+      case "porteiro": return stats.targetPorteiro;
+      case "representante": return stats.targetRepresentante;
+      case "informatica": return stats.targetTI;
+      default: return 1;
+    }
+  };
 
   // Helper to pick a clean icon for each role
   const getRoleIcon = (roleName: string) => {
@@ -324,6 +817,25 @@ export default function DragAndDropReserves({
       
       onMove(id, false, roomName, role);
       setSuccessMsg(`Colaborador ${targetCollab.name} alocado na ${roomName} como ${role}!`);
+      setTimeout(() => setSuccessMsg(null), 3500);
+    }
+    setDraggedId(null);
+  };
+
+  // Drop to an operational sector (Volantes, Banheiro, Limpeza, etc.)
+  const handleDropToSector = (e: React.DragEvent, sector: OperationalSectorConfig) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain") || draggedId;
+    if (!id) return;
+    
+    const targetCollab = collaborators.find(c => c.id === id);
+    if (targetCollab) {
+      const role = targetCollab.assignedRole && targetCollab.assignedRole.trim() !== "" 
+        ? targetCollab.assignedRole 
+        : sector.defaultRole;
+      
+      onMove(id, false, sector.shortName, role);
+      setSuccessMsg(`Colaborador ${targetCollab.name} alocado em ${sector.name} como ${role}!`);
       setTimeout(() => setSuccessMsg(null), 3500);
     }
     setDraggedId(null);
@@ -460,26 +972,91 @@ export default function DragAndDropReserves({
     });
   }, [unallocated, substitutingTarget, substituteSearchQuery]);
 
-  // Download printable HTML report
+  // Computed collaborators for current template
+  const filteredTemplateCollaborators = useMemo(() => {
+    const list = approvedCollaborators.filter(c => 
+      isCollabInTemplate(c, selectedExportTemplate, customExportConfig, rooms, isChefeDeSalaRole, isAplicadorRole, isRoleMatchingSector, isCollabInSector)
+    );
+
+    if (!exportSearchQuery.trim()) return list;
+    const q = exportSearchQuery.toLowerCase().trim();
+    return list.filter(c => {
+      const matchName = (c.name || "").toLowerCase().includes(q);
+      const matchCpf = (c.cpf || "").toLowerCase().includes(q);
+      const matchPhone = (c.whatsapp || "").toLowerCase().includes(q);
+      const matchRole = (c.assignedRole || "").toLowerCase().includes(q);
+      const matchRoom = (c.assignedRoom || "").toLowerCase().includes(q);
+      return matchName || matchCpf || matchPhone || matchRole || matchRoom;
+    });
+  }, [approvedCollaborators, selectedExportTemplate, customExportConfig, rooms, exportSearchQuery]);
+
+  // Sort list logically by room number then name
+  const sortedTemplateCollaborators = useMemo(() => {
+    const list = [...filteredTemplateCollaborators];
+    list.sort((a, b) => {
+      const roomA = a.assignedRoom || "ZZZ";
+      const roomB = b.assignedRoom || "ZZZ";
+      const numA = parseInt(roomA.replace(/\D/g, ""), 10);
+      const numB = parseInt(roomB.replace(/\D/g, ""), 10);
+      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+        return numA - numB;
+      }
+      if (roomA !== roomB) {
+        return roomA.localeCompare(roomB);
+      }
+      return (a.name || "").localeCompare(b.name || "");
+    });
+    return list;
+  }, [filteredTemplateCollaborators]);
+
+  // Active columns for the current template
+  const activeTemplateColumns = useMemo(() => {
+    if (selectedExportTemplate === "personalizado") {
+      return customExportConfig.selectedColumns;
+    }
+    const templateMeta = EXPORT_TEMPLATES.find(t => t.id === selectedExportTemplate);
+    return templateMeta?.defaultColumns || ["nome", "cpf", "telefone", "sala", "assinatura"];
+  }, [selectedExportTemplate, customExportConfig.selectedColumns]);
+
+  // Download printable HTML report based on active template
   const handleDownloadHtmlReport = () => {
-    const html = generatePrintableHtml(building, claName, rooms, approvedCollaborators, rolesWithQuantity);
+    const templateMeta = EXPORT_TEMPLATES.find(t => t.id === selectedExportTemplate) || EXPORT_TEMPLATES[0];
+    const html = generateTemplatePrintableHtml(
+      building, 
+      claName, 
+      rooms, 
+      sortedTemplateCollaborators, 
+      templateMeta, 
+      activeTemplateColumns,
+      customExportConfig
+    );
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Relatorio_Ensalamento_ENEM2026_${building?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Local"}.html`;
+    const sanitizedTemplateName = templateMeta.shortTitle.replace(/[^a-zA-Z0-9]/g, "_");
+    link.download = `Relatorio_${sanitizedTemplateName}_ENEM2026_${building?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Local"}.html`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 
-    setSuccessMsg("Relatório exportado com sucesso! Arquivo HTML pronto para impressão ou salvamento em PDF.");
+    setSuccessMsg(`Relatório "${templateMeta.title}" exportado com sucesso! Arquivo HTML pronto para impressão ou PDF.`);
     setTimeout(() => setSuccessMsg(null), 4000);
   };
 
-  // Open printable view in new window/tab
+  // Open printable view in new window/tab for active template
   const handleOpenPrintWindow = () => {
-    const html = generatePrintableHtml(building, claName, rooms, approvedCollaborators, rolesWithQuantity);
+    const templateMeta = EXPORT_TEMPLATES.find(t => t.id === selectedExportTemplate) || EXPORT_TEMPLATES[0];
+    const html = generateTemplatePrintableHtml(
+      building, 
+      claName, 
+      rooms, 
+      sortedTemplateCollaborators, 
+      templateMeta, 
+      activeTemplateColumns,
+      customExportConfig
+    );
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const win = window.open(url, "_blank");
@@ -488,46 +1065,71 @@ export default function DragAndDropReserves({
     }
   };
 
-  // Copy textual summary to clipboard
+  // Download CSV Spreadsheet for active template
+  const handleDownloadCsv = () => {
+    const templateMeta = EXPORT_TEMPLATES.find(t => t.id === selectedExportTemplate) || EXPORT_TEMPLATES[0];
+    const headers: string[] = ["Nº"];
+    if (activeTemplateColumns.includes("nome")) headers.push("Nome Completo");
+    if (activeTemplateColumns.includes("cpf")) headers.push("CPF");
+    if (activeTemplateColumns.includes("telefone")) headers.push("Telefone / WhatsApp");
+    if (activeTemplateColumns.includes("funcao")) headers.push("Função / Cargo");
+    if (activeTemplateColumns.includes("sala")) headers.push("Sala / Posto Alocado");
+    if (activeTemplateColumns.includes("andar")) headers.push("Pavimento / Andar");
+    if (activeTemplateColumns.includes("status")) headers.push("Status / Observação");
+
+    const rows = sortedTemplateCollaborators.map((c, idx) => {
+      const row: string[] = [(idx + 1).toString()];
+      if (activeTemplateColumns.includes("nome")) row.push(`"${(c.name || "").replace(/"/g, '""')}"`);
+      if (activeTemplateColumns.includes("cpf")) row.push(`"${c.cpf || ""}"`);
+      if (activeTemplateColumns.includes("telefone")) row.push(`"${c.whatsapp || "—"}"`);
+      if (activeTemplateColumns.includes("funcao")) row.push(`"${c.assignedRole || (c.isReserve ? "Reserva" : "Aplicador")}"`);
+      if (activeTemplateColumns.includes("sala")) {
+        const roomStr = c.assignedRoom ? (rooms.some(r => r.number === c.assignedRoom) ? `Sala ${c.assignedRoom}` : c.assignedRoom) : "Não Alocado / Reserva";
+        row.push(`"${roomStr}"`);
+      }
+      if (activeTemplateColumns.includes("andar")) {
+        const roomObj = rooms.find(r => r.number === c.assignedRoom);
+        row.push(`"${roomObj ? roomObj.floor : "—"}"`);
+      }
+      if (activeTemplateColumns.includes("status")) {
+        row.push(`"${c.substitutionTag || c.status || "Efetivo"}"`);
+      }
+      return row.join(";");
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(";"), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const sanitizedTemplateName = templateMeta.shortTitle.replace(/[^a-zA-Z0-9]/g, "_");
+    link.download = `Planilha_${sanitizedTemplateName}_ENEM2026.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+    setSuccessMsg(`Planilha CSV "${templateMeta.title}" exportada com sucesso!`);
+    setTimeout(() => setSuccessMsg(null), 4000);
+  };
+
+  // Copy textual summary of current template to clipboard
   const handleCopyReportText = () => {
+    const templateMeta = EXPORT_TEMPLATES.find(t => t.id === selectedExportTemplate) || EXPORT_TEMPLATES[0];
     let text = `========================================================\n`;
     text += `EXAME NACIONAL DO ENSINO MÉDIO - ENEM 2026\n`;
-    text += `MAPA DE ENSALAMENTO E ALOCAÇÃO DE FISCAIS\n`;
+    text += `RELATÓRIO: ${templateMeta.title.toUpperCase()}\n`;
+    text += `Estrutura: ${templateMeta.fieldsDescription}\n`;
     text += `Local: ${building?.name || "Local de Aplicação"}\n`;
     text += `CLA: ${claName || "Coordenação"}\n`;
-    text += `Data: ${new Date().toLocaleDateString('pt-BR')}\n`;
+    text += `Data: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}\n`;
+    text += `Total de Colaboradores no Relatório: ${sortedTemplateCollaborators.length}\n`;
     text += `========================================================\n\n`;
 
-    rooms.forEach(room => {
-      const roomFiscais = approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom === room.number);
-      text += `🚪 SALA: ${room.number} (${room.floor}) - CAP: ${room.capacity} cand.\n`;
-      if (roomFiscais.length === 0) {
-        text += `   (Nenhum fiscal alocado)\n`;
-      } else {
-        roomFiscais.forEach((f, idx) => {
-          text += `   ${idx + 1}. ${f.name} | CPF: ${f.cpf} | Função: ${f.assignedRole || "Aplicador"} ${f.substitutionTag ? `[${f.substitutionTag}]` : ""}\n`;
-        });
-      }
-      text += `\n`;
+    sortedTemplateCollaborators.forEach((c, idx) => {
+      const roomStr = c.assignedRoom ? (rooms.some(r => r.number === c.assignedRoom) ? `Sala ${c.assignedRoom}` : c.assignedRoom) : "Não Alocado / Reserva";
+      text += `${idx + 1}. ${c.name} | CPF: ${c.cpf} | Tel: ${c.whatsapp || "—"} | Sala/Posto: ${roomStr} | Função: ${c.assignedRole || "Reserva"}\n`;
     });
-
-    rolesWithQuantity.forEach(role => {
-      if (role.allMembers.length > 0) {
-        text += `👥 ${role.name.toUpperCase()} (${role.allMembers.length}):\n`;
-        role.allMembers.forEach((m, idx) => {
-          text += `   ${idx + 1}. ${m.name} | CPF: ${m.cpf} | ${m.assignedRoom ? `Alocado: ${m.assignedRoom}` : "Disponível"}\n`;
-        });
-        text += `\n`;
-      }
-    });
-
-    if (unallocatedReservas.length > 0) {
-      text += `📥 BANCO DE RESERVAS (${unallocatedReservas.length}):\n`;
-      unallocatedReservas.forEach((r, idx) => {
-        text += `   ${idx + 1}. ${r.name} | CPF: ${r.cpf} | Tel: ${r.whatsapp || "—"}\n`;
-      });
-      text += `\n`;
-    }
 
     navigator.clipboard.writeText(text);
     setCopiedSuccess(true);
@@ -556,10 +1158,11 @@ export default function DragAndDropReserves({
           <button
             onClick={() => setIsPdfModalOpen(true)}
             className="cursor-pointer px-4 py-2.5 rounded-xl font-display font-black text-xs uppercase tracking-wider bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white transition-all duration-200 active:scale-95 shadow-[3px_3px_0px_0px_#065f46] flex items-center gap-2"
-            title="Abrir visualização e opções de exportação em PDF e impressão oficial"
+            title="Abrir Central de Templates e Relatórios Oficiais (Chefes, Aplicadores, Volantes, Banheiro, Limpeza, Porteiro, Ensalamento, Prédio, Personalizado)"
           >
-            <Printer className="w-4 h-4" />
-            <span>Exportar Relatório PDF</span>
+            <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+            <span>Templates & Relatórios</span>
+            <span className="bg-emerald-950/40 text-emerald-200 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold">9</span>
           </button>
           <button
             onClick={handleDownloadHtmlReport}
@@ -592,100 +1195,189 @@ export default function DragAndDropReserves({
         </div>
       )}
 
-      {/* QUANTITATIVE DASHBOARD METRICS: CHEFES, APLICADORES & DEMAIS FISCAIS */}
-      <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {/* Total Fiscais */}
-        <div className="p-3.5 bg-slate-50 dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono font-black uppercase text-slate-500 dark:text-slate-400">Total Fiscais</span>
-            <Users className="w-4 h-4 text-slate-500" />
+      {/* QUANTITATIVE DASHBOARD METRICS: TOTAL DE FUNÇÕES PARA ASSOCIAÇÃO & QUANTIDADE ASSOCIADA */}
+      <div className="mb-6 space-y-3">
+        {/* Primary Role Metrics Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* Total Fiscais Aprovados */}
+          <div className="p-3.5 bg-slate-50 dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col justify-between shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-black uppercase text-slate-500 dark:text-slate-400">Total Fiscais</span>
+              <Users className="w-4 h-4 text-slate-500" />
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-display font-black text-slate-900 dark:text-white">{stats.totalApproved}</span>
+                <span className="text-[9px] font-bold text-slate-400">Aprovados</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold text-slate-500 dark:text-slate-400">
+                <span>{stats.totalAllocatedRooms + stats.totalAllocatedSectors} alocados</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{unallocated.length} disp.</span>
+              </div>
+            </div>
           </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-xl font-display font-black text-slate-900 dark:text-white">{stats.totalApproved}</span>
-            <span className="text-[9px] font-bold text-slate-400">Aprovados</span>
+
+          {/* Chefe de Sala */}
+          <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/20 border-2 border-amber-300 dark:border-amber-700/60 rounded-2xl flex flex-col justify-between shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-black uppercase text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                <Award className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span>Chefe de Sala</span>
+              </span>
+              <span className="text-[8.5px] font-mono font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-800 dark:text-amber-300">
+                Meta: {stats.targetChefes}
+              </span>
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-display font-black text-amber-700 dark:text-amber-300">{stats.chefesDeSalaAssigned}</span>
+                  <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">/ {stats.targetChefes}</span>
+                </div>
+                <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Associados</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold">
+                <span className="text-rose-600 dark:text-rose-400 font-black">{stats.chefesDeSalaAllocated} em sala</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.chefesDeSalaAvailable} disp.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Aplicadores */}
+          <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/20 border-2 border-indigo-200 dark:border-indigo-800/60 rounded-2xl flex flex-col justify-between shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-black uppercase text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                <UserCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span>Aplicadores</span>
+              </span>
+              <span className="text-[8.5px] font-mono font-black px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-700 dark:text-indigo-300">
+                Meta: {stats.targetAplicadores}
+              </span>
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-display font-black text-indigo-700 dark:text-indigo-300">{stats.aplicadoresAssigned}</span>
+                  <span className="text-[9px] font-bold text-indigo-500">/ {stats.targetAplicadores}</span>
+                </div>
+                <span className="text-[9px] font-bold text-indigo-500">Associados</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold">
+                <span className="text-rose-600 dark:text-rose-400 font-black">{stats.aplicadoresAllocated} em sala</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.aplicadoresAvailable} disp.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Fiscal Volante (Corredor) */}
+          <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/20 border-2 border-blue-200 dark:border-blue-800/60 rounded-2xl flex flex-col justify-between shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-black uppercase text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                <Footprints className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Volantes</span>
+              </span>
+              <span className="text-[8.5px] font-mono font-black px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-700 dark:text-blue-300">
+                Meta: {stats.targetVolantes}
+              </span>
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-display font-black text-blue-700 dark:text-blue-300">{stats.volantesAssigned}</span>
+                  <span className="text-[9px] font-bold text-blue-500">/ {stats.targetVolantes}</span>
+                </div>
+                <span className="text-[9px] font-bold text-blue-500">Associados</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold">
+                <span className="text-rose-600 dark:text-rose-400 font-black">{stats.volantesAllocated} no posto</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.volantesAvailable} disp.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Fiscal de Banheiro */}
+          <div className="p-3.5 bg-cyan-50/70 dark:bg-cyan-950/20 border-2 border-cyan-200 dark:border-cyan-800/60 rounded-2xl flex flex-col justify-between shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-black uppercase text-cyan-600 dark:text-cyan-400 flex items-center gap-1">
+                <Bath className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                <span>Banheiro</span>
+              </span>
+              <span className="text-[8.5px] font-mono font-black px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-700 dark:text-cyan-300">
+                Meta: {stats.targetBanheiro}
+              </span>
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-display font-black text-cyan-700 dark:text-cyan-300">{stats.banheiroAssigned}</span>
+                  <span className="text-[9px] font-bold text-cyan-500">/ {stats.targetBanheiro}</span>
+                </div>
+                <span className="text-[9px] font-bold text-cyan-500">Associados</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold">
+                <span className="text-rose-600 dark:text-rose-400 font-black">{stats.banheiroAllocated} no posto</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.banheiroAvailable} disp.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Auxiliar de Limpeza & Portaria & Demais */}
+          <div className="p-3.5 bg-teal-50/70 dark:bg-teal-950/20 border-2 border-teal-200 dark:border-teal-800/60 rounded-2xl flex flex-col justify-between shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-black uppercase text-teal-600 dark:text-teal-400 flex items-center gap-1">
+                <Shield className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                <span>Demais Setores</span>
+              </span>
+              <span className="text-[8.5px] font-mono font-black px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-700 dark:text-teal-300">
+                {stats.totalAllocatedSectors} Postos
+              </span>
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-display font-black text-teal-700 dark:text-teal-300">
+                  {stats.limpezaAssigned + stats.porteiroAssigned + stats.representanteAssigned + stats.tiAssigned + stats.demaisFiscaisAssigned}
+                </span>
+                <span className="text-[9px] font-bold text-teal-500">Associados</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold">
+                <span className="text-rose-600 dark:text-rose-400 font-black">
+                  {stats.limpezaAllocated + stats.porteiroAllocated + stats.representanteAllocated + stats.tiAllocated + stats.demaisFiscaisAllocated} alocados
+                </span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                  {stats.limpezaAvailable + stats.porteiroAvailable + stats.representanteAvailable + stats.tiAvailable + stats.demaisFiscaisAvailable} disp.
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Chefes de Sala */}
-        <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/20 border-2 border-amber-300 dark:border-amber-700/60 rounded-2xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono font-black uppercase text-amber-700 dark:text-amber-300 flex items-center gap-1">
-              <Award className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              <span>Chefe de Sala</span>
+        {/* Secondary Operational Summary Strip */}
+        <div className="p-3 bg-white dark:bg-[#0c1220] border border-slate-200 dark:border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+              Detalhamento de Funções do Prédio:
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-800 dark:text-amber-300 font-bold text-[10px]">
+              🧹 Limpeza: {stats.limpezaAssigned}/{stats.targetLimpeza} assoc. ({stats.limpezaAllocated} aloc.)
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-800 dark:text-blue-300 font-bold text-[10px]">
+              🚪 Porteiro: {stats.porteiroAssigned}/{stats.targetPorteiro} assoc. ({stats.porteiroAllocated} aloc.)
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-800 dark:text-purple-300 font-bold text-[10px]">
+              🏛️ Representante: {stats.representanteAssigned}/{stats.targetRepresentante} assoc. ({stats.representanteAllocated} aloc.)
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-800 dark:text-sky-300 font-bold text-[10px]">
+              💻 TI: {stats.tiAssigned}/{stats.targetTI} assoc. ({stats.tiAllocated} aloc.)
             </span>
           </div>
-          <div className="mt-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xl font-display font-black text-amber-700 dark:text-amber-300">{stats.chefesDeSalaAssigned}</span>
-              <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Associados</span>
-            </div>
-            <div className="mt-1 flex items-center gap-1.5 text-[8.5px] font-bold">
-              <span className="text-rose-600 dark:text-rose-400 font-black">{stats.chefesDeSalaAllocated} em sala</span>
-              <span className="text-slate-300">•</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.chefesDeSalaAvailable} disp.</span>
-            </div>
-          </div>
-        </div>
 
-        {/* Aplicadores Associados */}
-        <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/20 border-2 border-indigo-200 dark:border-indigo-800/60 rounded-2xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono font-black uppercase text-indigo-600 dark:text-indigo-400">Aplicadores</span>
-            <UserCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-          </div>
-          <div className="mt-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xl font-display font-black text-indigo-700 dark:text-indigo-300">{stats.aplicadoresAssigned}</span>
-              <span className="text-[9px] font-bold text-indigo-500">Associados</span>
-            </div>
-            <div className="mt-1 flex items-center gap-1.5 text-[8.5px] font-bold">
-              <span className="text-rose-600 dark:text-rose-400 font-black">{stats.aplicadoresAllocated} em sala</span>
-              <span className="text-slate-300">•</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.aplicadoresAvailable} disp.</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Demais Fiscais Associados */}
-        <div className="p-3.5 bg-teal-50/70 dark:bg-teal-950/20 border-2 border-teal-200 dark:border-teal-800/60 rounded-2xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono font-black uppercase text-teal-600 dark:text-teal-400">Demais Fiscais</span>
-            <Shield className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-          </div>
-          <div className="mt-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xl font-display font-black text-teal-700 dark:text-teal-300">{stats.demaisFiscaisAssigned}</span>
-              <span className="text-[9px] font-bold text-teal-500">Associados</span>
-            </div>
-            <div className="mt-1 flex items-center gap-1.5 text-[8.5px] font-bold">
-              <span className="text-rose-600 dark:text-rose-400 font-black">{stats.demaisFiscaisAllocated} alocados</span>
-              <span className="text-slate-300">•</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.demaisFiscaisAvailable} disp.</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Total Alocados em Salas */}
-        <div className="p-3.5 bg-rose-50/70 dark:bg-rose-950/20 border-2 border-rose-200 dark:border-rose-800/60 rounded-2xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono font-black uppercase text-rose-600 dark:text-rose-400">Alocados em Sala</span>
-            <Building2 className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-xl font-display font-black text-rose-700 dark:text-rose-300">{stats.totalAllocatedRooms}</span>
-            <span className="text-[9px] font-bold text-rose-500 font-mono">{stats.roomsOccupied}/{rooms.length} Salas</span>
-          </div>
-        </div>
-
-        {/* Reserva Geral */}
-        <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/20 border-2 border-emerald-200 dark:border-emerald-800/60 rounded-2xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono font-black uppercase text-emerald-600 dark:text-emerald-400">Disponíveis / Reserva</span>
-            <Inbox className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-xl font-display font-black text-emerald-700 dark:text-emerald-300">{unallocated.length}</span>
-            <span className="text-[9px] font-bold text-emerald-500 font-mono">{stats.totalReserves} sem função</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-xl bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+              ⚡ Com Função Não Ensalados: <strong>{stats.unallocatedWithRole}</strong>
+            </span>
+            <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-xl bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
+              📦 Reservas Puras: <strong>{stats.unallocatedNoRole}</strong>
+            </span>
           </div>
         </div>
       </div>
@@ -705,7 +1397,7 @@ export default function DragAndDropReserves({
                   <span>Fiscais & Ensalamento</span>
                 </h3>
                 <p className="text-[10px] text-slate-400 font-medium">
-                  {stats.totalAllocatedRooms} alocados em sala • {unallocated.length} disponíveis
+                  {stats.totalAllocatedRooms + stats.totalAllocatedSectors} alocados • {unallocated.length} disponíveis
                 </p>
               </div>
               <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-black px-2.5 py-0.5 rounded-full border border-indigo-500/20">
@@ -720,10 +1412,26 @@ export default function DragAndDropReserves({
                 type="text"
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
-                placeholder="Pesquisar por nome, CPF, sala ou função..."
+                placeholder="Pesquisar por nome, CPF, sala, posto ou função..."
                 className="w-full pl-9 pr-3 py-1.5 text-xs font-semibold rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-hidden focus:border-indigo-500"
               />
             </div>
+
+            {/* TOGGLE: Apenas Colaboradores Não Associados (que têm função mas não estão em sala/posto) */}
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer select-none bg-emerald-500/10 dark:bg-emerald-500/5 p-2 rounded-xl border border-emerald-500/20 hover:bg-emerald-500/15 transition">
+              <input
+                type="checkbox"
+                checked={onlyUnallocatedToggle}
+                onChange={(e) => setOnlyUnallocatedToggle(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+              />
+              <span className="flex items-center justify-between flex-1 gap-1">
+                <span>Marcar apenas colaboradores <strong>NÃO associados</strong> a salas/postos</span>
+                <span className="font-mono text-[10px] font-black bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full">
+                  {stats.unallocatedWithRole + stats.unallocatedNoRole}
+                </span>
+              </span>
+            </label>
 
             {/* STREAMLINED FILTER TABS */}
             <div className="flex flex-wrap gap-1.5">
@@ -741,7 +1449,38 @@ export default function DragAndDropReserves({
                 <span className="font-mono text-[9px] opacity-80">({stats.totalApproved})</span>
               </button>
 
-              {/* 2. Chefe de Sala */}
+              {/* 2. Com Função Não Ensalados */}
+              <button
+                type="button"
+                onClick={() => setSelectedRoleFilter("unallocated_with_role")}
+                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                  selectedRoleFilter === "unallocated_with_role"
+                    ? "bg-amber-600 text-white shadow-xs ring-2 ring-amber-500/40"
+                    : "bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20 hover:bg-amber-500/20"
+                }`}
+                title="Colaboradores que têm função designada mas ainda não foram alocados a nenhuma sala ou posto"
+              >
+                <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                <span>Com Função (Sem Sala)</span>
+                <span className="font-mono text-[9px] font-black">({stats.unallocatedWithRole})</span>
+              </button>
+
+              {/* 3. Sem Função Atribuída (Reserva Pura) */}
+              <button
+                type="button"
+                onClick={() => setSelectedRoleFilter("sem_funcao")}
+                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                  selectedRoleFilter === "sem_funcao"
+                    ? "bg-slate-700 text-white shadow-xs ring-2 ring-slate-500/40"
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300"
+                }`}
+              >
+                <Inbox className="w-3.5 h-3.5 text-slate-500" />
+                <span>Sem Função</span>
+                <span className="font-mono text-[9px]">({stats.unallocatedNoRole})</span>
+              </button>
+
+              {/* 4. Chefe de Sala */}
               <button
                 type="button"
                 onClick={() => setSelectedRoleFilter("chefe_de_sala")}
@@ -752,11 +1491,10 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <Award className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>Chefe de Sala</span>
-                <span className="font-mono text-[9px]">({stats.chefesDeSalaAssigned})</span>
+                <span>Chefe ({stats.chefesDeSalaAssigned}/{stats.targetChefes})</span>
               </button>
 
-              {/* 3. Aplicadores */}
+              {/* 5. Aplicadores */}
               <button
                 type="button"
                 onClick={() => setSelectedRoleFilter("aplicadores")}
@@ -767,11 +1505,80 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <UserCheck className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Aplicadores</span>
-                <span className="font-mono text-[9px]">({stats.aplicadoresAssigned})</span>
+                <span>Aplicadores ({stats.aplicadoresAssigned}/{stats.targetAplicadores})</span>
               </button>
 
-              {/* 4. Alocados em Sala */}
+              {/* 6. Volantes */}
+              <button
+                type="button"
+                onClick={() => setSelectedRoleFilter("volantes")}
+                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                  selectedRoleFilter === "volantes"
+                    ? "bg-blue-600 text-white shadow-xs ring-2 ring-blue-500/40"
+                    : "bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 hover:bg-blue-500/20"
+                }`}
+              >
+                <Footprints className="w-3.5 h-3.5 text-blue-500" />
+                <span>Volantes ({stats.volantesAssigned}/{stats.targetVolantes})</span>
+              </button>
+
+              {/* 7. Banheiro */}
+              <button
+                type="button"
+                onClick={() => setSelectedRoleFilter("banheiro")}
+                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                  selectedRoleFilter === "banheiro"
+                    ? "bg-cyan-600 text-white shadow-xs ring-2 ring-cyan-500/40"
+                    : "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 hover:bg-cyan-500/20"
+                }`}
+              >
+                <Bath className="w-3.5 h-3.5 text-cyan-500" />
+                <span>Banheiro ({stats.banheiroAssigned}/{stats.targetBanheiro})</span>
+              </button>
+
+              {/* 8. Limpeza */}
+              <button
+                type="button"
+                onClick={() => setSelectedRoleFilter("limpeza")}
+                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                  selectedRoleFilter === "limpeza"
+                    ? "bg-teal-600 text-white shadow-xs ring-2 ring-teal-500/40"
+                    : "bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20 hover:bg-teal-500/20"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-teal-500" />
+                <span>Limpeza ({stats.limpezaAssigned}/{stats.targetLimpeza})</span>
+              </button>
+
+              {/* 9. Porteiro */}
+              <button
+                type="button"
+                onClick={() => setSelectedRoleFilter("porteiro")}
+                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                  selectedRoleFilter === "porteiro"
+                    ? "bg-blue-700 text-white shadow-xs ring-2 ring-blue-500/40"
+                    : "bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 hover:bg-blue-500/20"
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5 text-blue-500" />
+                <span>Porteiro ({stats.porteiroAssigned}/{stats.targetPorteiro})</span>
+              </button>
+
+              {/* 10. Representante */}
+              <button
+                type="button"
+                onClick={() => setSelectedRoleFilter("representante")}
+                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                  selectedRoleFilter === "representante"
+                    ? "bg-purple-600 text-white shadow-xs ring-2 ring-purple-500/40"
+                    : "bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 hover:bg-purple-500/20"
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5 text-purple-500" />
+                <span>Representante ({stats.representanteAssigned}/{stats.targetRepresentante})</span>
+              </button>
+
+              {/* 11. Alocados em Sala */}
               <button
                 type="button"
                 onClick={() => setSelectedRoleFilter("allocated")}
@@ -782,11 +1589,10 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5 text-rose-500" />
-                <span>Alocados em Sala</span>
-                <span className="font-mono text-[9px]">({stats.totalAllocatedRooms})</span>
+                <span>Alocados ({stats.totalAllocatedRooms})</span>
               </button>
 
-              {/* 5. Disponíveis */}
+              {/* 12. Disponíveis */}
               <button
                 type="button"
                 onClick={() => setSelectedRoleFilter("available")}
@@ -797,11 +1603,10 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <Check className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Disponíveis</span>
-                <span className="font-mono text-[9px]">({unallocated.length})</span>
+                <span>Disponíveis ({unallocated.length})</span>
               </button>
 
-              {/* 6. Demais Fiscais */}
+              {/* 13. Demais Fiscais */}
               <button
                 type="button"
                 onClick={() => setSelectedRoleFilter("demais_fiscais")}
@@ -832,7 +1637,7 @@ export default function DragAndDropReserves({
                   >
                     {getRoleIcon(r.name)}
                     <span className="truncate max-w-[120px]">{r.name}</span>
-                    <span className="font-mono text-[9px]">({r.totalAssigned})</span>
+                    <span className="font-mono text-[9px]">({r.totalAssigned}{r.targetQty > 0 ? `/${r.targetQty}` : ""})</span>
                   </button>
                 ))}
 
@@ -1036,7 +1841,7 @@ export default function DragAndDropReserves({
               <h3 className="text-xs font-display font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider font-extrabold flex items-center gap-2">
                 <span>🏢 Salas do Bloco de Provas</span>
                 <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono font-bold px-2 py-0.5 rounded-full">
-                  {totalAllocated} fiscais alocados
+                  {stats.totalAllocatedRooms} fiscais alocados
                 </span>
               </h3>
               <p className="text-[10.5px] text-slate-400 font-medium">
@@ -1263,12 +2068,195 @@ export default function DragAndDropReserves({
               );
             })}
           </div>
+
+          {/* ========================================================================= */}
+          {/* SECTION: OPERATIONAL SECTORS & BUILDING ROLES (VOLANTES, BANHEIRO, ETC.) */}
+          {/* ========================================================================= */}
+          <div className="mt-8 pt-6 border-t-2 border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-display font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-indigo-500" />
+                  <span>Postos de Apoio & Setores Operacionais do Prédio</span>
+                </h3>
+                <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                  Arraste os fiscais ou clique nos quadros para associar Volantes, Banheiros, Limpeza, Portaria e Representantes
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-xl bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
+                  {stats.totalAllocatedSectors} alocados nos postos
+                </span>
+              </div>
+            </div>
+
+            {/* Grid of Operational Sectors */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {OPERATIONAL_SECTORS.map((sector) => {
+                const assignedToSector = approvedCollaborators.filter(c => isCollabInSector(c, sector));
+                const targetCount = getSectorTarget(sector.id);
+                const isFullyStaffed = assignedToSector.length >= targetCount && targetCount > 0;
+
+                return (
+                  <div
+                    key={sector.id}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDropToSector(e, sector)}
+                    onClick={() => {
+                      setManagingSector(sector);
+                      setSectorModalRoleFilter("all");
+                      setSectorModalSearch("");
+                      setSectorModalOnlyUnallocated(false);
+                    }}
+                    className={`group relative rounded-2xl border-2 p-3.5 transition-all cursor-pointer flex flex-col justify-between ${
+                      isFullyStaffed
+                        ? "bg-emerald-50/40 dark:bg-emerald-950/15 border-emerald-300 dark:border-emerald-700/60 hover:border-emerald-400"
+                        : assignedToSector.length > 0
+                        ? "bg-white dark:bg-[#0c1220] border-indigo-200 dark:border-indigo-800/60 hover:border-indigo-400"
+                        : "bg-white dark:bg-[#0c1220] border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <div>
+                      {/* Sector Header */}
+                      <div className="flex items-start justify-between gap-2 mb-2 pb-2 border-b border-slate-100 dark:border-slate-800/80">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xl shrink-0 p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                            {sector.icon}
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="font-display font-black text-xs text-slate-900 dark:text-white truncate">
+                              {sector.name}
+                            </h4>
+                            <span className="text-[9.5px] text-slate-400 font-bold block truncate">
+                              {sector.desc}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`text-[9px] font-mono font-black px-2 py-0.5 rounded-full border ${
+                            isFullyStaffed
+                              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                              : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30"
+                          }`}>
+                            {assignedToSector.length}/{targetCount}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setManagingSector(sector);
+                              setSectorModalRoleFilter("all");
+                              setSectorModalSearch("");
+                              setSectorModalOnlyUnallocated(false);
+                            }}
+                            className="text-[9px] font-extrabold text-indigo-700 dark:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded-md flex items-center gap-1 transition active:scale-95 cursor-pointer"
+                            title="Alocar colaboradores neste posto"
+                          >
+                            <UserPlus className="w-2.5 h-2.5" />
+                            <span>Alocar</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* List of Assigned Collaborators */}
+                      <div className="space-y-1.5 min-h-[90px] max-h-[220px] overflow-y-auto pr-1">
+                        {assignedToSector.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-6 text-center text-slate-400 space-y-1">
+                            <p className="text-[10px] italic font-medium">Nenhum colaborador alocado neste posto</p>
+                            <span className="text-[8.5px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20">
+                              + Clique ou arraste para alocar
+                            </span>
+                          </div>
+                        ) : (
+                          assignedToSector.map((collab) => (
+                            <div
+                              key={collab.id}
+                              draggable
+                              onClick={(e) => e.stopPropagation()}
+                              onDragStart={(e) => handleDragStart(e, collab.id!)}
+                              onDragEnd={handleDragEnd}
+                              className="border-2 rounded-xl p-2 flex items-center justify-between transition shadow-xs pr-2 text-xs font-bold gap-2 cursor-grab active:cursor-grabbing bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800"
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1 pr-1">
+                                <FiscalAvatar
+                                  photoUrl={collab.photoUrl}
+                                  name={collab.name}
+                                  size="xs"
+                                  onClick={(e) => {
+                                    e?.stopPropagation();
+                                    setLightboxData({
+                                      imageUrl: collab.photoUrl || '',
+                                      name: collab.name,
+                                      role: collab.assignedRole || sector.defaultRole,
+                                      cpf: collab.cpf,
+                                      claName: collab.originalClaName || collab.claName,
+                                      specialRole: collab.specialRole,
+                                      hasWorkedEnem: collab.hasWorkedEnem,
+                                      pastEditions: collab.pastEditions
+                                    });
+                                  }}
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-extrabold text-[11px] text-slate-800 dark:text-slate-200 truncate leading-tight" title={collab.name}>
+                                    {collab.name}
+                                  </p>
+                                  <span className="text-[9px] text-slate-400 font-mono block">
+                                    CPF: {collab.cpf}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenSubstituteModal(collab, sector.shortName);
+                                  }}
+                                  title="Substituir colaborador neste posto"
+                                  className="text-[8px] font-extrabold text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded transition uppercase cursor-pointer flex items-center gap-1 active:scale-95"
+                                >
+                                  <ArrowRightLeft className="w-2.5 h-2.5" />
+                                  <span>Substituir</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    quickAssignMobile(collab.id!, "DESALOCAR");
+                                  }}
+                                  title="Remover deste posto"
+                                  className="text-[8px] font-bold text-rose-600 dark:text-rose-400 hover:underline px-1 py-0.5 cursor-pointer"
+                                >
+                                  Desalocar
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-2 pt-1.5 border-t border-slate-200 dark:border-slate-800 text-[8.5px] text-slate-400 dark:text-slate-500 flex items-center justify-between font-mono font-bold">
+                      <span className="text-indigo-600 dark:text-indigo-400 group-hover:underline flex items-center gap-1">
+                        ⚡ Clique no posto para gerenciar
+                      </span>
+                      <span>Função: {sector.defaultRole}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
         </div>
 
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL 0: DIRECT ROOM ALLOCATION & ROLE FILTER WINDOW */}
+      {/* MODAL 0A: DIRECT ROOM ALLOCATION & ROLE FILTER WINDOW */}
       {/* ========================================================================= */}
       {managingRoom && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-fade-in">
@@ -1341,31 +2329,28 @@ export default function DragAndDropReserves({
 
                     {assignedInRoom.length === 0 ? (
                       <div className="py-5 px-4 text-center border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-white/50 dark:bg-slate-900/40">
-                        <Inbox className="w-7 h-7 text-slate-400 mx-auto mb-1 opacity-60" />
-                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                          Nenhum colaborador alocado nesta sala ainda.
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Selecione os associados abaixo e clique em <strong className="text-emerald-600 dark:text-emerald-400">"+ Alocar"</strong> para adicionar à sala.
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          Nenhum fiscal alocado atualmente nesta sala.
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         {assignedInRoom.map((collab) => {
                           const isChefe = isChefeDeSalaRole(collab.assignedRole);
                           const isAplicador = isAplicadorRole(collab.assignedRole);
+
                           return (
-                            <div 
+                            <div
                               key={collab.id}
-                              className={`p-3 rounded-xl border-2 flex items-center justify-between gap-3 shadow-xs ${
-                                isChefe 
-                                  ? "bg-amber-50/90 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700/60"
+                              className={`p-3 rounded-xl border-2 flex items-center justify-between gap-2 shadow-xs ${
+                                isChefe
+                                  ? "bg-amber-500/10 border-amber-500/30 dark:bg-amber-950/30 dark:border-amber-700/50"
                                   : isAplicador
-                                  ? "bg-indigo-50/90 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800/60"
-                                  : "bg-teal-50/90 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800/60"
+                                  ? "bg-indigo-500/10 border-indigo-500/30 dark:bg-indigo-950/30 dark:border-indigo-700/50"
+                                  : "bg-teal-500/10 border-teal-500/30 dark:bg-teal-950/30 dark:border-teal-700/50"
                               }`}
                             >
-                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-2.5 min-w-0">
                                 <FiscalAvatar
                                   photoUrl={collab.photoUrl}
                                   name={collab.name}
@@ -1381,39 +2366,43 @@ export default function DragAndDropReserves({
                                     pastEditions: collab.pastEditions
                                   })}
                                 />
-                                <div className="min-w-0 flex-1">
-                                  <h5 className="font-extrabold text-xs text-slate-900 dark:text-white truncate">
-                                    {collab.name}
-                                  </h5>
-                                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                    <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-md ${
-                                      isChefe 
-                                        ? "bg-amber-500/20 text-amber-900 dark:text-amber-300"
-                                        : isAplicador 
-                                        ? "bg-indigo-500/20 text-indigo-900 dark:text-indigo-300"
-                                        : "bg-teal-500/20 text-teal-900 dark:text-teal-300"
-                                    }`}>
-                                      {collab.assignedRole || "Aplicador"}
-                                    </span>
-                                    <span className="text-[9px] font-mono text-slate-500">
-                                      {collab.cpf}
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-black text-xs text-slate-900 dark:text-white truncate">
+                                      {collab.name}
                                     </span>
                                   </div>
+                                  <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                    CPF: {collab.cpf}
+                                  </p>
+                                  <span className={`inline-flex items-center gap-1 text-[9px] font-extrabold px-1.5 py-0.5 rounded mt-0.5 ${
+                                    isChefe
+                                      ? "bg-amber-500/20 text-amber-900 dark:text-amber-300"
+                                      : isAplicador
+                                      ? "bg-indigo-500/20 text-indigo-900 dark:text-indigo-300"
+                                      : "bg-teal-500/20 text-teal-900 dark:text-teal-300"
+                                  }`}>
+                                    {isChefe && <Award className="w-2.5 h-2.5" />}
+                                    {isAplicador && <UserCheck className="w-2.5 h-2.5" />}
+                                    <span>{collab.assignedRole || "Fiscal de Sala"}</span>
+                                  </span>
                                 </div>
                               </div>
 
-                              <div className="flex flex-col gap-1 shrink-0">
+                              <div className="flex items-center gap-1.5 shrink-0">
                                 <button
                                   type="button"
                                   onClick={() => quickAssignMobile(collab.id!, "DESALOCAR")}
-                                  className="text-[9px] font-extrabold text-rose-700 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2 py-1 rounded-lg transition uppercase cursor-pointer text-center"
+                                  className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 hover:bg-rose-500/15 border border-rose-500/30 px-2 py-1 rounded-lg transition cursor-pointer"
+                                  title="Desalocar desta sala"
                                 >
                                   Desalocar
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleOpenSubstituteModal(collab, managingRoom.number)}
-                                  className="text-[8.5px] font-bold text-amber-700 dark:text-amber-400 hover:underline px-1 py-0.5 cursor-pointer text-center"
+                                  className="text-[10px] font-extrabold text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 border border-amber-500/30 px-2 py-1 rounded-lg transition cursor-pointer"
+                                  title="Substituir por outro fiscal"
                                 >
                                   Substituir
                                 </button>
@@ -1505,6 +2494,38 @@ export default function DragAndDropReserves({
 
                   <button
                     type="button"
+                    onClick={() => setRoomModalRoleFilter("unallocated_with_role")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                      roomModalRoleFilter === "unallocated_with_role"
+                        ? "bg-amber-600 text-white dark:bg-amber-500 dark:text-slate-950 shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                    }`}
+                  >
+                    <AlertCircle className="w-3 h-3 text-amber-500" />
+                    <span>Com Função (Sem Sala)</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-mono">
+                      {stats.unallocatedWithRole}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRoomModalRoleFilter("sem_funcao")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                      roomModalRoleFilter === "sem_funcao"
+                        ? "bg-slate-700 text-white dark:bg-slate-600 shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                    }`}
+                  >
+                    <Inbox className="w-3 h-3 text-slate-500" />
+                    <span>Sem Função</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">
+                      {stats.unallocatedNoRole}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setRoomModalRoleFilter("chefe_de_sala")}
                     className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
                       roomModalRoleFilter === "chefe_de_sala"
@@ -1529,15 +2550,31 @@ export default function DragAndDropReserves({
                     }`}
                   >
                     <UserCheck className="w-3 h-3" />
-                    <span>Aplicador (Fiscal)</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 font-mono">
+                    <span>Aplicadores</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200 font-mono">
                       {stats.aplicadoresAssigned}
                     </span>
                   </button>
 
-                  {/* Other custom roles from Menu 3 */}
+                  <button
+                    type="button"
+                    onClick={() => setRoomModalRoleFilter("volantes")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                      roomModalRoleFilter === "volantes"
+                        ? "bg-blue-600 text-white dark:bg-blue-500 dark:text-slate-950 shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                    }`}
+                  >
+                    <Footprints className="w-3 h-3" />
+                    <span>Volantes</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 font-mono">
+                      {stats.volantesAssigned}
+                    </span>
+                  </button>
+
+                  {/* Individual active specific roles */}
                   {rolesWithQuantity
-                    .filter(r => r.name !== "Chefe de Sala" && r.name !== "Aplicador (Fiscal de Sala)" && r.name !== "Aplicador")
+                    .filter(r => !isChefeDeSalaRole(r.name) && !isAplicadorRole(r.name) && !r.name.toLowerCase().includes("volante"))
                     .map((r) => (
                       <button
                         key={r.name}
@@ -1546,32 +2583,16 @@ export default function DragAndDropReserves({
                         className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
                           roomModalRoleFilter === r.name
                             ? "bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950 shadow-xs"
-                            : "bg-white dark:bg-slate-800 text-teal-800 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                         }`}
                       >
                         {getRoleIcon(r.name)}
                         <span className="truncate max-w-[140px]">{r.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-900 dark:text-teal-200 font-mono">
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-mono">
                           {r.totalAssigned}
                         </span>
                       </button>
                     ))}
-
-                  <button
-                    type="button"
-                    onClick={() => setRoomModalRoleFilter("reserva")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
-                      roomModalRoleFilter === "reserva"
-                        ? "bg-purple-600 text-white dark:bg-purple-500 dark:text-slate-950 shadow-xs"
-                        : "bg-white dark:bg-slate-800 text-purple-800 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30"
-                    }`}
-                  >
-                    <Inbox className="w-3 h-3" />
-                    <span>Banco de Reserva</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 font-mono">
-                      {unallocatedReservas.length}
-                    </span>
-                  </button>
                 </div>
               </div>
 
@@ -1639,57 +2660,57 @@ export default function DragAndDropReserves({
                                     ? "bg-indigo-500/20 text-indigo-900 dark:text-indigo-300"
                                     : "bg-teal-500/20 text-teal-900 dark:text-teal-300"
                                 }`}>
-                                  {getRoleIcon(collab.assignedRole || "Aplicador")}
-                                  <span>{collab.assignedRole || "Reserva"}</span>
+                                  {isChefe && <Award className="w-2.5 h-2.5" />}
+                                  {isAplicador && <UserCheck className="w-2.5 h-2.5" />}
+                                  <span>{collab.assignedRole || "Fiscal de Sala"}</span>
                                 </span>
 
-                                {isAlreadyInThisRoom && (
-                                  <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-md">
-                                    ✓ Alocado nesta Sala
+                                {isAlreadyInThisRoom ? (
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-emerald-500 text-white dark:bg-emerald-500 dark:text-slate-950">
+                                    Alocado nesta sala
                                   </span>
-                                )}
-
-                                {isInOtherRoom && (
-                                  <span className="text-[9px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-md">
-                                    Alocado na {collab.assignedRoom}
+                                ) : isInOtherRoom ? (
+                                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                    Alocado em: {collab.assignedRoom}
                                   </span>
-                                )}
-
-                                {!collab.assignedRoom && (
-                                  <span className="text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-md">
-                                    Livre / Não alocado
+                                ) : (
+                                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
+                                    Disponível
                                   </span>
                                 )}
                               </div>
                             </div>
                           </div>
 
-                          {/* Allocation Actions */}
-                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                          {/* Quick Action Button for this room */}
+                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
                             {isAlreadyInThisRoom ? (
                               <button
                                 type="button"
-                                onClick={() => quickAssignMobile(collab.id!, "DESALOCAR")}
-                                className="w-full py-2 px-3 text-xs font-extrabold text-rose-700 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-xl transition uppercase cursor-pointer text-center active:scale-98"
+                                onClick={() => {
+                                  quickAssignMobile(collab.id!, "DESALOCAR");
+                                  setSuccessMsg(`${collab.name} desalocado da ${managingRoom.number}`);
+                                  setTimeout(() => setSuccessMsg(null), 3000);
+                                }}
+                                className="w-full py-1.5 text-center text-xs font-extrabold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-xl transition cursor-pointer"
                               >
-                                Remover desta Sala (Desalocar)
+                                Desalocar desta Sala
                               </button>
                             ) : (
-                              <div className="w-full flex flex-wrap items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 w-full">
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const targetRole = collab.assignedRole && collab.assignedRole.trim() !== "" 
-                                      ? collab.assignedRole 
+                                    const designatedRole = collab.assignedRole && collab.assignedRole.trim() !== ""
+                                      ? collab.assignedRole
                                       : "Aplicador (Fiscal de Sala)";
-                                    onMove(collab.id!, false, managingRoom.number, targetRole);
-                                    setSuccessMsg(`${collab.name} alocado na ${managingRoom.number} como ${targetRole}!`);
+                                    onMove(collab.id!, false, managingRoom.number, designatedRole);
+                                    setSuccessMsg(`${collab.name} alocado na ${managingRoom.number} como ${designatedRole}!`);
                                     setTimeout(() => setSuccessMsg(null), 3000);
                                   }}
-                                  className="flex-1 py-1.5 px-3 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition shadow-xs active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                                  className="flex-1 py-1.5 px-3 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-slate-950 rounded-xl transition shadow-xs cursor-pointer active:scale-95 text-center truncate"
                                 >
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>+ Alocar como {collab.assignedRole || "Aplicador"}</span>
+                                  + Alocar nesta Sala
                                 </button>
 
                                 {!isChefe && (
@@ -1750,6 +2771,400 @@ export default function DragAndDropReserves({
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 0B: DIRECT OPERATIONAL SECTOR ALLOCATION WINDOW */}
+      {/* ========================================================================= */}
+      {managingSector && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-fade-in">
+          <div className="bg-white dark:bg-[#0c1220] w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-scale-up">
+            
+            {/* Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-indigo-500/15 via-blue-500/10 to-teal-500/15 border-b-2 border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-2xl shrink-0 shadow-xs border border-indigo-500/30">
+                  {managingSector.icon}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-display font-black text-slate-900 dark:text-white text-base sm:text-lg">
+                      Alocação de Posto — {managingSector.name}
+                    </h3>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-700 dark:text-indigo-300">
+                      Função Padrão: {managingSector.defaultRole}
+                    </span>
+                  </div>
+                  {(() => {
+                    const assignedInSec = approvedCollaborators.filter(c => isCollabInSector(c, managingSector));
+                    const target = getSectorTarget(managingSector.id);
+                    const isComplete = assignedInSec.length >= target && target > 0;
+
+                    return (
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 flex flex-wrap items-center gap-x-2">
+                        <span>{managingSector.desc}</span>
+                        <span className={`font-bold ${isComplete ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                          • Status: {assignedInSec.length}/{target} alocados {isComplete ? "✓ Completo" : "(Pendente)"}
+                        </span>
+                      </p>
+                    );
+                  })()}
+                </div>
+              </div>
+              <button
+                onClick={() => setManagingSector(null)}
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Content Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              
+              {/* SECTION 1: Current Staff In This Sector */}
+              {(() => {
+                const assignedInSector = approvedCollaborators.filter(c => isCollabInSector(c, managingSector));
+                return (
+                  <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-indigo-500" />
+                        <h4 className="text-xs font-display font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          Equipe Atual Alocada em {managingSector.name} ({assignedInSector.length} Colaboradores)
+                        </h4>
+                      </div>
+                      {assignedInSector.length > 0 && (
+                        <span className="text-[10px] text-slate-500 font-bold">
+                          Clique em "Desalocar" para remover deste posto
+                        </span>
+                      )}
+                    </div>
+
+                    {assignedInSector.length === 0 ? (
+                      <div className="py-5 px-4 text-center border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-white/50 dark:bg-slate-900/40">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          Nenhum colaborador alocado atualmente neste posto operacional.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {assignedInSector.map((collab) => (
+                          <div
+                            key={collab.id}
+                            className="p-3 rounded-xl border-2 flex items-center justify-between gap-2 shadow-xs bg-indigo-500/10 border-indigo-500/30 dark:bg-indigo-950/30 dark:border-indigo-700/50"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <FiscalAvatar
+                                photoUrl={collab.photoUrl}
+                                name={collab.name}
+                                size="sm"
+                                onClick={() => setLightboxData({
+                                  imageUrl: collab.photoUrl || '',
+                                  name: collab.name,
+                                  role: collab.assignedRole || managingSector.defaultRole,
+                                  cpf: collab.cpf,
+                                  claName: collab.originalClaName || collab.claName,
+                                  specialRole: collab.specialRole,
+                                  hasWorkedEnem: collab.hasWorkedEnem,
+                                  pastEditions: collab.pastEditions
+                                })}
+                              />
+                              <div className="min-w-0">
+                                <span className="font-black text-xs text-slate-900 dark:text-white truncate block">
+                                  {collab.name}
+                                </span>
+                                <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                  CPF: {collab.cpf}
+                                </p>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-extrabold px-1.5 py-0.5 rounded mt-0.5 bg-indigo-500/20 text-indigo-900 dark:text-indigo-300">
+                                  <span>{collab.assignedRole || managingSector.defaultRole}</span>
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => quickAssignMobile(collab.id!, "DESALOCAR")}
+                                className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 hover:bg-rose-500/15 border border-rose-500/30 px-2 py-1 rounded-lg transition cursor-pointer"
+                                title="Desalocar deste posto"
+                              >
+                                Desalocar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSubstituteModal(collab, managingSector.shortName)}
+                                className="text-[10px] font-extrabold text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 border border-amber-500/30 px-2 py-1 rounded-lg transition cursor-pointer"
+                                title="Substituir por outro colaborador"
+                              >
+                                Substituir
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* SECTION 2: Role Filters & Search */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <div>
+                    <h4 className="text-xs font-display font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <Filter className="w-4 h-4 text-indigo-500" />
+                      <span>Filtrar Associados para {managingSector.name}</span>
+                    </h4>
+                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                      Selecione um filtro para listar colaboradores e associar a este posto
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
+                    <input
+                      type="checkbox"
+                      checked={sectorModalOnlyUnallocated}
+                      onChange={(e) => setSectorModalOnlyUnallocated(e.target.checked)}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <span>Apenas disponíveis (não alocados)</span>
+                  </label>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={sectorModalSearch}
+                    onChange={(e) => setSectorModalSearch(e.target.value)}
+                    placeholder="Buscar colaborador por nome, CPF ou função..."
+                    className="w-full pl-9 pr-8 py-2 text-xs font-medium bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-hidden focus:border-indigo-500"
+                  />
+                  {sectorModalSearch && (
+                    <button
+                      onClick={() => setSectorModalSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Role Filter Pills */}
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-slate-100/70 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setSectorModalRoleFilter("sector_default")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                      sectorModalRoleFilter === "sector_default"
+                        ? "bg-indigo-600 text-white dark:bg-indigo-500 dark:text-slate-950 shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50"
+                    }`}
+                  >
+                    <span>Associados com esta Função ({managingSector.defaultRole})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSectorModalRoleFilter("all")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                      sectorModalRoleFilter === "all"
+                        ? "bg-slate-900 text-white dark:bg-emerald-500 dark:text-slate-950 shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                    }`}
+                  >
+                    <span>Todos os Colaboradores</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-mono">
+                      {approvedCollaborators.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSectorModalRoleFilter("unallocated")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                      sectorModalRoleFilter === "unallocated"
+                        ? "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-slate-950 shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
+                    }`}
+                  >
+                    <UserCheck className="w-3 h-3" />
+                    <span>Livres / Disponíveis</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-mono">
+                      {unallocated.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSectorModalRoleFilter("unallocated_with_role")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                      sectorModalRoleFilter === "unallocated_with_role"
+                        ? "bg-amber-600 text-white dark:bg-amber-500 dark:text-slate-950 shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                    }`}
+                  >
+                    <AlertCircle className="w-3 h-3 text-amber-500" />
+                    <span>Com Função (Sem Sala)</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-mono">
+                      {stats.unallocatedWithRole}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSectorModalRoleFilter("sem_funcao")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                      sectorModalRoleFilter === "sem_funcao"
+                        ? "bg-slate-700 text-white dark:bg-slate-600 shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                    }`}
+                  >
+                    <Inbox className="w-3 h-3 text-slate-500" />
+                    <span>Sem Função</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">
+                      {stats.unallocatedNoRole}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* SECTION 3: Collaborators List for Sector */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Associados ({sectorModalFilteredCollabs.length} encontrados):
+                  </h5>
+                  <span className="text-[10px] text-slate-400">
+                    Clique em "+ Alocar" para associar ao posto <strong>{managingSector.name}</strong>
+                  </span>
+                </div>
+
+                {sectorModalFilteredCollabs.length === 0 ? (
+                  <div className="py-8 text-center bg-slate-50 dark:bg-slate-900/50 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800">
+                    <p className="text-xs font-bold text-slate-500">Nenhum colaborador encontrado com os filtros atuais.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {sectorModalFilteredCollabs.map((collab) => {
+                      const isAlreadyInSector = isCollabInSector(collab, managingSector);
+                      const isAllocatedElsewhere = !collab.isReserve && collab.assignedRoom && !isAlreadyInSector;
+
+                      return (
+                        <div
+                          key={collab.id}
+                          className={`p-3.5 rounded-2xl border-2 transition-all flex flex-col justify-between gap-3 ${
+                            isAlreadyInSector
+                              ? "bg-indigo-500/10 border-indigo-500/40 dark:border-indigo-500/40 shadow-xs"
+                              : "bg-white dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <FiscalAvatar
+                              photoUrl={collab.photoUrl}
+                              name={collab.name}
+                              size="md"
+                              onClick={() => setLightboxData({
+                                imageUrl: collab.photoUrl || '',
+                                name: collab.name,
+                                role: collab.assignedRole || managingSector.defaultRole,
+                                cpf: collab.cpf,
+                                claName: collab.originalClaName || collab.claName,
+                                specialRole: collab.specialRole,
+                                hasWorkedEnem: collab.hasWorkedEnem,
+                                pastEditions: collab.pastEditions
+                              })}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <h5 className="font-black text-xs text-slate-900 dark:text-white truncate" title={collab.name}>
+                                {collab.name}
+                              </h5>
+                              <p className="text-[10px] font-mono text-slate-500">
+                                CPF: {collab.cpf}
+                              </p>
+                              
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                                  {collab.assignedRole || "Sem função"}
+                                </span>
+
+                                {isAlreadyInSector ? (
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-indigo-600 text-white">
+                                    Alocado neste posto
+                                  </span>
+                                ) : isAllocatedElsewhere ? (
+                                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                    Alocado em: {collab.assignedRoom}
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
+                                    Disponível
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Quick Action Button */}
+                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+                            {isAlreadyInSector ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  quickAssignMobile(collab.id!, "DESALOCAR");
+                                  setSuccessMsg(`${collab.name} desalocado de ${managingSector.name}`);
+                                  setTimeout(() => setSuccessMsg(null), 3000);
+                                }}
+                                className="w-full py-1.5 text-center text-xs font-extrabold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-xl transition cursor-pointer"
+                              >
+                                Desalocar deste Posto
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const designatedRole = collab.assignedRole && collab.assignedRole.trim() !== ""
+                                    ? collab.assignedRole
+                                    : managingSector.defaultRole;
+                                  onMove(collab.id!, false, managingSector.shortName, designatedRole);
+                                  setSuccessMsg(`${collab.name} alocado em ${managingSector.name} como ${designatedRole}!`);
+                                  setTimeout(() => setSuccessMsg(null), 3000);
+                                }}
+                                className="w-full py-1.5 px-3 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:text-slate-950 rounded-xl transition shadow-xs cursor-pointer active:scale-95 text-center"
+                              >
+                                + Alocar em {managingSector.name}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 dark:bg-[#070b13] border-t-2 border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                Mostrando {sectorModalFilteredCollabs.length} de {approvedCollaborators.length} associados
+              </span>
+              <button
+                type="button"
+                onClick={() => setManagingSector(null)}
+                className="px-5 py-2 text-xs font-extrabold bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition shadow-xs cursor-pointer active:scale-95"
+              >
+                Concluir e Fechar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+
 
       {/* ========================================================================= */}
       {/* MODAL 1: CLICK-TO-ALLOCATE MODAL (CHOOSE ROOM & ROLE) */}
@@ -2113,30 +3528,35 @@ export default function DragAndDropReserves({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 3: OFFICIAL PDF / PRINT EXPORT MODAL & IMMEDIATE ACTIONS */}
+      {/* MODAL 3: OFFICIAL TEMPLATE-BASED PDF / PRINT EXPORT MODAL & ACTIONS       */}
       {/* ========================================================================= */}
       {isPdfModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fade-in">
-          <div className="bg-white dark:bg-[#0c1220] w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-scale-up">
+          <div className="bg-white dark:bg-[#0c1220] w-full max-w-5xl max-h-[94vh] flex flex-col rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-scale-up">
             
             {/* Modal Action Bar */}
-            <div className="no-print p-4 sm:p-5 bg-gradient-to-r from-emerald-700 via-teal-700 to-slate-900 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="no-print p-4 sm:p-5 bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-emerald-700/50">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                  <FileSpreadsheet className="w-5 h-5" />
+                <div className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center shrink-0 border border-white/20 shadow-inner">
+                  <FileSpreadsheet className="w-6 h-6 text-emerald-300" />
                 </div>
                 <div>
-                  <h3 className="font-display font-black text-base sm:text-lg">
-                    Relatório Oficial de Ensalamento e Fiscais
-                  </h3>
-                  <p className="text-xs text-emerald-100 font-medium">
-                    Salas, andares, fiscais alocados, volantes, banheiros e reservas (com CPF)
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display font-black text-base sm:text-lg tracking-tight">
+                      Central de Templates & Relatórios Oficiais
+                    </h3>
+                    <span className="text-[10px] bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full font-mono font-bold">
+                      ENEM 2026
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-100/90 font-medium mt-0.5">
+                    Escolha um template pronto ou monte seu relatório personalizado para impressão, PDF e CSV.
                   </p>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={handleDownloadHtmlReport}
@@ -2144,24 +3564,34 @@ export default function DragAndDropReserves({
                   title="Baixar arquivo HTML/PDF para abrir e imprimir diretamente"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Baixar Relatório (HTML/PDF)</span>
+                  <span>Baixar HTML / PDF</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleOpenPrintWindow}
                   className="cursor-pointer px-3 py-2 rounded-xl bg-white text-slate-800 hover:bg-slate-100 font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition"
-                  title="Abrir relatório formatado em nova aba do navegador"
+                  title="Abrir relatório pronto em nova aba para impressão"
                 >
                   <ExternalLink className="w-4 h-4 text-emerald-600" />
-                  <span>Nova Aba</span>
+                  <span className="hidden sm:inline">Nova Aba</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadCsv}
+                  className="cursor-pointer px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-xs"
+                  title="Exportar planilha CSV formatada"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span className="hidden sm:inline">CSV</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleCopyReportText}
                   className="cursor-pointer px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 font-bold text-xs flex items-center gap-1.5 transition active:scale-95"
-                  title="Copiar dados formatados para colar no Excel ou WhatsApp"
+                  title="Copiar texto formatado para a área de transferência"
                 >
                   {copiedSuccess ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   <span>{copiedSuccess ? "Copiado!" : "Copiar"}</span>
@@ -2171,225 +3601,373 @@ export default function DragAndDropReserves({
                   type="button"
                   onClick={() => setIsPdfModalOpen(false)}
                   className="w-8 h-8 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                  title="Fechar Modal"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Printable Document Area */}
-            <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-white text-slate-900 space-y-6">
+            {/* Modal Body: Scrollable area with Templates + Custom config + Live preview */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-50 dark:bg-[#070b13] space-y-6">
               
-              {/* Document Official Header */}
-              <div className="border-b-2 border-slate-800 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-emerald-700">
-                    EXAME NACIONAL DO ENSINO MÉDIO — ENEM 2026
+              {/* SECTION: 9 TEMPLATE PRESETS */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-display font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                    <span>📑 Selecione o Template de Exportação</span>
+                    <span className="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full font-mono font-bold">
+                      9 opções disponíveis
+                    </span>
+                  </h4>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Template ativo: <strong className="text-emerald-600 dark:text-emerald-400">{EXPORT_TEMPLATES.find(t => t.id === selectedExportTemplate)?.title}</strong>
                   </span>
-                  <h2 className="text-xl font-display font-black uppercase text-slate-900 mt-0.5">
-                    MAPA DE ENSALAMENTO E ALOCAÇÃO DE FISCAIS
-                  </h2>
-                  <div className="text-xs text-slate-600 font-semibold mt-1">
-                    <span>Prédio / Local de Prova: <strong>{building?.name || "Local de Aplicação Não Definido"}</strong></span>
-                    <span className="mx-2">•</span>
-                    <span>Coordenação: <strong>{claName || building?.claId || "CLA"}</strong></span>
-                  </div>
                 </div>
 
-                <div className="text-right text-xs font-mono font-bold text-slate-500 shrink-0">
-                  <div>Data de Emissão: {new Date().toLocaleDateString('pt-BR')}</div>
-                  <div>Hora: {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {EXPORT_TEMPLATES.map((tmpl) => {
+                    const isSelected = selectedExportTemplate === tmpl.id;
+                    const countMatching = approvedCollaborators.filter(c => 
+                      isCollabInTemplate(c, tmpl.id, customExportConfig, rooms, isChefeDeSalaRole, isAplicadorRole, isRoleMatchingSector, isCollabInSector)
+                    ).length;
+
+                    return (
+                      <button
+                        key={tmpl.id}
+                        type="button"
+                        onClick={() => setSelectedExportTemplate(tmpl.id)}
+                        className={`text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer relative flex flex-col justify-between gap-2 ${
+                          isSelected
+                            ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500 dark:border-emerald-500 shadow-md ring-2 ring-emerald-500/20"
+                            : "bg-white dark:bg-[#0c1220] border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100/50 dark:hover:bg-slate-800/30 shadow-xs"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="text-xl shrink-0">
+                              {tmpl.id === "chefe_de_sala" && "🏆"}
+                              {tmpl.id === "aplicadores" && "👤"}
+                              {tmpl.id === "volantes" && "🏃‍♂️"}
+                              {tmpl.id === "banheiro" && "🚻"}
+                              {tmpl.id === "limpeza" && "✨"}
+                              {tmpl.id === "porteiro" && "🚪"}
+                              {tmpl.id === "ensalamento" && "📚"}
+                              {tmpl.id === "predio" && "🏛️"}
+                              {tmpl.id === "personalizado" && "⚙️"}
+                            </span>
+                            <div className="min-w-0">
+                              <h5 className={`font-display font-black text-xs truncate ${isSelected ? "text-emerald-900 dark:text-emerald-300" : "text-slate-800 dark:text-slate-200"}`}>
+                                {tmpl.title}
+                              </h5>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block truncate">
+                                {tmpl.fieldsDescription}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                            isSelected 
+                              ? "bg-emerald-600 text-white" 
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                          }`}>
+                            {countMatching} fiscais
+                          </span>
+                        </div>
+
+                        {isSelected && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 pt-1 border-t border-emerald-200/50 dark:border-emerald-800/50">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>Template Selecionado para Emissão</span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Summary Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs">
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Total de Salas:</span>
-                  <strong className="text-base font-mono text-slate-900">{rooms.length} Salas</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Fiscais em Salas:</span>
-                  <strong className="text-base font-mono text-emerald-700">{totalAllocated} Alocados</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Total Associados:</span>
-                  <strong className="text-base font-mono text-indigo-700">{approvedCollaborators.filter(c => c.assignedRole).length} Fiscais</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Fiscais na Reserva:</span>
-                  <strong className="text-base font-mono text-amber-700">{unallocatedReservas.length} Fiscais</strong>
-                </div>
-              </div>
-
-              {/* Rooms and Allocated People */}
-              <div className="space-y-5">
-                <h4 className="text-xs font-display font-black uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1">
-                  1. Distribuição de Fiscais por Sala de Aplicação
-                </h4>
-                
-                {rooms.map((room) => {
-                  const roomFiscais = approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom === room.number);
-                  return (
-                    <div 
-                      key={room.number}
-                      className="border-2 border-slate-300 rounded-xl overflow-hidden"
-                    >
-                      {/* Room Header */}
-                      <div className="bg-slate-100 px-4 py-2 border-b-2 border-slate-200 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="font-display font-black text-sm text-slate-900 uppercase">
-                            🚪 {room.number}
-                          </span>
-                          <span className="text-xs font-bold text-emerald-800">
-                            Pavimento / Andar: {room.floor}
-                          </span>
-                        </div>
-                        <div className="text-xs font-mono font-bold text-slate-600">
-                          Capacidade: {room.capacity} candidatos • {roomFiscais.length} fiscal(is)
-                        </div>
-                      </div>
-
-                      {/* Room Table */}
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-extrabold uppercase tracking-wider text-slate-600">
-                            <th className="py-2 px-3 w-10">#</th>
-                            <th className="py-2 px-3">Nome do Colaborador</th>
-                            <th className="py-2 px-3 w-36">CPF</th>
-                            <th className="py-2 px-3 w-48">Cargo / Função</th>
-                            <th className="py-2 px-3 w-36">Status / Histórico</th>
-                            <th className="py-2 px-3 w-44">Assinatura do Fiscal</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200">
-                          {roomFiscais.length === 0 ? (
-                            <tr>
-                              <td colSpan={6} className="py-3 px-3 text-center text-slate-400 italic text-[11px]">
-                                Nenhum colaborador alocado para esta sala.
-                              </td>
-                            </tr>
-                          ) : (
-                            roomFiscais.map((fiscal, fIdx) => (
-                              <tr key={fiscal.id || fiscal.cpf} className="hover:bg-slate-50">
-                                <td className="py-2.5 px-3 font-mono font-bold text-slate-400">{fIdx + 1}</td>
-                                <td className="py-2.5 px-3 font-bold text-slate-900">
-                                  {fiscal.name}
-                                </td>
-                                <td className="py-2.5 px-3 font-mono font-bold text-slate-700">
-                                  {fiscal.cpf}
-                                </td>
-                                <td className="py-2.5 px-3 font-bold text-indigo-800">
-                                  {fiscal.assignedRole || "Aplicador"}
-                                </td>
-                                <td className="py-2.5 px-3 text-[10px] font-semibold text-slate-600">
-                                  {fiscal.substitutionTag || "Efetivo"}
-                                </td>
-                                <td className="py-2.5 px-3">
-                                  <div className="h-4 border-b border-slate-400"></div>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+              {/* SECTION: CUSTOM CONFIGURATION ACCORDION (If "Personalizado" is selected) */}
+              {selectedExportTemplate === "personalizado" && (
+                <div className="p-4 sm:p-5 bg-white dark:bg-[#0c1220] rounded-xl border-2 border-rose-300 dark:border-rose-900/50 shadow-sm space-y-4 animate-fade-in">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-rose-500" />
+                      <h4 className="font-display font-black text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                        Configuração do Relatório Personalizado
+                      </h4>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Functions from Menu 3 in the Report */}
-              {rolesWithQuantity.filter(r => r.allMembers.length > 0).map(role => (
-                <div key={role.name} className="space-y-4 pt-2">
-                  <h4 className="text-xs font-display font-black uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1">
-                    Equipe de {role.name} ({role.allMembers.length} Fiscais)
-                  </h4>
-                  <div className="border-2 border-indigo-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-indigo-50 border-b border-indigo-200 text-[10px] font-extrabold uppercase text-indigo-900">
-                          <th className="py-2 px-3 w-10">#</th>
-                          <th className="py-2 px-3">Nome Completo</th>
-                          <th className="py-2 px-3 w-36">CPF</th>
-                          <th className="py-2 px-3 w-48">Função</th>
-                          <th className="py-2 px-3 w-36">Alocação Atual</th>
-                          <th className="py-2 px-3 w-44">Assinatura</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-indigo-100">
-                        {role.allMembers.map((fiscal, fIdx) => (
-                          <tr key={fiscal.id || fiscal.cpf}>
-                            <td className="py-2.5 px-3 font-mono font-bold text-slate-400">{fIdx + 1}</td>
-                            <td className="py-2.5 px-3 font-bold text-slate-900">{fiscal.name}</td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-slate-700">{fiscal.cpf}</td>
-                            <td className="py-2.5 px-3 font-bold text-indigo-800">{fiscal.assignedRole}</td>
-                            <td className="py-2.5 px-3 text-[10px] font-bold text-slate-600">
-                              {fiscal.assignedRoom ? `Sala ${fiscal.assignedRoom}` : "Circulação / Apoio"}
-                            </td>
-                            <td className="py-2.5 px-3">
-                              <div className="h-4 border-b border-slate-400"></div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-950/30 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800">
+                      Modo Customizado
+                    </span>
                   </div>
-                </div>
-              ))}
 
-              {/* Reserves Section in the Report */}
-              {unallocatedReservas.length > 0 && (
-                <div className="space-y-4 pt-2">
-                  <h4 className="text-xs font-display font-black uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1">
-                    Banco de Fiscais de Reserva Geral ({unallocatedReservas.length} Fiscais)
-                  </h4>
-                  <div className="border-2 border-amber-300 rounded-xl overflow-hidden">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-amber-50 border-b border-amber-200 text-[10px] font-extrabold uppercase text-amber-900">
-                          <th className="py-2 px-3 w-10">#</th>
-                          <th className="py-2 px-3">Nome</th>
-                          <th className="py-2 px-3 w-36">CPF</th>
-                          <th className="py-2 px-3 w-36">Telefone</th>
-                          <th className="py-2 px-3">Observação / Histórico de Substituição</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-amber-100">
-                        {unallocatedReservas.map((res, rIdx) => (
-                          <tr key={res.id || res.cpf}>
-                            <td className="py-2.5 px-3 font-mono font-bold text-slate-400">{rIdx + 1}</td>
-                            <td className="py-2.5 px-3 font-bold text-slate-900">{res.name}</td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-slate-700">{res.cpf}</td>
-                            <td className="py-2.5 px-3 font-mono text-[11px]">{res.whatsapp || "—"}</td>
-                            <td className="py-2.5 px-3 text-[10px] text-amber-900 font-semibold">
-                              {res.substitutionTag || "Reserva Geral (Pronto para substituição)"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Role Filter */}
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                        1. Selecione as Funções a Incluir:
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          "Chefe de Sala", "Aplicador", "Volante", "Banheiro", 
+                          "Limpeza", "Porteiro", "Representante", "TI", "Reservas", "Outros"
+                        ].map((role) => {
+                          const isChecked = customExportConfig.selectedRoles.includes(role);
+                          return (
+                            <button
+                              key={role}
+                              type="button"
+                              onClick={() => {
+                                setCustomExportConfig(prev => ({
+                                  ...prev,
+                                  selectedRoles: isChecked 
+                                    ? prev.selectedRoles.filter(r => r !== role)
+                                    : [...prev.selectedRoles, role]
+                                }));
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer flex items-center gap-1.5 ${
+                                isChecked
+                                  ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30 font-bold"
+                                  : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 opacity-60"
+                              }`}
+                            >
+                              {isChecked ? <Check className="w-3 h-3 text-rose-500" /> : <span className="w-3 h-3" />}
+                              <span>{role}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Columns Selector */}
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                        2. Selecione as Colunas da Tabela:
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { key: "nome", label: "Nome" },
+                          { key: "cpf", label: "CPF" },
+                          { key: "telefone", label: "Telefone" },
+                          { key: "funcao", label: "Função" },
+                          { key: "sala", label: "Sala Alocada" },
+                          { key: "andar", label: "Pavimento/Andar" },
+                          { key: "status", label: "Status/Histórico" },
+                          { key: "assinatura", label: "Campo Assinatura" }
+                        ].map((col) => {
+                          const isChecked = customExportConfig.selectedColumns.includes(col.key as any);
+                          return (
+                            <button
+                              key={col.key}
+                              type="button"
+                              onClick={() => {
+                                setCustomExportConfig(prev => ({
+                                  ...prev,
+                                  selectedColumns: isChecked 
+                                    ? prev.selectedColumns.filter(c => c !== col.key)
+                                    : [...prev.selectedColumns, col.key as any]
+                                }));
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer flex items-center gap-1.5 ${
+                                isChecked
+                                  ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30 font-bold"
+                                  : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 opacity-60"
+                              }`}
+                            >
+                              {isChecked ? <Check className="w-3 h-3 text-indigo-500" /> : <span className="w-3 h-3" />}
+                              <span>{col.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Allocation Status Filter */}
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-3">
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                      3. Filtrar Status:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {[
+                        { val: "all", label: "Todos os Colaboradores" },
+                        { val: "allocated", label: "Apenas Alocados em Sala/Posto" },
+                        { val: "unallocated", label: "Apenas Livres / Reserva" }
+                      ].map((st) => (
+                        <button
+                          key={st.val}
+                          type="button"
+                          onClick={() => setCustomExportConfig(prev => ({ ...prev, allocationStatusFilter: st.val as any }))}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                            customExportConfig.allocationStatusFilter === st.val
+                              ? "bg-slate-800 dark:bg-white text-white dark:text-slate-900 border-slate-800 dark:border-white font-bold"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200"
+                          }`}
+                        >
+                          {st.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Signatures at bottom */}
-              <div className="pt-8 border-t-2 border-slate-400 grid grid-cols-2 gap-8 text-center text-xs">
-                <div>
-                  <div className="h-10 border-b-2 border-slate-700 max-w-xs mx-auto mb-2"></div>
-                  <strong className="block text-slate-900 uppercase font-display">
-                    {claName || "Coordenador de Local de Aplicação (CLA)"}
-                  </strong>
-                  <span className="text-[10px] text-slate-500">Responsável pelo Local de Aplicação</span>
+              {/* LIVE REPORT PREVIEW BOX */}
+              <div className="bg-white dark:bg-[#0c1220] rounded-xl border-2 border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+                
+                {/* Preview Controls Bar */}
+                <div className="p-3.5 bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <TableProperties className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="font-display font-black text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                      Pré-visualização do Relatório Oficial
+                    </span>
+                    <span className="text-[11px] font-mono font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      {sortedTemplateCollaborators.length} registros
+                    </span>
+                  </div>
+
+                  {/* Search Bar */}
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={exportSearchQuery}
+                      onChange={(e) => setExportSearchQuery(e.target.value)}
+                      placeholder="Buscar por nome, CPF ou sala..."
+                      className="w-full pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                    {exportSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setExportSearchQuery("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <div className="h-10 border-b-2 border-slate-700 max-w-xs mx-auto mb-2"></div>
-                  <strong className="block text-slate-900 uppercase font-display">
-                    Supervisão Geral ENEM 2026
-                  </strong>
-                  <span className="text-[10px] text-slate-500">Validação e Encerramento de Ensalamento</span>
+
+                {/* Live Preview Table */}
+                <div className="max-h-96 overflow-x-auto overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 sticky top-0 z-10 backdrop-blur-xs">
+                        <th className="py-2.5 px-3 w-10 text-center">#</th>
+                        {activeTemplateColumns.includes("nome") && <th className="py-2.5 px-3">Nome do Colaborador</th>}
+                        {activeTemplateColumns.includes("cpf") && <th className="py-2.5 px-3 w-32">CPF</th>}
+                        {activeTemplateColumns.includes("telefone") && <th className="py-2.5 px-3 w-32">Telefone</th>}
+                        {activeTemplateColumns.includes("funcao") && <th className="py-2.5 px-3 w-40">Função</th>}
+                        {activeTemplateColumns.includes("sala") && <th className="py-2.5 px-3 w-36">Sala Alocada</th>}
+                        {activeTemplateColumns.includes("andar") && <th className="py-2.5 px-3 w-28">Pavimento</th>}
+                        {activeTemplateColumns.includes("status") && <th className="py-2.5 px-3 w-28">Histórico</th>}
+                        {activeTemplateColumns.includes("assinatura") && <th className="py-2.5 px-3 w-40">Assinatura</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                      {sortedTemplateCollaborators.length === 0 ? (
+                        <tr>
+                          <td colSpan={activeTemplateColumns.length + 1} className="py-8 text-center text-slate-400 italic">
+                            Nenhum colaborador encontrado para este template com os filtros atuais.
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedTemplateCollaborators.map((fiscal, idx) => {
+                          const roomObj = rooms.find(r => r.number === fiscal.assignedRoom);
+                          const roomLabel = fiscal.assignedRoom 
+                            ? (rooms.some(r => r.number === fiscal.assignedRoom) ? `Sala ${fiscal.assignedRoom}` : fiscal.assignedRoom)
+                            : "Não Alocado / Reserva";
+
+                          return (
+                            <tr key={fiscal.id || fiscal.cpf} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                              <td className="py-2 px-3 font-mono font-bold text-slate-400 text-center">
+                                {idx + 1}
+                              </td>
+                              {activeTemplateColumns.includes("nome") && (
+                                <td className="py-2 px-3 font-bold text-slate-900 dark:text-slate-100">
+                                  {fiscal.name}
+                                </td>
+                              )}
+                              {activeTemplateColumns.includes("cpf") && (
+                                <td className="py-2 px-3 font-mono font-bold text-slate-600 dark:text-slate-300">
+                                  {fiscal.cpf}
+                                </td>
+                              )}
+                              {activeTemplateColumns.includes("telefone") && (
+                                <td className="py-2 px-3 font-mono text-[11px] text-sky-700 dark:text-sky-400 font-semibold">
+                                  {fiscal.whatsapp || "—"}
+                                </td>
+                              )}
+                              {activeTemplateColumns.includes("funcao") && (
+                                <td className="py-2 px-3 font-bold text-indigo-700 dark:text-indigo-300">
+                                  <span className="px-2 py-0.5 bg-indigo-500/10 rounded border border-indigo-500/20 text-[10px]">
+                                    {fiscal.assignedRole || (fiscal.isReserve ? "Reserva" : "Aplicador")}
+                                  </span>
+                                </td>
+                              )}
+                              {activeTemplateColumns.includes("sala") && (
+                                <td className="py-2 px-3 font-bold">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${
+                                    fiscal.assignedRoom 
+                                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                                      : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+                                  }`}>
+                                    {roomLabel}
+                                  </span>
+                                </td>
+                              )}
+                              {activeTemplateColumns.includes("andar") && (
+                                <td className="py-2 px-3 text-slate-500 dark:text-slate-400 text-[11px]">
+                                  {roomObj ? `Pav. ${roomObj.floor}` : "—"}
+                                </td>
+                              )}
+                              {activeTemplateColumns.includes("status") && (
+                                <td className="py-2 px-3 text-[10px] text-slate-500 dark:text-slate-400">
+                                  {fiscal.substitutionTag || fiscal.status || "Efetivo"}
+                                </td>
+                              )}
+                              {activeTemplateColumns.includes("assinatura") && (
+                                <td className="py-2 px-3">
+                                  <div className="h-4 border-b border-slate-300 dark:border-slate-700"></div>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
+
               </div>
 
+            </div>
+
+            {/* Modal Footer Bar with Full Actions */}
+            <div className="p-4 bg-white dark:bg-[#0c1220] border-t-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Local: <strong className="text-slate-800 dark:text-slate-200">{building?.name || "Local de Aplicação"}</strong> • CLA: <strong className="text-slate-800 dark:text-slate-200">{claName || "Coordenação"}</strong>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPdfModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadHtmlReport}
+                  className="px-5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition shadow-md active:scale-95 cursor-pointer flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Baixar Relatório Formatado</span>
+                </button>
+              </div>
             </div>
 
           </div>
@@ -2440,52 +4018,64 @@ function collaboratorWarnings(collab: CollaboratorInfo, onDiagnose?: (c: Collabo
 }
 
 /**
- * Generates a complete, self-contained, printable HTML document with styling
+ * Generates a complete, self-contained, printable HTML document based on the selected template and active columns
  */
-function generatePrintableHtml(
+function generateTemplatePrintableHtml(
   building: BuildingInfo | null | undefined,
   claName: string | undefined,
   rooms: RoomDetails[],
   collaborators: CollaboratorInfo[],
-  rolesWithQuantity: any[]
+  templateMeta: TemplateMeta,
+  columns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "assinatura")[],
+  customCfg: CustomExportConfig
 ): string {
   const dateStr = new Date().toLocaleDateString('pt-BR');
   const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
   const totalAllocated = collaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
-  const reservas = collaborators.filter(c => c.isReserve || !c.assignedRole || c.assignedRole.trim() === "");
+
+  const headerCols: { key: string; label: string; width?: string; align?: string }[] = [
+    { key: "num", label: "#", width: "35px", align: "center" }
+  ];
+  if (columns.includes("nome")) headerCols.push({ key: "nome", label: "Nome do Colaborador", width: "auto" });
+  if (columns.includes("cpf")) headerCols.push({ key: "cpf", label: "CPF", width: "125px" });
+  if (columns.includes("telefone")) headerCols.push({ key: "telefone", label: "Telefone / WhatsApp", width: "125px" });
+  if (columns.includes("funcao")) headerCols.push({ key: "funcao", label: "Função / Cargo", width: "140px" });
+  if (columns.includes("sala")) headerCols.push({ key: "sala", label: "Sala / Posto Alocado", width: "130px" });
+  if (columns.includes("andar")) headerCols.push({ key: "andar", label: "Pavimento / Andar", width: "110px" });
+  if (columns.includes("status")) headerCols.push({ key: "status", label: "Status / Obs", width: "110px" });
+  if (columns.includes("assinatura")) headerCols.push({ key: "assinatura", label: "Assinatura do Fiscal", width: "150px" });
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Mapa de Ensalamento ENEM 2026 - ${building?.name || 'Local'}</title>
+  <title>Relatório ENEM 2026 - ${templateMeta.title} - ${building?.name || 'Local'}</title>
   <style>
-    @page { size: A4 portrait; margin: 12mm 10mm; }
+    @page { size: A4 portrait; margin: 10mm 8mm; }
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11px; line-height: 1.35; color: #111827; background: #fff; margin: 0; padding: 20px; }
-    .header { border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start; }
-    .tag { font-family: monospace; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #047857; }
-    h1 { margin: 4px 0 6px; font-size: 16px; font-weight: 900; text-transform: uppercase; }
-    .sub { font-size: 11px; color: #374151; font-weight: 600; }
-    .meta { font-family: monospace; font-size: 10px; font-weight: 700; text-align: right; color: #4b5563; }
-    .stats { display: flex; gap: 12px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 10.5px; line-height: 1.3; color: #111827; background: #fff; margin: 0; padding: 16px; }
+    .header { border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start; }
+    .tag { font-family: monospace; font-size: 8.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #047857; }
+    h1 { margin: 2px 0 4px; font-size: 15px; font-weight: 900; text-transform: uppercase; color: #0f172a; }
+    .template-badge { display: inline-block; background: #0f766e; color: #fff; font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-left: 6px; }
+    .sub { font-size: 10.5px; color: #334155; font-weight: 600; }
+    .meta { font-family: monospace; font-size: 9.5px; font-weight: 700; text-align: right; color: #475569; }
+    .stats { display: flex; gap: 10px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; }
     .stat-box { flex: 1; }
-    .stat-label { font-size: 9px; text-transform: uppercase; font-weight: 700; color: #6b7280; display: block; }
-    .stat-val { font-family: monospace; font-size: 13px; font-weight: 800; color: #111827; }
-    .section-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1.5px solid #9ca3af; padding-bottom: 4px; margin: 18px 0 10px; color: #1f2937; }
-    .room-card { border: 1.5px solid #9ca3af; border-radius: 6px; margin-bottom: 14px; page-break-inside: avoid; overflow: hidden; }
-    .room-hdr { background: #e5e7eb; padding: 6px 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #9ca3af; font-weight: 800; font-size: 11px; }
-    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 10.5px; }
-    th { background: #f9fafb; font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 5px 8px; border-bottom: 1px solid #d1d5db; color: #4b5563; }
-    td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
-    .sig-line { border-bottom: 1px solid #9ca3af; height: 16px; width: 100%; }
-    .sig-grid { display: flex; gap: 30px; margin-top: 35px; padding-top: 15px; border-top: 1.5px solid #9ca3af; page-break-inside: avoid; }
-    .sig-block { flex: 1; text-align: center; font-size: 10px; }
-    .sig-box-line { border-bottom: 1.5px solid #111827; height: 28px; margin: 0 auto 6px; max-width: 220px; }
-    .badge { display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 9px; font-weight: 700; background: #e0e7ff; color: #3730a3; }
-    .print-btn-bar { margin-bottom: 20px; text-align: right; }
-    .btn { background: #059669; color: white; border: none; padding: 8px 16px; font-weight: 800; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .stat-label { font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; display: block; }
+    .stat-val { font-family: monospace; font-size: 12px; font-weight: 800; color: #0f172a; }
+    .fields-tag { font-size: 9px; font-weight: 700; color: #0369a1; background: #e0f2fe; padding: 2px 6px; border-radius: 4px; border: 1px solid #bae6fd; display: inline-block; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 10px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; }
+    th { background: #f1f5f9; font-size: 8.5px; font-weight: 800; text-transform: uppercase; padding: 6px 6px; border-bottom: 1.5px solid #94a3b8; color: #334155; }
+    td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+    tr:nth-child(even) { background-color: #f8fafc; }
+    .sig-line { border-bottom: 1px solid #64748b; height: 16px; width: 100%; }
+    .sig-grid { display: flex; gap: 30px; margin-top: 25px; padding-top: 15px; border-top: 1.5px solid #94a3b8; page-break-inside: avoid; }
+    .sig-block { flex: 1; text-align: center; font-size: 9.5px; }
+    .sig-box-line { border-bottom: 1.5px solid #0f172a; height: 26px; margin: 0 auto 6px; max-width: 200px; }
+    .badge { display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 8.5px; font-weight: 700; background: #e0e7ff; color: #3730a3; }
+    .print-btn-bar { margin-bottom: 16px; text-align: right; }
+    .btn { background: #059669; color: white; border: none; padding: 7px 14px; font-weight: 800; border-radius: 6px; cursor: pointer; font-size: 11px; }
     @media print { .print-btn-bar { display: none; } body { padding: 0; } }
   </style>
 </head>
@@ -2497,131 +4087,65 @@ function generatePrintableHtml(
   <div class="header">
     <div>
       <span class="tag">EXAME NACIONAL DO ENSINO MÉDIO — ENEM 2026</span>
-      <h1>MAPA DE ENSALAMENTO E ALOCAÇÃO DE FISCAIS</h1>
+      <h1>${templateMeta.title.toUpperCase()} <span class="template-badge">${templateMeta.badge}</span></h1>
       <div class="sub">
         Local de Prova: <strong>${building?.name || 'Local Não Definido'}</strong> | Coordenação: <strong>${claName || 'CLA'}</strong>
       </div>
+      <div class="fields-tag">📋 Estrutura: ${templateMeta.fieldsDescription}</div>
     </div>
     <div class="meta">
-      <div>Data: ${dateStr}</div>
-      <div>Hora: ${timeStr}</div>
+      <div>Data de Emissão: ${dateStr}</div>
+      <div>Horário: ${timeStr}</div>
     </div>
   </div>
 
   <div class="stats">
-    <div class="stat-box"><span class="stat-label">Total de Salas:</span><span class="stat-val">${rooms.length}</span></div>
-    <div class="stat-box"><span class="stat-label">Fiscais em Sala:</span><span class="stat-val">${totalAllocated}</span></div>
-    <div class="stat-box"><span class="stat-label">Total Associados:</span><span class="stat-val">${collaborators.filter(c => c.assignedRole).length}</span></div>
-    <div class="stat-box"><span class="stat-label">Banco de Reservas:</span><span class="stat-val">${reservas.length}</span></div>
+    <div class="stat-box"><span class="stat-label">Total no Relatório:</span><span class="stat-val">${collaborators.length} Colaboradores</span></div>
+    <div class="stat-box"><span class="stat-label">Alocados em Sala/Posto:</span><span class="stat-val">${totalAllocated} Alocados</span></div>
+    <div class="stat-box"><span class="stat-label">Disponíveis / Livres:</span><span class="stat-val">${collaborators.length - totalAllocated}</span></div>
+    <div class="stat-box"><span class="stat-label">Salas no Prédio:</span><span class="stat-val">${rooms.length} Salas</span></div>
   </div>
 
-  <div class="section-title">1. Distribuição de Fiscais por Sala de Aplicação</div>
-  ${rooms.map(room => {
-    const rFiscais = collaborators.filter(c => !c.isReserve && c.assignedRoom === room.number);
-    return `
-    <div class="room-card">
-      <div class="room-hdr">
-        <span>🚪 ${room.number} — Pavimento / Andar: ${room.floor}</span>
-        <span>Capacidade: ${room.capacity} candidatos | ${rFiscais.length} fiscal(is)</span>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 30px;">#</th>
-            <th>Nome do Colaborador</th>
-            <th style="width: 120px;">CPF</th>
-            <th style="width: 150px;">Cargo / Função</th>
-            <th style="width: 120px;">Obs / Substituição</th>
-            <th style="width: 140px;">Assinatura do Fiscal</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rFiscais.length === 0 ? `
-            <tr><td colspan="6" style="text-align: center; color: #9ca3af; font-style: italic; padding: 8px;">Nenhum fiscal alocado para esta sala</td></tr>
-          ` : rFiscais.map((f, i) => `
-            <tr>
-              <td style="font-family: monospace; font-weight: bold; color: #6b7280;">${i + 1}</td>
-              <td style="font-weight: bold;">${f.name}</td>
-              <td style="font-family: monospace; font-weight: bold;">${f.cpf}</td>
-              <td><span class="badge">${f.assignedRole || 'Aplicador'}</span></td>
-              <td style="font-size: 9px; color: #4b5563;">${f.substitutionTag || 'Efetivo'}</td>
-              <td><div class="sig-line"></div></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-    `;
-  }).join('')}
-
-  ${rolesWithQuantity.filter(r => r.allMembers.length > 0).map(role => `
-    <div class="section-title">Equipe de ${role.name} (${role.allMembers.length} Fiscais)</div>
-    <div class="room-card">
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 30px;">#</th>
-            <th>Nome Completo</th>
-            <th style="width: 120px;">CPF</th>
-            <th style="width: 150px;">Função</th>
-            <th style="width: 120px;">Alocação</th>
-            <th style="width: 140px;">Assinatura</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${role.allMembers.map((f: any, i: number) => `
-            <tr>
-              <td style="font-family: monospace; font-weight: bold; color: #6b7280;">${i + 1}</td>
-              <td style="font-weight: bold;">${f.name}</td>
-              <td style="font-family: monospace; font-weight: bold;">${f.cpf}</td>
-              <td><span class="badge">${f.assignedRole}</span></td>
-              <td style="font-size: 9px;">${f.assignedRoom ? `Sala ${f.assignedRoom}` : 'Circulação Geral'}</td>
-              <td><div class="sig-line"></div></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `).join('')}
-
-  ${reservas.length > 0 ? `
-    <div class="section-title">Banco de Fiscais de Reserva (${reservas.length})</div>
-    <div class="room-card">
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 30px;">#</th>
-            <th>Nome</th>
-            <th style="width: 120px;">CPF</th>
-            <th style="width: 120px;">Telefone</th>
-            <th>Histórico / Observação</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${reservas.map((r, i) => `
-            <tr>
-              <td style="font-family: monospace; font-weight: bold; color: #6b7280;">${i + 1}</td>
-              <td style="font-weight: bold;">${r.name}</td>
-              <td style="font-family: monospace;">${r.cpf}</td>
-              <td style="font-family: monospace;">${r.whatsapp || '—'}</td>
-              <td style="font-size: 9px; color: #92400e;">${r.substitutionTag || 'Reserva Geral'}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  ` : ''}
+  <table>
+    <thead>
+      <tr>
+        ${headerCols.map(col => `<th style="${col.width ? `width: ${col.width};` : ''} ${col.align ? `text-align: ${col.align};` : ''}">${col.label}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${collaborators.length === 0 ? `
+        <tr><td colspan="${headerCols.length}" style="text-align: center; color: #94a3b8; font-style: italic; padding: 14px;">Nenhum colaborador encontrado para o template selecionado com os filtros atuais.</td></tr>
+      ` : collaborators.map((c, idx) => {
+        const roomObj = rooms.find(r => r.number === c.assignedRoom);
+        const roomStr = c.assignedRoom ? (rooms.some(r => r.number === c.assignedRoom) ? `Sala ${c.assignedRoom}` : c.assignedRoom) : "Não Alocado";
+        const floorStr = roomObj ? `Pav. ${roomObj.floor}` : "—";
+        return `
+        <tr>
+          <td style="font-family: monospace; font-weight: bold; text-align: center; color: #64748b;">${idx + 1}</td>
+          ${columns.includes("nome") ? `<td style="font-weight: bold; color: #0f172a;">${c.name}</td>` : ''}
+          ${columns.includes("cpf") ? `<td style="font-family: monospace; font-weight: bold; color: #334155;">${c.cpf}</td>` : ''}
+          ${columns.includes("telefone") ? `<td style="font-family: monospace; color: #0369a1; font-weight: 600;">${c.whatsapp || "—"}</td>` : ''}
+          ${columns.includes("funcao") ? `<td><span class="badge">${c.assignedRole || (c.isReserve ? "Reserva" : "Aplicador")}</span></td>` : ''}
+          ${columns.includes("sala") ? `<td style="font-weight: 700; color: ${c.assignedRoom ? '#047857' : '#94a3b8'};">${roomStr}</td>` : ''}
+          ${columns.includes("andar") ? `<td style="font-size: 9px; color: #475569;">${floorStr}</td>` : ''}
+          ${columns.includes("status") ? `<td style="font-size: 9px; color: #64748b;">${c.substitutionTag || c.status || "Efetivo"}</td>` : ''}
+          ${columns.includes("assinatura") ? `<td><div class="sig-line"></div></td>` : ''}
+        </tr>
+        `;
+      }).join('')}
+    </tbody>
+  </table>
 
   <div class="sig-grid">
     <div class="sig-block">
       <div class="sig-box-line"></div>
       <strong>${claName || 'Coordenador de Local de Aplicação (CLA)'}</strong><br>
-      <span style="color: #6b7280;">Responsável pelo Local de Aplicação</span>
+      <span style="color: #64748b;">Responsável pelo Local de Aplicação</span>
     </div>
     <div class="sig-block">
       <div class="sig-box-line"></div>
       <strong>Supervisão Geral ENEM 2026</strong><br>
-      <span style="color: #6b7280;">Validação e Encerramento de Ensalamento</span>
+      <span style="color: #64748b;">Validação e Encerramento do Relatório</span>
     </div>
   </div>
 </body>

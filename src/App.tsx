@@ -803,7 +803,7 @@ export default function App() {
               CalanguS
             </h2>
             <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-              v2.0
+              v2.3
             </span>
           </div>
           <span className="text-[10px] uppercase font-extrabold text-slate-450 tracking-widest font-mono">
@@ -907,7 +907,7 @@ export default function App() {
                 <div className="flex items-center justify-center gap-2">
                   <h1 className="font-display font-black text-3xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</h1>
                   <span className="text-[11px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                    v2.0
+                    v2.3
                   </span>
                 </div>
                 <span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block mt-0.5">TACTILE TEAM DISPATCHER</span>
@@ -984,7 +984,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</span>
                     <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                      v2.0
+                      v2.3
                     </span>
                   </div>
                   <span className="text-[8px] sm:text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block">TACTILE TEAM DISPATCHER</span>

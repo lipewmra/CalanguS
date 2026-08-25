@@ -439,7 +439,7 @@ export default function SettingsModal({
               <span>Restaurar Padrões</span>
             </button>
             <span className="text-[10px] text-slate-400 dark:text-slate-600 font-mono font-bold hidden sm:inline">
-              CalanguS v2.0 (Build 2026)
+              CalanguS v2.3 (Build 2026)
             </span>
           </div>
 
