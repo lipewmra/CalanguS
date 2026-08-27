@@ -30,12 +30,18 @@ import {
   Clock,
   HelpCircle,
   ThumbsUp,
-  Edit2
+  Edit2,
+  Banknote,
+  Award,
+  CalendarCheck,
+  Building2,
+  ShieldCheck
 } from "lucide-react";
-import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage, MessageReadReceipt, MessageCollaboratorResponse, DidacticMaterial, MaterialAccessLog } from "../types";
+import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage, MessageReadReceipt, MessageCollaboratorResponse, DidacticMaterial, MaterialAccessLog, EventConfigInfo } from "../types";
 import { subscribeToDidacticMaterials, recordCollaboratorMaterialAccess } from "../lib/db-services";
 import PhotoUploader from "./PhotoUploader";
 import { DEFAULT_ENEM_SCHEDULE } from "./CollaboratorSettingsView";
+import { getRolePayment } from "./AssociationView";
 
 interface CollaboratorDashboardProps {
   currentUser: UserProfile;
@@ -46,6 +52,8 @@ interface CollaboratorDashboardProps {
   onUpdateConfirmationStatus: (status: "Pendente" | "Confirmado" | "Recusado", roleNameToRefuse?: string) => void;
   onUpdateProfile: (updates: Partial<CollaboratorInfo>) => Promise<void>;
   onSaveBuilding?: (building: BuildingInfo) => Promise<void> | void;
+  eventConfig?: EventConfigInfo | null;
+  claName?: string;
 }
 
 export default function CollaboratorDashboard({
@@ -56,7 +64,9 @@ export default function CollaboratorDashboard({
   individualConfirmationStatus,
   onUpdateConfirmationStatus,
   onUpdateProfile,
-  onSaveBuilding
+  onSaveBuilding,
+  eventConfig,
+  claName
 }: CollaboratorDashboardProps) {
   const [activeMenuTab, setActiveMenuTab] = useState<string>("messages");
   const [isRefusingModalOpen, setIsRefusingModalOpen] = useState(false);
@@ -703,7 +713,7 @@ export default function CollaboratorDashboard({
               </button>
             </div>
 
-            {/* BUSINESS LOGIC: PRESENCE CONFIRMATION SECTION */}
+            {/* BUSINESS LOGIC: PRESENCE CONFIRMATION & ROLE HIGHLIGHTS SECTION */}
             {(() => {
               const isAuthorized = collaboratorRecord?.status === "Confirmado";
               const assignedRole = collaboratorRecord?.assignedRole?.trim();
@@ -712,15 +722,43 @@ export default function CollaboratorDashboard({
               const hasRefused = Boolean(collaboratorRecord?.refusedRole || collaboratorRecord?.refusalTag);
               const isConfirmedAttendance = collaboratorRecord?.attendanceStatus === "Confirmado";
 
+              // Role resolution for payments and display
+              const displayRoleName = hasAssignedRole 
+                ? (assignedRole || "Aplicador")
+                : (collaboratorRecord?.specialRole && collaboratorRecord.specialRole !== "Nenhuma" 
+                    ? collaboratorRecord.specialRole 
+                    : (isReserve ? "Fiscal de Reserva de Corredor" : (collaboratorRecord?.assignedRole || "Fiscal de Sala Regular")));
+
+              // Compute custom or standard remuneration
+              const getCustomOrStandardPayment = (roleName: string): string => {
+                if (!roleName) return "—";
+                if (building?.customRoles && building.customRoles.length > 0) {
+                  const matched = building.customRoles.find(r => r.name.toLowerCase().trim() === roleName.toLowerCase().trim());
+                  if (matched && matched.remuneration && matched.remuneration > 0) {
+                    return `R$ ${matched.remuneration.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                  }
+                }
+                return getRolePayment(roleName);
+              };
+
+              const rolePayment = getCustomOrStandardPayment(displayRoleName);
+
+              // Exam dates list
+              const examDates = (eventConfig?.examDates && eventConfig.examDates.length > 0)
+                ? eventConfig.examDates
+                : ["08/11/2026", "15/11/2026"];
+
               // Only show presence confirmation when collaborator is authorized AND has an assigned active role (not reserve)
               if (isAuthorized && hasAssignedRole) {
                 return (
-                  <div className="p-5 bg-gradient-to-r from-emerald-500/10 via-slate-50 to-indigo-500/10 dark:from-emerald-500/10 dark:via-[#0c1220] dark:to-indigo-500/10 border-2 border-emerald-500/30 rounded-2xl space-y-4 shadow-md animate-fade-in">
+                  <div className="p-5 sm:p-6 bg-gradient-to-r from-emerald-500/10 via-slate-50 to-indigo-500/10 dark:from-emerald-500/10 dark:via-[#0c1220] dark:to-indigo-500/10 border-2 border-emerald-500/40 rounded-2xl space-y-5 shadow-lg animate-fade-in">
+                    
+                    {/* Header Convocação */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-mono font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md border border-emerald-500/30">
-                            CONVOCAÇÃO OFICIAL CEBRASPE
+                            CONVOCAÇÃO
                           </span>
                           {isConfirmedAttendance ? (
                             <span className="text-[10px] bg-emerald-600 text-white font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
@@ -733,28 +771,96 @@ export default function CollaboratorDashboard({
                             </span>
                           )}
                         </div>
-                        <h4 className="text-sm font-display font-black text-slate-850 dark:text-white mt-1.5 flex items-center gap-1.5">
-                          <span>📋</span> Função Designada: <span className="text-indigo-600 dark:text-indigo-400 underline">{assignedRole}</span>
+                        <h4 className="text-base font-display font-black text-slate-850 dark:text-white mt-1.5 flex items-center gap-2">
+                          <span>📋</span> Convocação Oficial para Atuação no ENEM
                         </h4>
                       </div>
 
                       {collaboratorRecord?.assignedRoom && (
-                        <div className="bg-white dark:bg-[#101726] border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-center">
-                          <span className="text-[9px] uppercase font-bold text-slate-400 block">Sala Designada</span>
-                          <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">{collaboratorRecord.assignedRoom}</span>
+                        <div className="bg-white dark:bg-[#101726] border-2 border-emerald-500/30 rounded-xl px-4 py-2 text-center shadow-xs">
+                          <span className="text-[9px] uppercase font-black text-slate-400 block tracking-wider">Sala Designada</span>
+                          <span className="text-sm font-mono font-black text-emerald-600 dark:text-emerald-400">{collaboratorRecord.assignedRoom}</span>
                         </div>
                       )}
                     </div>
 
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    {/* DADOS EM DESTAQUE (Função, Valor recebido, Dias de comparecimento) */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                      {/* 1. FUNÇÃO */}
+                      <div className="p-4 bg-white dark:bg-[#101726] rounded-xl border-2 border-indigo-500/30 shadow-xs flex flex-col justify-between space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-black tracking-wider text-indigo-600 dark:text-indigo-400">
+                            Função Designada
+                          </span>
+                          <div className="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                            <Award className="w-4 h-4" />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-display font-black text-slate-900 dark:text-white text-base leading-tight">
+                            {assignedRole}
+                          </div>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium block mt-0.5">
+                            {collaboratorRecord?.specialRole && collaboratorRecord.specialRole !== "Nenhuma"
+                              ? `Especialidade: ${collaboratorRecord.specialRole}`
+                              : "Atuação oficial em equipe de aplicação"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 2. VALOR RECEBIDO NA FUNÇÃO */}
+                      <div className="p-4 bg-white dark:bg-[#101726] rounded-xl border-2 border-emerald-500/30 shadow-xs flex flex-col justify-between space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400">
+                            Valor Recebido na Função
+                          </span>
+                          <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                            <Banknote className="w-4 h-4" />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-display font-black text-emerald-600 dark:text-emerald-400 text-xl font-mono leading-tight">
+                            {rolePayment}
+                          </div>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium block mt-0.5">
+                            Remuneração oficial do exame
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 3. DIAS DE COMPARECIMENTO (DIAS DO ENEM) */}
+                      <div className="p-4 bg-white dark:bg-[#101726] rounded-xl border-2 border-amber-500/30 shadow-xs flex flex-col justify-between space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-black tracking-wider text-amber-600 dark:text-amber-400">
+                            Comparecer nos Dias (ENEM)
+                          </span>
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                            <CalendarCheck className="w-4 h-4" />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-mono font-black text-slate-900 dark:text-white text-xs sm:text-sm leading-snug">
+                            1º Dia: <strong className="text-indigo-600 dark:text-indigo-400">{examDates[0] || "08/11/2026"}</strong>
+                            <br />
+                            2º Dia: <strong className="text-indigo-600 dark:text-indigo-400">{examDates[1] || "15/11/2026"}</strong>
+                          </div>
+                          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 block mt-0.5">
+                            ⚠️ Presença obrigatória em ambos os dias
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions and message */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2 border-t border-slate-200 dark:border-slate-800">
                       <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
                         {isConfirmedAttendance ? (
                           <span>
-                            ✓ Você confirmou sua presença para exercer a função de <strong>{assignedRole}</strong> no ENEM 2026. A coordenação conta com sua pontualidade!
+                            ✓ Você confirmou sua presença para exercer a função de <strong>{assignedRole}</strong> no ENEM. Compareça pontualmente nos dias <strong>{examDates[0]}</strong> e <strong>{examDates[1]}</strong>!
                           </span>
                         ) : (
                           <span>
-                            O CLA autorizou seu cadastro e fez a sua associação na função de <strong>{assignedRole}</strong>. Por favor, <strong>confirme sua presença</strong> para garantir sua vaga na escala oficial do ENEM.
+                            Você foi alocado na função de <strong>{assignedRole}</strong> ({rolePayment}). Por favor, <strong>confirme sua presença</strong> para garantir sua escala nos dias <strong>{examDates[0]}</strong> e <strong>{examDates[1]}</strong>.
                           </span>
                         )}
                       </p>
@@ -816,8 +922,75 @@ export default function CollaboratorDashboard({
                 );
               }
 
-              // When in reserve or waiting for role assignment: do not show any confirmation div
-              return null;
+              // In reserve or awaiting association - still show prominent summary of status, estimated role/value and exam dates
+              return (
+                <div className="p-5 bg-slate-100/80 dark:bg-[#101726]/60 border-2 border-slate-200 dark:border-slate-800 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] bg-sky-500/20 text-sky-700 dark:text-sky-300 font-mono font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md border border-sky-500/30">
+                      STATUS DO CADASTRO
+                    </span>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                      {isReserve ? "Banco de Reserva de Fiscais" : "Aguardando Associação pelo CLA"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                    {/* 1. FUNÇÃO */}
+                    <div className="p-4 bg-white dark:bg-[#0c1220] rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">
+                          Função Cadastrada
+                        </span>
+                        <Award className="w-4 h-4 text-slate-400" />
+                      </div>
+                      <div>
+                        <div className="font-display font-black text-slate-850 dark:text-white text-sm">
+                          {displayRoleName}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                          {isReserve ? "Disponível para substituições" : "Aguardando alocação em sala"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 2. VALOR RECEBIDO */}
+                    <div className="p-4 bg-white dark:bg-[#0c1220] rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400">
+                          Remuneração da Função
+                        </span>
+                        <Banknote className="w-4 h-4 text-emerald-500" />
+                      </div>
+                      <div>
+                        <div className="font-display font-black text-emerald-600 dark:text-emerald-400 text-lg font-mono">
+                          {rolePayment}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                          Valor padrão conforme tabela oficial
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 3. DIAS DO ENEM */}
+                    <div className="p-4 bg-white dark:bg-[#0c1220] rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-indigo-600 dark:text-indigo-400">
+                          Dias de Aplicação ENEM
+                        </span>
+                        <CalendarCheck className="w-4 h-4 text-indigo-500" />
+                      </div>
+                      <div>
+                        <div className="font-mono font-black text-slate-800 dark:text-white text-xs">
+                          1º Dia: {examDates[0] || "08/11/2026"} • 2º Dia: {examDates[1] || "15/11/2026"}
+                        </div>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block mt-0.5">
+                          Comparecimento nos 2 domingos
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
             })()}
 
             {/* Modal to Confirm Refusal of Role Convocations */}
@@ -872,58 +1045,91 @@ export default function CollaboratorDashboard({
               </div>
             )}
 
-            {building && (
-              <div className="space-y-4">
-                <span className="block text-[10px] uppercase font-extrabold tracking-widest text-slate-500 dark:text-slate-400">Escola Designada & Rota</span>
-                
-                <div className="bg-slate-50 dark:bg-[#070b13]/40 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-inner">
-                  <div>
-                    <h4 className="font-display font-black text-slate-800 dark:text-white text-base">🏫 {building.name}</h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-1.5 font-medium">
-                      <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <span>{building.address}</span>
-                    </p>
-                  </div>
+            {/* ESCOLA DESIGNADA & LOCAL DE TRABALHO (Includes Nome do CLA que convocou) */}
+            {building && (() => {
+              const convokedClaName = (
+                collaboratorRecord?.claName || 
+                collaboratorRecord?.originalClaName || 
+                claName || 
+                (building?.coordRoom ? `Coordenação (Sala ${building.coordRoom})` : "Coordenação CLA")
+              ).trim();
 
-                  <div className="grid grid-cols-2 gap-4 border-t border-slate-200 dark:border-slate-800 pt-4 text-xs font-bold leading-relaxed">
+              return (
+                <div className="space-y-4">
+                  <span className="block text-[10px] uppercase font-extrabold tracking-widest text-slate-500 dark:text-slate-400">Escola Designada & Local de Trabalho</span>
+                  
+                  <div className="bg-slate-50 dark:bg-[#070b13]/40 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-inner">
                     <div>
-                      <span className="text-slate-400 block font-normal uppercase text-[9px] tracking-wider mb-0.5">Sua Função de Lotação:</span>
-                      <span className="text-slate-800 dark:text-white">
-                        {collaboratorRecord?.specialRole && collaboratorRecord.specialRole !== "Nenhuma" 
-                          ? `${collaboratorRecord.specialRole} (Acessibilidade)`
-                          : (collaboratorRecord?.isReserve ? "Fiscal de Reserva de Corredor" : "Fiscal de Sala Regular")}
-                      </span>
+                      <h4 className="font-display font-black text-slate-800 dark:text-white text-base">🏫 {building.name}</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-1.5 font-medium">
+                        <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <span>{building.address}</span>
+                      </p>
                     </div>
-                    <div>
-                      <span className="text-slate-400 block font-normal uppercase text-[9px] tracking-wider mb-0.5">Setor de Alocação:</span>
-                      <span className="text-slate-850 dark:text-slate-200">
-                        {collaboratorRecord?.isReserve ? "Salas Extras / Apoio" : `Andar ${collaboratorRecord?.assignedRoom ? "1º / Bloco A" : "Selecione na Sala"} (${collaboratorRecord?.assignedRoom || "Pendente de Coordenação"})`}
-                      </span>
-                    </div>
-                    <div className="mt-2">
-                      <span className="text-slate-400 block font-normal uppercase text-[9px] tracking-wider mb-0.5">Sala de Coordenação (CLA):</span>
-                      <span className="text-slate-850 dark:text-slate-200">{building.coordRoom}</span>
-                    </div>
-                    <div className="mt-2">
-                      <span className="text-slate-400 block font-normal uppercase text-[9px] tracking-wider mb-0.5">Capacidade da Escola:</span>
-                      <span className="text-slate-850 dark:text-slate-200">{building.realCapacity} Candidatos</span>
-                    </div>
-                  </div>
 
-                  <div className="pt-2">
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(building.name + " " + building.address)}`}
-                      target="_blank"
-                      referrerPolicy="no-referrer"
-                      className="btn-3d w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xs cursor-pointer shadow-md"
-                    >
-                      <Navigation className="w-4 h-4 text-white" />
-                      <span>TRAÇAR ROTA NO GOOGLE MAPS</span>
-                    </a>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-200 dark:border-slate-800 pt-4 text-xs font-bold leading-relaxed">
+                      {/* Destaque: Nome do CLA que convocou */}
+                      <div className="bg-emerald-500/10 dark:bg-emerald-500/15 border-2 border-emerald-500/30 rounded-xl p-3.5 flex items-center justify-between gap-3 col-span-1 sm:col-span-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                            <UserCheck className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-black tracking-wider text-emerald-700 dark:text-emerald-300 block">
+                              Nome do CLA que Convocou:
+                            </span>
+                            <span className="font-display font-black text-slate-900 dark:text-white text-sm">
+                              {convokedClaName}
+                            </span>
+                          </div>
+                        </div>
+                        {building.coordRoom && (
+                          <div className="text-right shrink-0">
+                            <span className="text-[9px] uppercase font-bold text-slate-400 block">Sala CLA</span>
+                            <span className="font-mono font-black text-xs text-emerald-600 dark:text-emerald-400">{building.coordRoom}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 block font-normal uppercase text-[9px] tracking-wider mb-0.5">Sua Função de Lotação:</span>
+                        <span className="text-slate-800 dark:text-white">
+                          {collaboratorRecord?.specialRole && collaboratorRecord.specialRole !== "Nenhuma" 
+                            ? `${collaboratorRecord.specialRole} (Acessibilidade)`
+                            : (collaboratorRecord?.isReserve ? "Fiscal de Reserva de Corredor" : "Fiscal de Sala Regular")}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block font-normal uppercase text-[9px] tracking-wider mb-0.5">Setor de Alocação:</span>
+                        <span className="text-slate-850 dark:text-slate-200">
+                          {collaboratorRecord?.isReserve ? "Salas Extras / Apoio" : `Andar ${collaboratorRecord?.assignedRoom ? "1º / Bloco A" : "Selecione na Sala"} (${collaboratorRecord?.assignedRoom || "Pendente de Coordenação"})`}
+                        </span>
+                      </div>
+                      <div className="mt-1">
+                        <span className="text-slate-400 block font-normal uppercase text-[9px] tracking-wider mb-0.5">Sala de Coordenação (CLA):</span>
+                        <span className="text-slate-850 dark:text-slate-200">{building.coordRoom}</span>
+                      </div>
+                      <div className="mt-1">
+                        <span className="text-slate-400 block font-normal uppercase text-[9px] tracking-wider mb-0.5">Capacidade da Escola:</span>
+                        <span className="text-slate-850 dark:text-slate-200">{building.realCapacity} Candidatos</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(building.name + " " + building.address)}`}
+                        target="_blank"
+                        referrerPolicy="no-referrer"
+                        className="btn-3d w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xs cursor-pointer shadow-md"
+                      >
+                        <Navigation className="w-4 h-4 text-white" />
+                        <span>TRAÇAR ROTA NO GOOGLE MAPS</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 

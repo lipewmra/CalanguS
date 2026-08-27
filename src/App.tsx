@@ -809,19 +809,21 @@ export default function App() {
       <div className="fixed inset-0 z-50 bg-[#070b13] flex flex-col items-center justify-center select-none transition-all duration-500 overflow-y-auto px-0 py-6">
         <div className="absolute inset-0 bg-radial from-emerald-500/10 via-[#070b13]/80 to-[#070b13] pointer-events-none" />
         
-        {/* Full-width lateral video animation without borders/card container */}
-        <div className="relative w-full flex justify-center items-center overflow-hidden">
-          <video
-            src="/StartCalanguS.mp4"
-            autoPlay
-            muted
-            playsInline
-            onEnded={() => setShowSplash(false)}
-            onError={() => {
-              console.log("Intro video load failed, fallback will transition");
-            }}
-            className="w-full max-h-[60vh] object-cover"
-          />
+        {/* Full-width lateral 16:9 video animation without borders/card container */}
+        <div className="relative w-full flex justify-center items-center overflow-hidden px-0">
+          <div className="w-full max-w-5xl aspect-video relative flex items-center justify-center">
+            <video
+              src="/StartCalanguS.mp4"
+              autoPlay
+              muted
+              playsInline
+              onEnded={() => setShowSplash(false)}
+              onError={() => {
+                console.log("Intro video load failed, fallback will transition");
+              }}
+              className="w-full h-full object-contain aspect-video"
+            />
+          </div>
         </div>
 
         {/* Brand logo and loader text below the animation */}
@@ -1213,6 +1215,8 @@ export default function App() {
                 }
               }}
               onSaveBuilding={saveBuilding}
+              eventConfig={eventConfig}
+              claName={resolvedClaName}
             />
           </div>
         ) : (
@@ -1770,6 +1774,8 @@ export default function App() {
             onUpdateConfirmationStatus={handleUpdateConfirmationStatus}
             onUpdateProfile={handleUpdateCollaboratorProfile}
             onSaveBuilding={saveBuilding}
+            eventConfig={eventConfig}
+            claName={resolvedClaName}
           />
         )}
           </>
