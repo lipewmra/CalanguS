@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   UserProfile, 
   BuildingInfo, 
@@ -189,6 +189,27 @@ export default function App() {
       path.includes("/recrutamento")
     );
   });
+
+  // Memoized human-readable CLA name for reports and views
+  const resolvedClaName = useMemo(() => {
+    if (effectiveRole === "CLA" && (effectiveUser?.name || currentUser?.name)) {
+      return (effectiveUser?.name || currentUser?.name || "").trim();
+    }
+    const targetClaId = building?.claId || (effectiveUser?.claId || effectiveUser?.uid);
+    if (targetClaId) {
+      const userMatch = allUsers.find(u => u.uid === targetClaId || u.claId === targetClaId);
+      if (userMatch?.name && userMatch.name.trim() !== "") {
+        return userMatch.name.trim();
+      }
+      const colegaMatch = colegas.find(c => c.uid === targetClaId || c.role === "CLA" || (c.roles || []).includes("CLA"));
+      if (colegaMatch?.name && colegaMatch.name.trim() !== "") {
+        return colegaMatch.name.trim();
+      }
+    }
+    if (effectiveUser?.name && effectiveUser.name.trim() !== "") return effectiveUser.name.trim();
+    if (currentUser?.name && currentUser.name.trim() !== "") return currentUser.name.trim();
+    return "Coordenação de Local de Aplicação (CLA)";
+  }, [effectiveRole, effectiveUser, currentUser, building?.claId, allUsers, colegas]);
 
   // Colaborador simulation states
   const [individualConfirmationStatus, setIndividualConfirmationStatus] = useState<"Pendente" | "Confirmado" | "Recusado">("Pendente");
@@ -1434,7 +1455,7 @@ export default function App() {
                             ...(building?.extraRooms || [])
                           ]} 
                           building={building}
-                          claName={building?.claId || effectiveUser?.name || "Coordenação"}
+                          claName={resolvedClaName}
                           onMove={handleDragAllocationMove} 
                           onUpdateCollaborator={updateCollaborator}
                           onSubstitute={handleSubstituteCollaborator}
@@ -1495,6 +1516,7 @@ export default function App() {
                             ...(building?.extraRooms || [])
                           ]}
                           building={building}
+                          claName={resolvedClaName}
                           readOnly={effectiveRole === "ALA"}
                         />
                       </div>

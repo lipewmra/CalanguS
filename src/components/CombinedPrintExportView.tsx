@@ -8,6 +8,7 @@ interface CombinedPrintExportViewProps {
   collaborators: CollaboratorInfo[];
   rooms: RoomDetails[];
   building: BuildingInfo | null;
+  claName?: string;
   readOnly?: boolean;
 }
 
@@ -15,6 +16,7 @@ export default function CombinedPrintExportView({
   collaborators, 
   rooms, 
   building, 
+  claName,
   readOnly = false 
 }: CombinedPrintExportViewProps) {
   const [subTab, setSubTab] = useState<"export" | "plates">("export");
@@ -53,6 +55,7 @@ export default function CombinedPrintExportView({
           collaborators={collaborators} 
           rooms={rooms} 
           building={building} 
+          claName={claName}
         />
       ) : (
         <RoomPlatesPrint readOnly={readOnly} building={building} rooms={rooms} />

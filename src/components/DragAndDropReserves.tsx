@@ -11,7 +11,7 @@ import {
   FileSpreadsheet, FileText, CheckCircle2, ChevronRight, Search, Shield,
   ExternalLink, Copy, CheckCheck, Eye, Filter, Footprints, Bath, Award,
   ChevronDown, ChevronUp, Layers, SlidersHorizontal, Trash2, KeyRound,
-  DoorClosed, Settings2, Phone, CheckSquare, Square, TableProperties
+  DoorClosed, Settings2, Phone, CheckSquare, Square, TableProperties, ArrowUpDown
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
 
@@ -25,6 +25,49 @@ export type ExportTemplateType =
   | "ensalamento" 
   | "predio" 
   | "personalizado";
+
+export type ExportSortType = "function_alphabetical" | "alphabetical" | "room_alphabetical";
+
+export const ROLE_HIERARCHY_RANK: Record<string, number> = {
+  "chefe de sala": 1,
+  "chefe": 1,
+  "aplicador": 2,
+  "fiscal de sala": 2,
+  "fiscal volante / corredor": 3,
+  "fiscal volante": 3,
+  "volante": 3,
+  "corredor": 3,
+  "fiscal de banheiro": 4,
+  "banheiro": 4,
+  "auxiliar de limpeza": 5,
+  "limpeza": 5,
+  "porteiro": 6,
+  "portaria": 6,
+  "representante do local": 7,
+  "representante": 7,
+  "técnico de informática": 8,
+  "tecnico de informatica": 8,
+  "informática": 8,
+  "informatica": 8,
+  "ti": 8,
+  "fiscal especializado": 9,
+  "intérprete de libras": 10,
+  "interprete de libras": 10,
+  "ledor/transcritor": 11,
+  "guia-intérprete": 12,
+  "guia-interprete": 12,
+  "apoio": 13,
+  "reserva": 90,
+};
+
+export function getRoleRank(role?: string): number {
+  if (!role) return 50;
+  const r = role.toLowerCase().trim();
+  for (const [key, rank] of Object.entries(ROLE_HIERARCHY_RANK)) {
+    if (r === key || r.includes(key)) return rank;
+  }
+  return 50;
+}
 
 export interface CustomExportConfig {
   selectedRoles: string[];
@@ -231,45 +274,38 @@ function isCollabInTemplate(
   isRoleMatchingSector: (r: string | undefined, sectorId: string) => boolean,
   isCollabInSector: (c: CollaboratorInfo, s: OperationalSectorConfig) => boolean
 ): boolean {
+  // Apenas colaboradores alocados em salas ou postos/setores do Menu 4
+  const isAllocated = !c.isReserve && !!c.assignedRoom && c.assignedRoom.trim() !== "";
+
   if (template === "chefe_de_sala") {
-    return isChefeDeSalaRole(c.assignedRole);
+    return isAllocated && isChefeDeSalaRole(c.assignedRole);
   }
   if (template === "aplicadores") {
-    return isAplicadorRole(c.assignedRole);
+    return isAllocated && isAplicadorRole(c.assignedRole);
   }
   if (template === "volantes") {
-    return isRoleMatchingSector(c.assignedRole, "volante") || isCollabInSector(c, OPERATIONAL_SECTORS[0]);
+    return isAllocated && (isRoleMatchingSector(c.assignedRole, "volante") || isCollabInSector(c, OPERATIONAL_SECTORS[0]));
   }
   if (template === "banheiro") {
-    return isRoleMatchingSector(c.assignedRole, "banheiro") || isCollabInSector(c, OPERATIONAL_SECTORS[1]);
+    return isAllocated && (isRoleMatchingSector(c.assignedRole, "banheiro") || isCollabInSector(c, OPERATIONAL_SECTORS[1]));
   }
   if (template === "limpeza") {
-    return isRoleMatchingSector(c.assignedRole, "limpeza") || isCollabInSector(c, OPERATIONAL_SECTORS[2]);
+    return isAllocated && (isRoleMatchingSector(c.assignedRole, "limpeza") || isCollabInSector(c, OPERATIONAL_SECTORS[2]));
   }
   if (template === "porteiro") {
-    return isRoleMatchingSector(c.assignedRole, "porteiro") || isCollabInSector(c, OPERATIONAL_SECTORS[3]);
+    return isAllocated && (isRoleMatchingSector(c.assignedRole, "porteiro") || isCollabInSector(c, OPERATIONAL_SECTORS[3]));
   }
   if (template === "ensalamento") {
-    // Unir Chefes de Sala + Aplicadores
-    return (
+    // Apenas alocados em salas de provas com funções de chefia ou aplicação
+    return isAllocated && (
       isChefeDeSalaRole(c.assignedRole) ||
       isAplicadorRole(c.assignedRole) ||
-      (!c.isReserve && !!c.assignedRoom && rooms.some(r => r.number === c.assignedRoom))
+      rooms.some(r => r.number === c.assignedRoom)
     );
   }
   if (template === "predio") {
-    // Unir Chefes + Aplicador + Volantes + Banheiro (+ Limpeza/Porteiro/Representante/TI se houver)
-    return (
-      isChefeDeSalaRole(c.assignedRole) ||
-      isAplicadorRole(c.assignedRole) ||
-      isRoleMatchingSector(c.assignedRole, "volante") ||
-      isRoleMatchingSector(c.assignedRole, "banheiro") ||
-      isRoleMatchingSector(c.assignedRole, "limpeza") ||
-      isRoleMatchingSector(c.assignedRole, "porteiro") ||
-      isRoleMatchingSector(c.assignedRole, "representante") ||
-      isRoleMatchingSector(c.assignedRole, "informatica") ||
-      (!c.isReserve && !!c.assignedRoom && c.assignedRoom.trim() !== "")
-    );
+    // Unir todas as funções operacionais alocadas no prédio
+    return isAllocated;
   }
   if (template === "personalizado") {
     let roleMatches = false;
@@ -287,14 +323,14 @@ function isCollabInTemplate(
     if (!roleMatches) return false;
 
     if (customCfg.allocationStatusFilter === "allocated") {
-      return !c.isReserve && !!c.assignedRoom && c.assignedRoom.trim() !== "";
+      return isAllocated;
     }
     if (customCfg.allocationStatusFilter === "unallocated") {
-      return !c.assignedRoom || c.assignedRoom.trim() === "" || c.isReserve;
+      return !isAllocated;
     }
-    return true;
+    return isAllocated;
   }
-  return true;
+  return isAllocated;
 }
 
 interface DragAndDropProps {
@@ -333,11 +369,12 @@ export default function DragAndDropReserves({
 
   // Export Templates State
   const [selectedExportTemplate, setSelectedExportTemplate] = useState<ExportTemplateType>("ensalamento");
+  const [exportSortBy, setExportSortBy] = useState<ExportSortType>("function_alphabetical");
   const [exportSearchQuery, setExportSearchQuery] = useState<string>("");
   const [customExportConfig, setCustomExportConfig] = useState<CustomExportConfig>({
     selectedRoles: ["Chefe de Sala", "Aplicador", "Volante", "Banheiro", "Limpeza", "Porteiro"],
     selectedColumns: ["nome", "cpf", "telefone", "funcao", "sala", "assinatura"],
-    allocationStatusFilter: "all",
+    allocationStatusFilter: "allocated",
     groupBy: "room"
   });
 
@@ -990,24 +1027,55 @@ export default function DragAndDropReserves({
     });
   }, [approvedCollaborators, selectedExportTemplate, customExportConfig, rooms, exportSearchQuery]);
 
-  // Sort list logically by room number then name
+  // Sort list logically by function and alphabetical order (or user-selected sort criteria)
   const sortedTemplateCollaborators = useMemo(() => {
     const list = [...filteredTemplateCollaborators];
     list.sort((a, b) => {
-      const roomA = a.assignedRoom || "ZZZ";
-      const roomB = b.assignedRoom || "ZZZ";
-      const numA = parseInt(roomA.replace(/\D/g, ""), 10);
-      const numB = parseInt(roomB.replace(/\D/g, ""), 10);
-      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
-        return numA - numB;
+      const nameA = (a.name || "").trim();
+      const nameB = (b.name || "").trim();
+
+      if (exportSortBy === "function_alphabetical") {
+        const rankA = getRoleRank(a.assignedRole);
+        const rankB = getRoleRank(b.assignedRole);
+        if (rankA !== rankB) {
+          return rankA - rankB;
+        }
+        const roleA = (a.assignedRole || "").trim();
+        const roleB = (b.assignedRole || "").trim();
+        const roleComp = roleA.localeCompare(roleB, "pt-BR", { sensitivity: "base" });
+        if (roleComp !== 0) return roleComp;
+        return nameA.localeCompare(nameB, "pt-BR", { sensitivity: "base" });
       }
-      if (roomA !== roomB) {
-        return roomA.localeCompare(roomB);
+
+      if (exportSortBy === "alphabetical") {
+        const nameComp = nameA.localeCompare(nameB, "pt-BR", { sensitivity: "base" });
+        if (nameComp !== 0) return nameComp;
+        const rankA = getRoleRank(a.assignedRole);
+        const rankB = getRoleRank(b.assignedRole);
+        return rankA - rankB;
       }
-      return (a.name || "").localeCompare(b.name || "");
+
+      if (exportSortBy === "room_alphabetical") {
+        const roomA = a.assignedRoom || "ZZZ";
+        const roomB = b.assignedRoom || "ZZZ";
+        const numA = parseInt(roomA.replace(/\D/g, ""), 10);
+        const numB = parseInt(roomB.replace(/\D/g, ""), 10);
+        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+          return numA - numB;
+        }
+        if (roomA !== roomB) {
+          return roomA.localeCompare(roomB, "pt-BR", { numeric: true });
+        }
+        const rankA = getRoleRank(a.assignedRole);
+        const rankB = getRoleRank(b.assignedRole);
+        if (rankA !== rankB) return rankA - rankB;
+        return nameA.localeCompare(nameB, "pt-BR", { sensitivity: "base" });
+      }
+
+      return nameA.localeCompare(nameB, "pt-BR", { sensitivity: "base" });
     });
     return list;
-  }, [filteredTemplateCollaborators]);
+  }, [filteredTemplateCollaborators, exportSortBy]);
 
   // Active columns for the current template
   const activeTemplateColumns = useMemo(() => {
@@ -1028,7 +1096,8 @@ export default function DragAndDropReserves({
       sortedTemplateCollaborators, 
       templateMeta, 
       activeTemplateColumns,
-      customExportConfig
+      customExportConfig,
+      exportSortBy
     );
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -1055,7 +1124,8 @@ export default function DragAndDropReserves({
       sortedTemplateCollaborators, 
       templateMeta, 
       activeTemplateColumns,
-      customExportConfig
+      customExportConfig,
+      exportSortBy
     );
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -3817,8 +3887,8 @@ export default function DragAndDropReserves({
               <div className="bg-white dark:bg-[#0c1220] rounded-xl border-2 border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
                 
                 {/* Preview Controls Bar */}
-                <div className="p-3.5 bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
+                <div className="p-3.5 bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <TableProperties className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <span className="font-display font-black text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
                       Pré-visualização do Relatório Oficial
@@ -3828,25 +3898,70 @@ export default function DragAndDropReserves({
                     </span>
                   </div>
 
-                  {/* Search Bar */}
-                  <div className="relative w-full sm:w-64">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={exportSearchQuery}
-                      onChange={(e) => setExportSearchQuery(e.target.value)}
-                      placeholder="Buscar por nome, CPF ou sala..."
-                      className="w-full pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                    {exportSearchQuery && (
+                  <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+                    {/* Sorting selector */}
+                    <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-lg border border-slate-250 dark:border-slate-700 text-xs shadow-xs">
+                      <span className="text-[10px] uppercase font-extrabold text-slate-400 dark:text-slate-500 px-1.5 flex items-center gap-1">
+                        <ArrowUpDown className="w-3 h-3 text-emerald-500" /> Ordenar:
+                      </span>
                       <button
                         type="button"
-                        onClick={() => setExportSearchQuery("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        onClick={() => setExportSortBy("function_alphabetical")}
+                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+                          exportSortBy === "function_alphabetical"
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                        title="Ordenação por Função e Nome em Ordem Alfabética (A-Z)"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        🏷️ Função + Nome (A-Z)
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => setExportSortBy("alphabetical")}
+                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+                          exportSortBy === "alphabetical"
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                        title="Ordenação geral de todos em Ordem Alfabética (A-Z)"
+                      >
+                        🔤 Nome (A-Z)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExportSortBy("room_alphabetical")}
+                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+                          exportSortBy === "room_alphabetical"
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                        title="Ordenação por Sala/Posto e Nome"
+                      >
+                        🚪 Sala / Posto
+                      </button>
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="relative flex-1 sm:w-60">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={exportSearchQuery}
+                        onChange={(e) => setExportSearchQuery(e.target.value)}
+                        placeholder="Buscar nome, CPF, função, sala..."
+                        className="w-full pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                      />
+                      {exportSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setExportSearchQuery("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -4027,11 +4142,18 @@ function generateTemplatePrintableHtml(
   collaborators: CollaboratorInfo[],
   templateMeta: TemplateMeta,
   columns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "assinatura")[],
-  customCfg: CustomExportConfig
+  customCfg: CustomExportConfig,
+  exportSortBy: ExportSortType = "function_alphabetical"
 ): string {
   const dateStr = new Date().toLocaleDateString('pt-BR');
   const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const totalAllocated = collaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
+
+  const sortDescription = exportSortBy === "function_alphabetical"
+    ? "Hierarquia de Função e Ordem Alfabética (A-Z)"
+    : exportSortBy === "alphabetical"
+      ? "Ordem Alfabética Geral (Nome A-Z)"
+      : "Número de Sala/Posto e Ordem Alfabética";
 
   const headerCols: { key: string; label: string; width?: string; align?: string }[] = [
     { key: "num", label: "#", width: "35px", align: "center" }
@@ -4064,7 +4186,8 @@ function generateTemplatePrintableHtml(
     .stat-box { flex: 1; }
     .stat-label { font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; display: block; }
     .stat-val { font-family: monospace; font-size: 12px; font-weight: 800; color: #0f172a; }
-    .fields-tag { font-size: 9px; font-weight: 700; color: #0369a1; background: #e0f2fe; padding: 2px 6px; border-radius: 4px; border: 1px solid #bae6fd; display: inline-block; margin-top: 4px; }
+    .fields-tag { font-size: 9px; font-weight: 700; color: #0369a1; background: #e0f2fe; padding: 2px 6px; border-radius: 4px; border: 1px solid #bae6fd; display: inline-block; margin-top: 4px; margin-right: 6px; }
+    .sort-tag { font-size: 9px; font-weight: 700; color: #047857; background: #d1fae5; padding: 2px 6px; border-radius: 4px; border: 1px solid #a7f3d0; display: inline-block; margin-top: 4px; }
     table { width: 100%; border-collapse: collapse; text-align: left; font-size: 10px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; }
     th { background: #f1f5f9; font-size: 8.5px; font-weight: 800; text-transform: uppercase; padding: 6px 6px; border-bottom: 1.5px solid #94a3b8; color: #334155; }
     td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
@@ -4091,7 +4214,10 @@ function generateTemplatePrintableHtml(
       <div class="sub">
         Local de Prova: <strong>${building?.name || 'Local Não Definido'}</strong> | Coordenação: <strong>${claName || 'CLA'}</strong>
       </div>
-      <div class="fields-tag">📋 Estrutura: ${templateMeta.fieldsDescription}</div>
+      <div>
+        <span class="fields-tag">📋 Estrutura: ${templateMeta.fieldsDescription}</span>
+        <span class="sort-tag">⚡ Ordenação: ${sortDescription}</span>
+      </div>
     </div>
     <div class="meta">
       <div>Data de Emissão: ${dateStr}</div>

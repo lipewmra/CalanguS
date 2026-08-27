@@ -12,9 +12,10 @@ interface ExportAllocationsViewProps {
   collaborators: CollaboratorInfo[];
   rooms: RoomDetails[];
   building: BuildingInfo | null;
+  claName?: string;
 }
 
-export default function ExportAllocationsView({ collaborators, rooms, building }: ExportAllocationsViewProps) {
+export default function ExportAllocationsView({ collaborators, rooms, building, claName }: ExportAllocationsViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState<string>("all");
   const [copiedStatus, setCopiedStatus] = useState(false);
@@ -23,8 +24,8 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
 
   // Compute stats
   const totalRooms = rooms.length;
-  const allocatedCollabs = collaborators.filter(c => c.assignedRoom && c.assignedRoom !== "");
-  const unallocatedCollabs = collaborators.filter(c => !c.assignedRoom || c.assignedRoom === "");
+  const allocatedCollabs = collaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "");
+  const unallocatedCollabs = collaborators.filter(c => c.isReserve || !c.assignedRoom || c.assignedRoom.trim() === "");
   const totalAllocatedCount = allocatedCollabs.length;
 
   // Filter rooms based on search
@@ -34,21 +35,21 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
     
     if (filterRole === "all") return matchesSearch;
     if (filterRole === "empty") {
-      const roomAlloc = collaborators.filter(c => c.assignedRoom === room.number);
+      const roomAlloc = collaborators.filter(c => !c.isReserve && c.assignedRoom === room.number);
       return matchesSearch && roomAlloc.length === 0;
     }
     if (filterRole === "filled") {
-      const roomAlloc = collaborators.filter(c => c.assignedRoom === room.number);
+      const roomAlloc = collaborators.filter(c => !c.isReserve && c.assignedRoom === room.number);
       return matchesSearch && roomAlloc.length > 0;
     }
     // Specific roles allocated
-    const hasRole = collaborators.some(c => c.assignedRoom === room.number && c.assignedRole === filterRole);
+    const hasRole = collaborators.some(c => !c.isReserve && c.assignedRoom === room.number && c.assignedRole === filterRole);
     return matchesSearch && hasRole;
   });
 
   // Unique roles currently assigned for the role filter list
   const uniqueAssignedRoles = Array.from(
-    new Set(collaborators.map(c => c.assignedRole).filter(Boolean))
+    new Set(collaborators.filter(c => !c.isReserve && c.assignedRoom).map(c => c.assignedRole).filter(Boolean))
   ) as string[];
 
   // Helper to format CPF safely if needed or raw for admin export
@@ -60,7 +61,30 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
     return cpf;
   };
 
-  // 1. Export as CSV
+  const getRoleRank = (role?: string): number => {
+    if (!role) return 50;
+    const r = role.toLowerCase().trim();
+    if (r.includes("chefe")) return 1;
+    if (r.includes("aplicador") || r.includes("fiscal de sala")) return 2;
+    if (r.includes("volante") || r.includes("corredor")) return 3;
+    if (r.includes("banheiro")) return 4;
+    if (r.includes("limpeza")) return 5;
+    if (r.includes("porteiro") || r.includes("portaria")) return 6;
+    if (r.includes("representante")) return 7;
+    if (r.includes("ti") || r.includes("informática") || r.includes("informatica")) return 8;
+    return 20;
+  };
+
+  const sortCollaboratorsByRoleAndName = (list: CollaboratorInfo[]): CollaboratorInfo[] => {
+    return [...list].sort((a, b) => {
+      const rankA = getRoleRank(a.assignedRole);
+      const rankB = getRoleRank(b.assignedRole);
+      if (rankA !== rankB) return rankA - rankB;
+      return (a.name || "").localeCompare(b.name || "", "pt-BR", { sensitivity: "base" });
+    });
+  };
+
+  // 1. Export as CSV (Apenas colaboradores alocados em salas e funções - ordenados por função e nome A-Z)
   const handleExportCSV = () => {
     // CSV headers
     const headers = [
@@ -82,7 +106,9 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
     const rows: string[][] = [];
 
     rooms.forEach(room => {
-      const roomPeople = collaborators.filter(c => c.assignedRoom === room.number);
+      const roomPeople = sortCollaboratorsByRoleAndName(
+        collaborators.filter(c => !c.isReserve && c.assignedRoom === room.number)
+      );
       
       if (roomPeople.length === 0) {
         // Empty room row
@@ -122,29 +148,6 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
       }
     });
 
-    // Also append the Reserves / Unallocated list at the bottom
-    if (unallocatedCollabs.length > 0) {
-      rows.push(["", "", "", "", "", "", "", "", "", "", "", "", ""]);
-      rows.push(["--- FISCAIS EM RESERVA / NÃO ALOCADOS ---", "", "", "", "", "", "", "", "", "", "", "", ""]);
-      unallocatedCollabs.forEach(p => {
-        rows.push([
-          "RESERVA (Sem sala)",
-          "-",
-          "-",
-          "-",
-          p.name,
-          p.cpf,
-          p.assignedRole || "Reserva / Não Definido",
-          p.whatsapp || "-",
-          p.email || "-",
-          p.pixKey || "-",
-          p.hasWorkedEnem ? "Sim" : "Não",
-          p.disability || "Nenhuma",
-          p.status
-        ]);
-      });
-    }
-
     // Generate CSV Content with semicolon delimiter (standard for Excel in Brazil/Europe)
     const csvContent = 
       "\uFEFF" + // UTF-8 BOM for Excel compatibility
@@ -160,17 +163,20 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
     document.body.removeChild(link);
   };
 
-  // 2. Copy Entire Allocation as Formatted Text (WhatsApp Friendly)
+  // 2. Copy Entire Allocation as Formatted Text (WhatsApp Friendly - Apenas alocados)
   const handleCopyToClipboard = () => {
     let text = `📋 *ALOCAÇÃO DE SALAS - ENEM*\n`;
     text += `🏢 *Local:* ${building?.name || "Não Definido"}\n`;
+    text += `👤 *CLA Responsável:* ${claName || "Coordenação"}\n`;
     text += `📍 *Endereço:* ${building?.address || "Não Definido"}\n`;
     text += `📅 *Gerado em:* ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}\n`;
-    text += `⚙️ *Resumo:* ${totalRooms} salas | ${totalAllocatedCount} fiscais alocados | ${unallocatedCollabs.length} em reserva\n`;
+    text += `⚙️ *Resumo:* ${totalRooms} salas | ${totalAllocatedCount} fiscais alocados\n`;
     text += `=========================================\n\n`;
 
     rooms.forEach(room => {
-      const roomPeople = collaborators.filter(c => c.assignedRoom === room.number);
+      const roomPeople = sortCollaboratorsByRoleAndName(
+        collaborators.filter(c => !c.isReserve && c.assignedRoom === room.number)
+      );
       text += `🚪 *${room.number.toUpperCase()}* (${room.floor} | Cap: ${room.capacity} cand.)\n`;
       
       if (roomPeople.length === 0) {
@@ -183,13 +189,6 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
       text += `-----------------------------------------\n`;
     });
 
-    if (unallocatedCollabs.length > 0) {
-      text += `\n🚨 *FISCAIS EM RESERVA / SUPORTE CORREDOR:*\n`;
-      unallocatedCollabs.forEach((p, idx) => {
-        text += `  ${idx + 1}. ${p.name} - *${p.assignedRole || "Reserva"}* (${p.whatsapp || "Sem whats"})\n`;
-      });
-    }
-
     navigator.clipboard.writeText(text);
     setCopiedStatus(true);
     setTimeout(() => setCopiedStatus(false), 3500);
@@ -197,7 +196,9 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
 
   // 3. Copy text of a SINGLE Room
   const handleCopySingleRoom = (room: RoomDetails) => {
-    const roomPeople = collaborators.filter(c => c.assignedRoom === room.number);
+    const roomPeople = sortCollaboratorsByRoleAndName(
+      collaborators.filter(c => !c.isReserve && c.assignedRoom === room.number)
+    );
     let text = `🚪 *${room.number.toUpperCase()}* - ALOCAÇÃO\n`;
     text += `🏢 Local: ${building?.name || ""}\n`;
     text += `📍 Andar: ${room.floor || "Térreo"} | Cap: ${room.capacity} cand.\n`;
@@ -241,6 +242,11 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
             <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
               Exporte a estrutura de salas e seus respectivos fiscais alocados para o Excel, copie em formato de texto para enviar no WhatsApp ou imprima folhas de controle para o dia da aplicação do ENEM.
             </p>
+            <div className="mt-2 text-[11px] text-emerald-300/90 font-medium flex items-center gap-2">
+              <span>Local: <strong>{building?.name || "Local de Prova"}</strong></span>
+              <span>•</span>
+              <span>CLA: <strong>{claName || "Coordenação"}</strong></span>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2 md:self-center">
@@ -390,7 +396,9 @@ export default function ExportAllocationsView({ collaborators, rooms, building }
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredRooms.map((room) => {
-            const roomPeople = collaborators.filter(c => c.assignedRoom === room.number);
+            const roomPeople = sortCollaboratorsByRoleAndName(
+              collaborators.filter(c => !c.isReserve && c.assignedRoom === room.number)
+            );
             
             return (
               <div 
