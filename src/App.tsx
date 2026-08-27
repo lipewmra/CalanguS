@@ -63,6 +63,7 @@ import CollaboratorSettingsView from "./components/CollaboratorSettingsView";
 import MessagingCenter from "./components/MessagingCenter";
 import AttendanceListView from "./components/AttendanceListView";
 import SimulateCollaboratorModal from "./components/SimulateCollaboratorModal";
+import CalangusIaView from "./components/CalangusIaView";
 
 import { 
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
@@ -70,7 +71,7 @@ import {
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
   Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck, Clock,
-  SlidersHorizontal, Eye, ArrowRightLeft, BookOpen
+  SlidersHorizontal, Eye, ArrowRightLeft, BookOpen, Bot, ExternalLink
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
@@ -1366,7 +1367,8 @@ export default function App() {
                 { id: "plates", label: "8. Impressão", icon: Printer, iconColor: "text-pink-400" },
                 { id: "activities", label: "9. Atividades do CLA", icon: CheckSquare, iconColor: "text-emerald-450" },
                 { id: "collab-settings", label: "10. Dados Colaboradores", icon: Calendar, iconColor: "text-emerald-400" },
-                { id: "messages", label: "11. Mensagens & Comunicação", icon: MessageSquare, iconColor: "text-teal-400" }
+                { id: "messages", label: "11. Mensagens & Comunicação", icon: MessageSquare, iconColor: "text-teal-400" },
+                { id: "calangusia", label: "12. CalangusIA", icon: Sparkles, iconColor: "text-amber-400", externalUrl: "https://notebook.google.com/notebook/c3e64642-72e2-4ced-9d2c-685fcb910084" }
               ];
 
               const renderTabContent = (tabId: string) => {
@@ -1574,6 +1576,12 @@ export default function App() {
                         />
                       </div>
                     );
+                  case "calangusia":
+                    return (
+                      <div className="animate-fade-in">
+                        <CalangusIaView notebookUrl="https://notebook.google.com/notebook/c3e64642-72e2-4ced-9d2c-685fcb910084" />
+                      </div>
+                    );
                   default:
                     return null;
                 }
@@ -1603,7 +1611,12 @@ export default function App() {
                       return (
                         <div key={item.id} className="w-full space-y-3">
                           <button
-                            onClick={() => setActiveTab((prev) => (prev === item.id ? "" : item.id))}
+                            onClick={() => {
+                              if ((item as any).externalUrl) {
+                                window.open((item as any).externalUrl, "_blank", "noopener,noreferrer");
+                              }
+                              setActiveTab((prev) => (prev === item.id ? "" : item.id));
+                            }}
                             className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center justify-between px-4 py-3.5 cursor-pointer border-2 transition-all duration-150 ${
                               isActive
                                 ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.01]"
@@ -1615,6 +1628,9 @@ export default function App() {
                             <div className="flex items-center gap-2.5">
                               <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
                               <span>{item.label}</span>
+                              {(item as any).externalUrl && (
+                                <ExternalLink className="w-3 h-3 text-amber-400 shrink-0" />
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               {pendingTransfers > 0 && (
@@ -1671,11 +1687,17 @@ export default function App() {
                             const IconComp = item.icon;
                             const isActive = desktopActiveTab === item.id;
                             const isStaffMenuWithTransfers = item.id === "staff" && pendingTransfersCount > 0;
+                            const hasExternalUrl = Boolean((item as any).externalUrl);
 
                             return (
                               <button
                                 key={item.id}
-                                onClick={() => setActiveTab(item.id)}
+                                onClick={() => {
+                                  if ((item as any).externalUrl) {
+                                    window.open((item as any).externalUrl, "_blank", "noopener,noreferrer");
+                                  }
+                                  setActiveTab(item.id);
+                                }}
                                 title={item.label}
                                 className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3 relative" : "justify-between px-4 py-3.5"} ${
                                   isActive
@@ -1689,6 +1711,9 @@ export default function App() {
                                   <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
                                   {!isSidebarCollapsed && <span>{item.label}</span>}
                                 </div>
+                                {!isSidebarCollapsed && hasExternalUrl && (
+                                  <ExternalLink className="w-3 h-3 text-amber-400 shrink-0" />
+                                )}
                                 {isStaffMenuWithTransfers && (
                                   isSidebarCollapsed ? (
                                     <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
