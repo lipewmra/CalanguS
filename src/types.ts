@@ -230,7 +230,25 @@ export interface CollaboratorInfo {
   substitutedAt?: string; // Date of substitution
   substitutionTag?: string; // Tag / Badge text for substitution
   isSubstituted?: boolean; // Flag indicating collaborator was substituted and returned to reserve
+  materialsAccessed?: MaterialAccessLog[];
   createdAt?: string; // Form submission/registration ISO date
+}
+
+export interface DidacticMaterial {
+  id: string;
+  title: string;
+  roles: string[]; // ["all"] or list of specific roles like ["Chefe de Sala", "Aplicador", ...]
+  accessUrl: string; // Link de acesso ao material
+  instructionText: string; // Texto de instrução
+  createdAt: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+export interface MaterialAccessLog {
+  materialId: string;
+  materialTitle: string;
+  accessedAt: string;
 }
 
 export interface Quote {

@@ -10,6 +10,7 @@ import {
 import { BuildingInfo, CollaboratorInfo, CalangusMessage, CalangusTemplate, PingramConfig, MessagePoll } from "../types";
 import PingramConfigModal from "./PingramConfigModal";
 import MessageReceiptsAndPollsView from "./MessageReceiptsAndPollsView";
+import { resetAllClaMessages } from "../lib/db-services";
 import {
   getPingramConfig,
   sendEmailViaPingram,
@@ -294,6 +295,71 @@ export default function MessagingCenter({
       window.removeEventListener("calangus_pingram_config_changed", handlePingramChange);
     };
   }, [claId]);
+
+  // Reset all messages sent to collaborators across Firestore and LocalStorage
+  const handleResetAllMessages = async () => {
+    if (!confirm("⚠️ ATENÇÃO: Deseja realmente resetar e apagar TODAS as mensagens enviadas aos colaboradores?\n\nEsta ação limpará a caixa de entrada de todos os colaboradores e o histórico de mensagens para iniciarmos novos envios a partir de agora.")) {
+      return;
+    }
+
+    try {
+      // 1. Clear local state
+      setInternalMessages([]);
+      setSentLogs([]);
+
+      // 2. Clear localStorage keys
+      localStorage.removeItem("enem_internal_messages");
+      localStorage.removeItem("enem_sent_messages_log");
+      localStorage.setItem("enem_internal_messages", JSON.stringify([]));
+      localStorage.setItem("enem_sent_messages_log", JSON.stringify([]));
+
+      // 3. Update building with empty messages array
+      if (building && onSaveBuilding) {
+        await onSaveBuilding({
+          ...building,
+          messages: []
+        });
+      }
+
+      // 4. Global wipe across Firestore & local cache
+      await resetAllClaMessages(claId || building?.claId);
+
+      // 5. Dispatch sync events
+      window.dispatchEvent(new CustomEvent("calangus_message_sent", { detail: { reset: true } }));
+      window.dispatchEvent(new CustomEvent("calangus_response_submitted", { detail: { reset: true } }));
+      window.dispatchEvent(new Event("storage"));
+
+      setSuccessBanner("✓ Todas as mensagens enviadas foram resetadas com sucesso! As caixas de entrada dos colaboradores agora estão limpas para os novos envios.");
+      setTimeout(() => setSuccessBanner(""), 5000);
+    } catch (err) {
+      console.error("Erro ao resetar mensagens:", err);
+      alert("Erro ao resetar mensagens. Verifique a conexão e tente novamente.");
+    }
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!confirm("Deseja realmente excluir esta mensagem enviada?")) return;
+    try {
+      const updated = internalMessages.filter(m => m.id !== msgId);
+      setInternalMessages(updated);
+      localStorage.setItem("enem_internal_messages", JSON.stringify(updated));
+      
+      const updatedLogs = sentLogs.filter(l => l.id !== msgId && !l.id.includes(msgId));
+      setSentLogs(updatedLogs);
+      localStorage.setItem("enem_sent_messages_log", JSON.stringify(updatedLogs));
+
+      if (building && onSaveBuilding) {
+        const buildingMsgs = (building.messages || []).filter(m => m.id !== msgId);
+        await onSaveBuilding({ ...building, messages: buildingMsgs });
+      }
+
+      window.dispatchEvent(new CustomEvent("calangus_message_sent", { detail: { deletedId: msgId } }));
+      setSuccessBanner("Mensagem excluída com sucesso.");
+      setTimeout(() => setSuccessBanner(""), 3500);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Sync templates changes to building and localStorage
   const saveTemplates = (newTemplates: CalangusTemplate[]) => {
@@ -903,6 +969,18 @@ export default function MessagingCenter({
               <span>Pingram & E-mail/SMS</span>
             </button>
           </div>
+
+          {/* RESET ALL MESSAGES BUTTON */}
+          <button
+            type="button"
+            id="btn-reset-all-messages"
+            onClick={handleResetAllMessages}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20 active:scale-95 shadow-xs ml-auto sm:ml-0"
+            title="Resetar e apagar todas as mensagens enviadas aos colaboradores (limpa a caixa de entrada de todos para iniciar novos envios)"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+            <span>Resetar Mensagens</span>
+          </button>
         </div>
       </div>
 
@@ -1678,6 +1756,8 @@ export default function MessagingCenter({
           currentUserName={currentUserName}
           claId={claId}
           onSaveBuilding={onSaveBuilding}
+          onResetAllMessages={handleResetAllMessages}
+          onDeleteMessage={handleDeleteMessage}
           onComposeNewWithTarget={(ids, defaultSubj, defaultBdy) => {
             if (ids.length === 1) {
               setTargetType("individual");

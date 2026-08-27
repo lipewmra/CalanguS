@@ -13,7 +13,7 @@ import {
   Users, UserPlus, Upload, ShieldAlert, BadgeInfo, Trash, Mail, 
   MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
   Building2, Globe, Clock, ArrowRightLeft, Sparkles, Search, Filter,
-  Calendar, ArrowUpDown, FileSpreadsheet, RotateCcw, Send, MessageSquare
+  Calendar, ArrowUpDown, FileSpreadsheet, RotateCcw, Send, MessageSquare, BookOpen
 } from "lucide-react";
 
 export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "colaboradores_enem_calangus") {
@@ -1437,26 +1437,29 @@ function activeTabSubList(
       )}
 
       {/* ADVANCED FILTER & SEARCH TOOLBAR */}
-      <div className="bg-slate-50 dark:bg-[#070b13]/60 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3.5">
+      <div className="bg-slate-50/80 dark:bg-[#070b13]/80 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm backdrop-blur-xs">
         
-        {/* Top line: Search Input + Field Selector + Action Buttons */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Search Box */}
-          <div className="flex items-center gap-2 flex-1">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+        {/* Tier 1: Primary Search Input + Scope Selector + Quick Action Buttons */}
+        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
+          
+          {/* Search Box & Field Dropdown Container */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 min-w-0">
+            {/* Input Search Field */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery?.(e.target.value)}
-                placeholder="Pesquisar por qualquer campo (Nome, CPF, E-mail, WhatsApp, PIX, Cargo, Sala, PCD...)"
-                className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:outline-emerald-500"
+                placeholder="Pesquisar por nome, CPF, e-mail, WhatsApp, PIX, função, sala, PCD..."
+                className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-[#0c1220] border-2 border-slate-200 dark:border-slate-700/80 rounded-xl text-xs font-semibold text-slate-800 dark:text-white placeholder:text-slate-400 placeholder:font-normal focus:outline-hidden focus:border-emerald-500 transition shadow-2xs"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery?.("")}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                  title="Limpar busca"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1464,42 +1467,40 @@ function activeTabSubList(
             </div>
 
             {/* Search Field Dropdown */}
-            <select
-              value={searchField}
-              onChange={(e) => setSearchField?.(e.target.value as any)}
-              className="bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold rounded-xl text-slate-700 dark:text-slate-300 cursor-pointer focus:outline-emerald-500"
-            >
-              <option value="all">🔍 Todos os Campos</option>
-              <option value="name">Por Nome</option>
-              <option value="cpf">Por CPF</option>
-              <option value="email">Por E-mail</option>
-              <option value="whatsapp">Por WhatsApp / Telefone</option>
-              <option value="pixKey">Por Chave PIX</option>
-              <option value="referencePerson">Por Indicação / Referência</option>
-              <option value="education">Por Escolaridade</option>
-              <option value="specialRole">Por Perfil Especial</option>
-              <option value="disability">Por PCD / Deficiência</option>
-              <option value="assignedRole">Por Função</option>
-              <option value="assignedRoom">Por Sala Alocada</option>
-            </select>
+            <div className="sm:w-56 shrink-0">
+              <select
+                value={searchField}
+                onChange={(e) => setSearchField?.(e.target.value as any)}
+                className="w-full bg-white dark:bg-[#0c1220] border-2 border-slate-200 dark:border-slate-700/80 px-3 py-2.5 text-xs font-bold rounded-xl text-slate-700 dark:text-slate-300 cursor-pointer focus:outline-hidden focus:border-emerald-500 transition shadow-2xs"
+              >
+                <option value="all">🔍 Todos os Campos</option>
+                <option value="name">Por Nome</option>
+                <option value="cpf">Por CPF</option>
+                <option value="email">Por E-mail</option>
+                <option value="whatsapp">Por WhatsApp / Telefone</option>
+                <option value="pixKey">Por Chave PIX</option>
+                <option value="referencePerson">Por Indicação / Referência</option>
+                <option value="education">Por Escolaridade</option>
+                <option value="specialRole">Por Perfil Especial</option>
+                <option value="disability">Por PCD / Deficiência</option>
+                <option value="assignedRole">Por Função</option>
+                <option value="assignedRoom">Por Sala Alocada</option>
+              </select>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Action Buttons Cluster */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
             {/* Aceitar Todos Button */}
-            {onAcceptAllPending && (
+            {onAcceptAllPending && pendingCount > 0 && (
               <button
                 type="button"
                 onClick={onAcceptAllPending}
-                disabled={pendingCount === 0}
-                className={`px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs shrink-0 ${
-                  pendingCount > 0
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse"
-                    : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60"
-                }`}
-                title={pendingCount > 0 ? `Aprovar e aceitar todos os ${pendingCount} colaboradores aguardando aprovação` : "Nenhum colaborador pendente"}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse transition cursor-pointer shadow-sm active:scale-95 shrink-0"
+                title={`Aprovar e aceitar todos os ${pendingCount} colaboradores aguardando aprovação`}
               >
                 <Check className="w-4 h-4 stroke-[3]" />
-                <span>ACEITAR TODOS {pendingCount > 0 ? `(${pendingCount})` : ""}</span>
+                <span>ACEITAR TODOS ({pendingCount})</span>
               </button>
             )}
 
@@ -1508,14 +1509,14 @@ function activeTabSubList(
               <button
                 type="button"
                 onClick={onOpenDuplicateFinder}
-                className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs shrink-0 ${
+                className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs shrink-0 active:scale-95 ${
                   duplicateGroupsCount > 0
                     ? "bg-amber-600 hover:bg-amber-700 text-white animate-pulse"
-                    : "bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+                    : "bg-white dark:bg-[#0c1220] border-2 border-slate-200 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
                 }`}
                 title="Localizar dados duplicados e mesclar ou remover registros redundantes"
               >
-                <Sparkles className="w-4 h-4 text-amber-400" />
+                <Sparkles className={`w-4 h-4 ${duplicateGroupsCount > 0 ? "text-amber-200" : "text-amber-500"}`} />
                 <span>Duplicados {duplicateGroupsCount > 0 ? `(${duplicateGroupsCount})` : ""}</span>
               </button>
             )}
@@ -1524,21 +1525,24 @@ function activeTabSubList(
             <button
               type="button"
               onClick={() => exportCollaboratorsToCSV(filteredCollaborators, `fiscais_${buildingName.replace(/\s+/g, "_").toLowerCase()}`)}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer shadow-xs shrink-0"
+              className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer shadow-md hover:shadow-emerald-500/20 active:scale-95 shrink-0"
               title="Exportar dados filtrados para planilha Excel/CSV"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span>Exportar CSV ({filteredCollaborators.length})</span>
+              <span>Exportar CSV</span>
+              <span className="px-1.5 py-0.5 rounded-md bg-emerald-800/60 text-[10px] font-mono font-bold">
+                {filteredCollaborators.length}
+              </span>
             </button>
           </div>
         </div>
 
-        {/* Second line: Date Range Filter + Sorting */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+        {/* Tier 2: Refinement Controls (Submission Date Range + Sorting) */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
           
           {/* Submission Date Range */}
           <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 dark:text-slate-400">
-            <span className="font-bold flex items-center gap-1">
+            <span className="font-bold flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
               <Calendar className="w-3.5 h-3.5 text-emerald-500" />
               <span>Data de Submissão:</span>
             </span>
@@ -1547,14 +1551,14 @@ function activeTabSubList(
                 type="date"
                 value={dateStart}
                 onChange={(e) => setDateStart?.(e.target.value)}
-                className="bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 px-2 py-1 text-xs rounded-lg font-mono text-slate-800 dark:text-slate-200"
+                className="bg-white dark:bg-[#0c1220] border-2 border-slate-200 dark:border-slate-700 px-2.5 py-1 text-xs rounded-lg font-mono text-slate-800 dark:text-slate-200 focus:outline-hidden focus:border-emerald-500"
               />
-              <span className="text-slate-400">até</span>
+              <span className="text-slate-400 text-xs font-bold">até</span>
               <input
                 type="date"
                 value={dateEnd}
                 onChange={(e) => setDateEnd?.(e.target.value)}
-                className="bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 px-2 py-1 text-xs rounded-lg font-mono text-slate-800 dark:text-slate-200"
+                className="bg-white dark:bg-[#0c1220] border-2 border-slate-200 dark:border-slate-700 px-2.5 py-1 text-xs rounded-lg font-mono text-slate-800 dark:text-slate-200 focus:outline-hidden focus:border-emerald-500"
               />
               {(dateStart || dateEnd) && (
                 <button
@@ -1563,7 +1567,7 @@ function activeTabSubList(
                     setDateStart?.("");
                     setDateEnd?.("");
                   }}
-                  className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
+                  className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition cursor-pointer"
                   title="Limpar filtro de data"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -1573,15 +1577,15 @@ function activeTabSubList(
           </div>
 
           {/* Sort Order Selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1">
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
               <ArrowUpDown className="w-3.5 h-3.5 text-indigo-500" />
               <span>Ordenar por:</span>
             </span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy?.(e.target.value as any)}
-              className="bg-white dark:bg-[#0c1220] border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-bold rounded-lg text-slate-800 dark:text-slate-200 cursor-pointer focus:outline-emerald-500"
+              className="bg-white dark:bg-[#0c1220] border-2 border-slate-200 dark:border-slate-700 px-3 py-1 text-xs font-bold rounded-lg text-slate-800 dark:text-slate-200 cursor-pointer focus:outline-hidden focus:border-emerald-500"
             >
               <option value="created_desc">Mais Recentes Primeiro</option>
               <option value="created_asc">Mais Antigos Primeiro</option>
@@ -1591,32 +1595,42 @@ function activeTabSubList(
           </div>
         </div>
 
-        {/* Third line: Status Filter Pills */}
-        <div className="flex gap-1.5 flex-wrap pt-2 border-t border-slate-200 dark:border-slate-800">
+        {/* Tier 3: Category Status Filter Pills */}
+        <div className="flex gap-1.5 flex-wrap pt-3 border-t border-slate-200 dark:border-slate-800">
           {[
-            { id: "todos", label: `Todos (${allCollaborators.length})` },
-            { id: "com_funcao_sem_sala", label: `Com Função (Não Ensalados) (${allCollaborators.filter(c => c.status === "Confirmado" && c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === "")).length})` },
-            { id: "sem_funcao", label: `Sem Função Atribuída (${allCollaborators.filter(c => c.status === "Confirmado" && (!c.assignedRole || c.assignedRole.trim() === "")).length})` },
-            { id: "confirmados", label: `Confirmados (${allCollaborators.filter(c => c.status === "Confirmado").length})` },
-            { id: "efetivos", label: `Efetivos c/ Sala (${allCollaborators.filter(c => !c.isReserve && c.status === "Confirmado" && c.assignedRoom && c.assignedRoom.trim() !== "").length})` },
-            { id: "reservas", label: `Reservas (${allCollaborators.filter(c => c.isReserve && c.status === "Confirmado").length})` },
-            { id: "pendentes", label: `Pendentes (${allCollaborators.filter(c => c.status === "Pendente").length})` },
-            { id: "recusados", label: `Recusados (${refusedCollabs.length})` },
-            { id: "com_erro", label: `⚠ Inconsistência (${allCollaborators.filter(c => c.orionStatus === "Erro").length})` }
-          ].map(f => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setFilterType(f.id as any)}
-              className={`px-3 py-1 rounded-full text-xs font-black cursor-pointer transition capitalize active:scale-95 ${
-                filterType === f.id
-                  ? "bg-slate-900 dark:bg-emerald-600 dark:text-white text-white shadow-xs"
-                  : "bg-white dark:bg-[#101726]/80 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+            { id: "todos", label: "Todos", count: allCollaborators.length },
+            { id: "confirmados", label: "Confirmados", count: allCollaborators.filter(c => c.status === "Confirmado").length },
+            { id: "efetivos", label: "Efetivos c/ Sala", count: allCollaborators.filter(c => !c.isReserve && c.status === "Confirmado" && c.assignedRoom && c.assignedRoom.trim() !== "").length },
+            { id: "reservas", label: "Reservas", count: allCollaborators.filter(c => c.isReserve && c.status === "Confirmado").length },
+            { id: "com_funcao_sem_sala", label: "Com Função (Não Ensalados)", count: allCollaborators.filter(c => c.status === "Confirmado" && c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === "")).length },
+            { id: "sem_funcao", label: "Sem Função Atribuída", count: allCollaborators.filter(c => c.status === "Confirmado" && (!c.assignedRole || c.assignedRole.trim() === "")).length },
+            { id: "pendentes", label: "Pendentes", count: allCollaborators.filter(c => c.status === "Pendente").length },
+            { id: "recusados", label: "Recusados", count: refusedCollabs.length },
+            { id: "com_erro", label: "⚠ Inconsistência", count: allCollaborators.filter(c => c.orionStatus === "Erro").length }
+          ].map(f => {
+            const isActive = filterType === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilterType(f.id as any)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition active:scale-95 ${
+                  isActive
+                    ? "bg-slate-900 dark:bg-emerald-600 text-white shadow-sm border border-transparent"
+                    : "bg-white dark:bg-[#0c1220] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <span>{f.label}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                }`}>
+                  {f.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
       </div>
@@ -1674,6 +1688,7 @@ function activeTabSubList(
                           refusalTag: c.refusalTag,
                           createdAt: c.createdAt,
                           isExternalRecruit: c.isExternalRecruit,
+                          materialsAccessed: c.materialsAccessed,
                           transferHistory: c.transferHistory
                         })}
                       />
@@ -1692,13 +1707,23 @@ function activeTabSubList(
                           </div>
                         )}
                         
-                        {/* Tags line: CLA Tag, Reserve/Role Tag, Transfer request tag */}
+                        {/* Tags line: CLA Tag, Reserve/Role Tag, Transfer request tag, Material Access Tag */}
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           {/* Origin CLA TAG */}
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20" title={`Cadastrado no CLA: ${originName}`}>
                             <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
                             <span>CLA: {originName}</span>
                           </span>
+
+                          {c.materialsAccessed && c.materialsAccessed.length > 0 && (
+                            <span 
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30"
+                              title={c.materialsAccessed.map(m => `• ${m.materialTitle} (${new Date(m.accessedAt).toLocaleString("pt-BR")})`).join("\n")}
+                            >
+                              <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
+                              <span>Material Acessado ({c.materialsAccessed.length})</span>
+                            </span>
+                          )}
 
                           {(c.refusedRole || c.refusalTag) && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30" title={`Recusa: ${c.refusalTag || c.refusedRole}`}>

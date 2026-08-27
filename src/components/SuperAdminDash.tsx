@@ -4,6 +4,7 @@ import { saveEventConfig, subscribeToUsers, updateUserRole, updateUserRoles, upd
 import { ShieldCheck, Calendar, Settings, CheckCircle, Save, Users, RefreshCw, AlertCircle, PlusCircle, Trash2, AlertTriangle, Building, Activity, CheckSquare, Server, Layers, Pencil, X, Search, Mail, UserCheck, Hash } from "lucide-react";
 import BuildingConfigView from "./BuildingConfigView";
 import CollaboratorMetricsAdminView from "./CollaboratorMetricsAdminView";
+import DidacticMaterialsManager from "./DidacticMaterialsManager";
 
 interface SuperAdminProps {
   initialConfig: EventConfigInfo | null;
@@ -744,6 +745,15 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
   const totalPossibleChecks = (allClaActivities.length || totalClasCount || 1) * 6;
   const actualChecksCompleted = countVisitation + countAlaDefined + countTraining + countReceivedMaterial + countCheckedMaterial + countFilledOrion;
   const overallActivitiesProgressPct = totalPossibleChecks > 0 ? Math.round((actualChecksCompleted / totalPossibleChecks) * 100) : 0;
+
+  // Render for "materials" sub-tab
+  if (activeSubTab === "materials") {
+    return (
+      <DidacticMaterialsManager 
+        currentUserName="SuperAdmin" 
+      />
+    );
+  }
 
   // Render for "metrics" sub-tab
   if (activeSubTab === "metrics") {

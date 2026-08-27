@@ -24,7 +24,9 @@ import {
   CateringInfo, 
   PhotoRecord, 
   EventConfigInfo,
-  ClaActivities
+  ClaActivities,
+  DidacticMaterial,
+  MaterialAccessLog
 } from "../types";
 
 // ==========================================
@@ -1136,3 +1138,221 @@ export function subscribeToAllClaActivities(onUpdate: (activities: ClaActivities
     if (fallback.length > 0) onUpdate(fallback);
   });
 }
+
+// ==========================================
+// 8. Reset All Messages Sent from CLA
+// ==========================================
+
+export async function resetAllClaMessages(activeClaId?: string): Promise<void> {
+  // 1. Clear LocalStorage keys
+  try {
+    localStorage.removeItem("enem_internal_messages");
+    localStorage.removeItem("enem_sent_messages_log");
+    localStorage.setItem("enem_internal_messages", JSON.stringify([]));
+    localStorage.setItem("enem_sent_messages_log", JSON.stringify([]));
+  } catch (e) {
+    console.warn("Error clearing message localStorage:", e);
+  }
+
+  // 2. Clear local cache for all buildings
+  const allBuildings = getLocalCache<BuildingInfo[]>("all_buildings", []);
+  const updatedBuildings = allBuildings.map(b => ({
+    ...b,
+    messages: []
+  }));
+  setLocalCache("all_buildings", updatedBuildings);
+
+  if (activeClaId) {
+    const singleKey = `building_${activeClaId}`;
+    const cachedSingle = getLocalCache<BuildingInfo | null>(singleKey, null);
+    if (cachedSingle) {
+      setLocalCache(singleKey, { ...cachedSingle, messages: [] });
+    }
+  }
+
+  // Also clean any cache in localStorage starting with building_
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith("calangus_v2_building_") || key.startsWith("building_"))) {
+        const item = localStorage.getItem(key);
+        if (item) {
+          try {
+            const parsed = JSON.parse(item);
+            if (parsed && parsed.data && Array.isArray(parsed.data.messages)) {
+              parsed.data.messages = [];
+              localStorage.setItem(key, JSON.stringify(parsed));
+            } else if (parsed && Array.isArray(parsed.messages)) {
+              parsed.messages = [];
+              localStorage.setItem(key, JSON.stringify(parsed));
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(e);
+  }
+
+  // 3. Update Firestore documents in buildings collection to empty messages array
+  try {
+    const snap = await getDocs(collection(db, "buildings"));
+    for (const d of snap.docs) {
+      await updateDoc(doc(db, "buildings", d.id), { messages: [] });
+    }
+  } catch (error) {
+    console.warn("Could not wipe messages from firestore buildings online:", error);
+  }
+
+  // 4. Dispatch custom events so all tabs & components update in real-time
+  try {
+    window.dispatchEvent(new CustomEvent("calangus_message_sent", { detail: { reset: true } }));
+    window.dispatchEvent(new CustomEvent("calangus_response_submitted", { detail: { reset: true } }));
+    window.dispatchEvent(new Event("storage"));
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+// ==========================================
+// 10. Didactic Materials & Training Management
+// ==========================================
+
+export function subscribeToDidacticMaterials(
+  onUpdate: (materials: DidacticMaterial[]) => void,
+  onError?: (err: any) => void
+) {
+  const cacheKey = "didactic_materials";
+  const initial = getLocalCache<DidacticMaterial[]>(cacheKey, []);
+  onUpdate(initial);
+
+  const colRef = collection(db, "didactic_materials");
+  const q = query(colRef, orderBy("createdAt", "desc"));
+
+  const unsub = onSnapshot(
+    q,
+    (snapshot) => {
+      const items: DidacticMaterial[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        items.push({
+          id: doc.id,
+          title: data.title || "",
+          roles: Array.isArray(data.roles) ? data.roles : ["all"],
+          accessUrl: data.accessUrl || "",
+          instructionText: data.instructionText || "",
+          createdAt: data.createdAt || new Date().toISOString(),
+          createdBy: data.createdBy,
+          updatedAt: data.updatedAt
+        });
+      });
+      setLocalCache(cacheKey, items);
+      onUpdate(items);
+    },
+    (err) => {
+      console.warn("Firestore error subscribing to didactic materials (fallback to local cache):", err);
+      if (onError) onError(err);
+    }
+  );
+
+  return unsub;
+}
+
+export async function saveDidacticMaterial(material: Omit<DidacticMaterial, "id" | "createdAt"> & { id?: string; createdAt?: string }): Promise<string> {
+  const cacheKey = "didactic_materials";
+  const current = getLocalCache<DidacticMaterial[]>(cacheKey, []);
+  const now = new Date().toISOString();
+
+  let targetId = material.id;
+  if (!targetId) {
+    targetId = `mat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  }
+
+  const completeMaterial: DidacticMaterial = {
+    id: targetId,
+    title: material.title.trim(),
+    roles: material.roles && material.roles.length > 0 ? material.roles : ["all"],
+    accessUrl: material.accessUrl.trim(),
+    instructionText: material.instructionText.trim(),
+    createdAt: material.createdAt || now,
+    createdBy: material.createdBy,
+    updatedAt: now
+  };
+
+  const updatedList = [
+    completeMaterial,
+    ...current.filter((m) => m.id !== targetId)
+  ];
+  setLocalCache(cacheKey, updatedList);
+
+  try {
+    const docRef = doc(db, "didactic_materials", targetId);
+    await setDoc(docRef, completeMaterial, { merge: true });
+  } catch (err) {
+    console.warn("Firestore error saving didactic material (saved locally):", err);
+  }
+
+  try {
+    window.dispatchEvent(new CustomEvent("calangus_materials_updated", { detail: completeMaterial }));
+  } catch {}
+
+  return targetId;
+}
+
+export async function deleteDidacticMaterial(materialId: string): Promise<void> {
+  const cacheKey = "didactic_materials";
+  const current = getLocalCache<DidacticMaterial[]>(cacheKey, []);
+  const updatedList = current.filter((m) => m.id !== materialId);
+  setLocalCache(cacheKey, updatedList);
+
+  try {
+    const docRef = doc(db, "didactic_materials", materialId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.warn("Firestore error deleting didactic material (removed locally):", err);
+  }
+
+  try {
+    window.dispatchEvent(new CustomEvent("calangus_materials_updated", { detail: { deletedId: materialId } }));
+  } catch {}
+}
+
+export async function recordCollaboratorMaterialAccess(
+  collaboratorId: string,
+  materialId: string,
+  materialTitle: string
+): Promise<void> {
+  if (!collaboratorId || !materialId) return;
+
+  const now = new Date().toISOString();
+  const newLog: MaterialAccessLog = {
+    materialId,
+    materialTitle,
+    accessedAt: now
+  };
+
+  try {
+    // 1. Update in collaborator document if exists in firestore
+    const collabRef = doc(db, "collaborators", collaboratorId);
+    const snap = await getDoc(collabRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const existingLogs: MaterialAccessLog[] = Array.isArray(data.materialsAccessed) ? data.materialsAccessed : [];
+      // avoid duplicate spam on same day/minute or just append
+      const alreadyHas = existingLogs.some(l => l.materialId === materialId && (new Date(l.accessedAt).toDateString() === new Date().toDateString()));
+      if (!alreadyHas) {
+        await updateDoc(collabRef, {
+          materialsAccessed: [newLog, ...existingLogs]
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Error updating collaborator material access log in firestore:", err);
+  }
+
+  // 2. Broadcast and local cache update
+  try {
+    window.dispatchEvent(new CustomEvent("calangus_material_accessed", { detail: { collaboratorId, ...newLog } }));
+  } catch {}
+}
+

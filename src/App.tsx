@@ -39,7 +39,8 @@ import {
   approveCollaboratorTransfer,
   rejectCollaboratorTransfer,
   cancelCollaboratorTransfer,
-  resolveSuperAdminAndClaProfile
+  resolveSuperAdminAndClaProfile,
+  resetAllClaMessages
 } from "./lib/db-services";
 
 import SuperAdminDash from "./components/SuperAdminDash";
@@ -69,7 +70,7 @@ import {
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
   Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck, Clock,
-  SlidersHorizontal, Eye, ArrowRightLeft
+  SlidersHorizontal, Eye, ArrowRightLeft, BookOpen
 } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
@@ -239,6 +240,15 @@ export default function App() {
       window.removeEventListener("calangus_firestore_quota_status", handleQuotaEvent);
     };
   }, []);
+
+  // One-time clean reset requested by CLA: clear old sent messages so collaborator inboxes are completely clean
+  useEffect(() => {
+    const hasReset = localStorage.getItem("enem_messages_reset_v1");
+    if (!hasReset) {
+      resetAllClaMessages(effectiveUser?.uid || currentUser?.uid);
+      localStorage.setItem("enem_messages_reset_v1", "true");
+    }
+  }, [effectiveUser?.uid, currentUser?.uid]);
 
   // Sync registration fields when currentUser overrides
   useEffect(() => {
@@ -796,10 +806,11 @@ export default function App() {
 
   if (showSplash) {
     return (
-      <div className="fixed inset-0 z-50 bg-[#070b13] flex flex-col items-center justify-center p-6 select-none transition-all duration-500 overflow-y-auto">
+      <div className="fixed inset-0 z-50 bg-[#070b13] flex flex-col items-center justify-center select-none transition-all duration-500 overflow-y-auto px-0 py-6">
         <div className="absolute inset-0 bg-radial from-emerald-500/10 via-[#070b13]/80 to-[#070b13] pointer-events-none" />
         
-        <div className="relative w-full max-w-2xl aspect-video rounded-3xl overflow-hidden border-4 border-slate-800 dark:border-slate-900 shadow-[0_0_60px_rgba(16,185,129,0.2)] bg-slate-950 flex flex-col justify-center items-center">
+        {/* Full-width lateral video animation without borders/card container */}
+        <div className="relative w-full flex justify-center items-center overflow-hidden">
           <video
             src="/StartCalanguS.mp4"
             autoPlay
@@ -809,13 +820,12 @@ export default function App() {
             onError={() => {
               console.log("Intro video load failed, fallback will transition");
             }}
-            className="h-full object-cover"
-            style={{ width: "450px" }}
+            className="w-full max-h-[60vh] object-cover"
           />
         </div>
 
-        {/* Brand logo and loader text below the animation container */}
-        <div className="mt-8 flex flex-col items-center gap-3 animate-pulse">
+        {/* Brand logo and loader text below the animation */}
+        <div className="mt-8 flex flex-col items-center gap-3 animate-pulse px-4">
           <img 
             src="/CalanguS-logo-Noname.png" 
             referrerPolicy="no-referrer"
@@ -827,7 +837,7 @@ export default function App() {
               CalanguS
             </h2>
             <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-              v2.3
+              v2.5
             </span>
           </div>
           <span className="text-[10px] uppercase font-extrabold text-slate-450 tracking-widest font-mono">
@@ -931,7 +941,7 @@ export default function App() {
                 <div className="flex items-center justify-center gap-2">
                   <h1 className="font-display font-black text-3xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</h1>
                   <span className="text-[11px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                    v2.3
+                    v2.5
                   </span>
                 </div>
                 <span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block mt-0.5">TACTILE TEAM DISPATCHER</span>
@@ -1008,7 +1018,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</span>
                     <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                      v2.3
+                      v2.5
                     </span>
                   </div>
                   <span className="text-[8px] sm:text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block">TACTILE TEAM DISPATCHER</span>
@@ -1337,7 +1347,8 @@ export default function App() {
                 { id: "admin-directives", label: "2. Diretivas Gerais", icon: Calendar, iconColor: "text-sky-400" },
                 { id: "admin-profiles", label: "3. Gestão de Perfis", icon: Users, iconColor: "text-indigo-400" },
                 { id: "admin-register", label: "4. Cadastrar CLA/Admin", icon: PlusCircle, iconColor: "text-amber-400" },
-                { id: "admin-metrics", label: "5. Métricas de Colaborador", icon: SlidersHorizontal, iconColor: "text-teal-400" }
+                { id: "admin-metrics", label: "5. Métricas de Colaborador", icon: SlidersHorizontal, iconColor: "text-teal-400" },
+                { id: "admin-materials", label: "6. Material Didático & Capacitação", icon: BookOpen, iconColor: "text-indigo-400" }
               ] : [
                 { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
                 { id: "staff", label: "2. Fiscais e Inscrições", icon: Users, iconColor: "text-sky-400" },
@@ -1384,6 +1395,12 @@ export default function App() {
                     return effectiveRole === "SuperAdmin" ? (
                       <div className="animate-fade-in">
                         <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="metrics" />
+                      </div>
+                    ) : null;
+                  case "admin-materials":
+                    return effectiveRole === "SuperAdmin" ? (
+                      <div className="animate-fade-in">
+                        <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="materials" />
                       </div>
                     ) : null;
                   case "building":

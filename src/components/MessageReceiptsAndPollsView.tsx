@@ -4,7 +4,7 @@ import {
   RefreshCw, Download, Filter, Check, Copy, Search, MessageSquare, 
   AlertCircle, Vote, FileText, Sparkles, ChevronRight, Eye, 
   Smartphone, Mail, MessageCircle, ArrowRight, Printer, Share2,
-  ThumbsUp, ThumbsDown, UserCheck, UserX, ChevronDown
+  ThumbsUp, ThumbsDown, UserCheck, UserX, ChevronDown, Trash2
 } from "lucide-react";
 import { BuildingInfo, CollaboratorInfo, CalangusMessage, MessageCollaboratorResponse, MessageReadReceipt } from "../types";
 import { formatBrazilianPhone } from "../utils/pingramConfig";
@@ -16,6 +16,8 @@ interface MessageReceiptsAndPollsViewProps {
   currentUserName?: string;
   claId?: string;
   onSaveBuilding?: (updatedBuilding: BuildingInfo) => Promise<void> | void;
+  onResetAllMessages?: () => Promise<void> | void;
+  onDeleteMessage?: (messageId: string) => Promise<void> | void;
   onComposeNewWithTarget?: (targetCollabIds: string[], defaultSubject?: string, defaultBody?: string) => void;
 }
 
@@ -26,6 +28,8 @@ export default function MessageReceiptsAndPollsView({
   currentUserName = "CLA",
   claId = "",
   onSaveBuilding,
+  onResetAllMessages,
+  onDeleteMessage,
   onComposeNewWithTarget
 }: MessageReceiptsAndPollsViewProps) {
   // Select which message to inspect
@@ -471,6 +475,32 @@ export default function MessageReceiptsAndPollsView({
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Cobrar Leitura ({stats.unreadCount})</span>
+                </button>
+              )}
+
+              {onDeleteMessage && currentMessage && (
+                <button
+                  type="button"
+                  id="btn-delete-current-message"
+                  onClick={() => onDeleteMessage(currentMessage.id)}
+                  className="btn-3d px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs border border-rose-500/20"
+                  title="Excluir este comunicado do painel"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Excluir Mensagem</span>
+                </button>
+              )}
+
+              {onResetAllMessages && (
+                <button
+                  type="button"
+                  id="btn-reset-messages-monitor"
+                  onClick={onResetAllMessages}
+                  className="btn-3d px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  title="Resetar e apagar todas as mensagens enviadas aos colaboradores"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Resetar Todas</span>
                 </button>
               )}
             </div>

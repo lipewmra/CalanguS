@@ -32,7 +32,8 @@ import {
   ThumbsUp,
   Edit2
 } from "lucide-react";
-import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage, MessageReadReceipt, MessageCollaboratorResponse } from "../types";
+import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage, MessageReadReceipt, MessageCollaboratorResponse, DidacticMaterial, MaterialAccessLog } from "../types";
+import { subscribeToDidacticMaterials, recordCollaboratorMaterialAccess } from "../lib/db-services";
 import PhotoUploader from "./PhotoUploader";
 import { DEFAULT_ENEM_SCHEDULE } from "./CollaboratorSettingsView";
 
@@ -218,6 +219,17 @@ export default function CollaboratorDashboard({
   const [pollSelections, setPollSelections] = useState<Record<string, { optionIds: string[]; texts: string[]; customText: string }>>({});
   const [editingPollMsgId, setEditingPollMsgId] = useState<string | null>(null);
 
+  // Didactic materials state
+  const [didacticMaterials, setDidacticMaterials] = useState<DidacticMaterial[]>([]);
+  const [localAccessLogs, setLocalAccessLogs] = useState<Record<string, string>>({}); // materialId -> timestamp
+
+  useEffect(() => {
+    const unsub = subscribeToDidacticMaterials((list) => {
+      setDidacticMaterials(list);
+    });
+    return () => unsub();
+  }, []);
+
   const myCollabId = collaboratorRecord?.id || "";
   const myEmail = currentUser?.email || "";
   const myCpf = collaboratorRecord?.cpf || "";
@@ -225,6 +237,30 @@ export default function CollaboratorDashboard({
   const isMyReserve = Boolean(collaboratorRecord?.isReserve);
   const myAttendance = collaboratorRecord?.attendanceStatus;
   const myIdentifier = myCollabId || myEmail || myCpf || "collab-user";
+
+  const handleAccessMaterial = async (mat: DidacticMaterial) => {
+    const now = new Date().toISOString();
+    setLocalAccessLogs(prev => ({ ...prev, [mat.id]: now }));
+    
+    // Open the material link
+    if (mat.accessUrl) {
+      window.open(mat.accessUrl, "_blank", "noopener,noreferrer");
+    }
+
+    // Record in database & dispatch event
+    const targetId = collaboratorRecord?.id || currentUser.uid;
+    if (targetId) {
+      await recordCollaboratorMaterialAccess(targetId, mat.id, mat.title);
+    }
+  };
+
+  const relevantMaterials = didacticMaterials.filter(mat => {
+    if (!mat.roles || mat.roles.includes("all") || mat.roles.length === 0) return true;
+    if (myRole && mat.roles.includes(myRole)) return true;
+    if (collaboratorRecord?.assignedRole && mat.roles.includes(collaboratorRecord.assignedRole)) return true;
+    if (collaboratorRecord?.specialRole && mat.roles.includes(collaboratorRecord.specialRole)) return true;
+    return false;
+  });
 
   const reloadMessages = () => {
     let allMsgs: CalangusMessage[] = [];
@@ -1144,29 +1180,124 @@ export default function CollaboratorDashboard({
 
         {/* TAB 4: MATERIAL_ */}
         {desktopMenuTab === "materials" && (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-fade-in">
             <div>
-              <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Material Didático & Capacitação</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Acesse apostilas, normativas, briefings e orientações recomendadas pela coordenação para a aplicação do ENEM.</p>
-            </div>
-
-            <div className="p-8 md:p-12 bg-white dark:bg-[#0c1220] border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl text-center space-y-4 shadow-xs">
-              <div className="w-16 h-16 mx-auto bg-gradient-to-br from-indigo-500/15 via-emerald-500/15 to-teal-500/15 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center border-2 border-indigo-500/25 shadow-sm">
-                <BookOpen className="w-8 h-8" />
-              </div>
-
-              <div className="space-y-2 max-w-md mx-auto">
-                <span className="inline-block px-3.5 py-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-full text-[10px] font-black uppercase tracking-wider">
-                  ⏳ Em Breve Teremos Conteúdo
+              <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2 flex items-center justify-between">
+                <span>Material Didático & Capacitação</span>
+                <span className="text-[10px] font-bold text-slate-400 font-mono lowercase">
+                  {relevantMaterials.length} {relevantMaterials.length === 1 ? "disponível" : "disponíveis"}
                 </span>
-                <h4 className="text-base font-display font-black text-slate-850 dark:text-white">
-                  Materiais Didáticos & Guias do ENEM 2026
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-                  A coordenação do Cebraspe e do CLA disponibilizará em breve os manuais oficiais, videoaulas instrutivas de procedimentos, portarias e orientações específicas nesta aba antes do dia do exame.
-                </p>
-              </div>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Acesse apostilas, manuais, videoaulas, normativas e orientações recomendadas pela coordenação Cebraspe/CLA para a aplicação do ENEM.</p>
             </div>
+
+            {relevantMaterials.length === 0 ? (
+              <div className="p-8 md:p-12 bg-white dark:bg-[#0c1220] border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl text-center space-y-4 shadow-xs">
+                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-indigo-500/15 via-emerald-500/15 to-teal-500/15 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center border-2 border-indigo-500/25 shadow-sm">
+                  <BookOpen className="w-8 h-8" />
+                </div>
+
+                <div className="space-y-2 max-w-md mx-auto">
+                  <span className="inline-block px-3.5 py-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-full text-[10px] font-black uppercase tracking-wider">
+                    ⏳ Nenhum Material Cadastrado para sua Função
+                  </span>
+                  <h4 className="text-base font-display font-black text-slate-850 dark:text-white">
+                    Materiais Didáticos do ENEM 2026
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                    A coordenação disponibilizará em breve os manuais oficiais, instruções de sala e portarias específicas para sua função. Fique atento às mensagens do CLA!
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {relevantMaterials.map((mat) => {
+                  const existingAccess = collaboratorRecord?.materialsAccessed?.find(m => m.materialId === mat.id);
+                  const localAccessTime = localAccessLogs[mat.id];
+                  const accessTimestamp = existingAccess?.accessedAt || localAccessTime;
+                  const hasAccessed = Boolean(accessTimestamp);
+
+                  return (
+                    <div 
+                      key={mat.id}
+                      className="p-5 bg-white dark:bg-[#0c1220] border-2 border-slate-200 dark:border-slate-800 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 rounded-2xl transition-all duration-300 shadow-sm space-y-3.5 relative overflow-hidden"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-850 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl shrink-0">
+                            <BookOpen className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-black text-slate-850 dark:text-white leading-tight">
+                              {mat.title}
+                            </h4>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              {mat.roles.includes("all") ? (
+                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                  Todas as Funções
+                                </span>
+                              ) : (
+                                mat.roles.map((r, i) => (
+                                  <span key={i} className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                                    {r}
+                                  </span>
+                                ))
+                              )}
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                • {new Date(mat.createdAt).toLocaleDateString("pt-BR")}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Access status tag */}
+                        <div>
+                          {hasAccessed ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shadow-xs">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              <span>Acessado em {new Date(accessTimestamp!).toLocaleDateString("pt-BR")}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                              <span>⏳ Não Acessado</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Instruction Text */}
+                      {mat.instructionText && (
+                        <div className="p-3.5 bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800/80 rounded-xl space-y-1">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-indigo-500" />
+                            <span>Instruções & Orientações:</span>
+                          </div>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium whitespace-pre-wrap leading-relaxed">
+                            {mat.instructionText}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Action Bar */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                          Ao clicar em acessar, seu registro de visualização é enviado automaticamente ao CLA.
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAccessMaterial(mat)}
+                          className="btn-3d w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs cursor-pointer shadow-md flex items-center justify-center gap-2 active:scale-95 transition"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>{hasAccessed ? "Acessar Material Novamente" : "Acessar Material & Registrar"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

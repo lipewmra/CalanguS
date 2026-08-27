@@ -1,6 +1,6 @@
 {
   "name": "CalanguS",
-  "description": "Sistema CalanguS 2.3 - Gestão integrada de coordenação de equipes, ensalamento ENEM 2026, tabelas de remuneração, controle de acessibilidades, lanches, fotos e placas de sinalização.",
+  "description": "Sistema CalanguS 2.5 - Gestão integrada de coordenação de equipes, ensalamento ENEM 2026, tabelas de remuneração, controle de acessibilidades, lanches, fotos e placas de sinalização.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

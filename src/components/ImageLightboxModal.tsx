@@ -2,10 +2,10 @@ import React, { useEffect } from "react";
 import { 
   X, ZoomIn, Download, User, Shield, Building2, Award, Sparkles, 
   Clock, CheckCircle2, Phone, Mail, CreditCard, UserCheck, 
-  AlertCircle, Check, DoorOpen, History, Layers, MessageCircle
+  AlertCircle, Check, DoorOpen, History, Layers, MessageCircle, BookOpen
 } from "lucide-react";
 import { getInitials } from "../lib/image-utils";
-import { PastEdition } from "../types";
+import { PastEdition, MaterialAccessLog } from "../types";
 
 export interface LightboxData {
   imageUrl: string;
@@ -33,6 +33,7 @@ export interface LightboxData {
   createdAt?: string;
   isExternalRecruit?: boolean;
   paymentValue?: string;
+  materialsAccessed?: MaterialAccessLog[];
   transferHistory?: Array<{
     fromClaId: string;
     fromClaName: string;
@@ -343,6 +344,45 @@ export default function ImageLightboxModal({ data, onClose }: ImageLightboxModal
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* Materiais Didáticos e de Apoio Acessados */}
+          <div className="p-4 bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                <BookOpen className="w-4 h-4 text-indigo-500 shrink-0" />
+                <span>Material de Apoio e Capacitação Acessado</span>
+              </div>
+              {data.materialsAccessed && data.materialsAccessed.length > 0 ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                  {data.materialsAccessed.length} acessado(s)
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-200 dark:bg-slate-800 text-slate-500">
+                  Nenhum registro ainda
+                </span>
+              )}
+            </div>
+
+            {data.materialsAccessed && data.materialsAccessed.length > 0 ? (
+              <div className="space-y-1.5 pt-1">
+                {data.materialsAccessed.map((item, idx) => (
+                  <div key={idx} className="p-2.5 bg-white dark:bg-[#0c1220] border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span className="font-bold text-slate-800 dark:text-white truncate">{item.materialTitle}</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                      {new Date(item.accessedAt).toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 font-medium">
+                O colaborador ainda não registrou o acesso aos materiais didáticos de apoio nesta edição.
+              </p>
             )}
           </div>
 

@@ -185,7 +185,7 @@ export default function SettingsModal({
                   Configurações do Sistema
                 </h3>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black">
-                  CalanguS v2.3
+                  CalanguS v2.5
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
