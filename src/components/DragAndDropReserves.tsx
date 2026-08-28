@@ -1183,6 +1183,86 @@ export default function DragAndDropReserves({
     setTimeout(() => setSuccessMsg(null), 4000);
   };
 
+  // Download Google Contacts CSV for all associated and allocated collaborators in Menu 4
+  const handleDownloadGoogleContactsCsv = () => {
+    // RFC 4180 compliant CSV cell escaping preventing any character corruption or injection
+    const escapeCsvCell = (val: string | undefined | null): string => {
+      if (val === undefined || val === null) return '""';
+      const cleaned = String(val)
+        .replace(/[\r\n\t]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return `"${cleaned.replace(/"/g, '""')}"`;
+    };
+
+    // Clean phone number ensuring no invalid control characters, tabs, newlines or quotes
+    const cleanPhoneNumber = (raw?: string): string => {
+      if (!raw) return "";
+      return raw.replace(/[\r\n\t";]/g, "").trim();
+    };
+
+    // Google Contacts standard CSV columns precisely mapped as requested:
+    // First Name, Last Name, E-mail, Phone, Notes, Organization Name, Organization Title
+    const headers = [
+      "First Name",
+      "Last Name",
+      "E-mail",
+      "Phone",
+      "Notes",
+      "Organization Name",
+      "Organization Title"
+    ];
+
+    // Filter approved and allocated/associated collaborators in Menu 4
+    // Sorted alphabetically for organized contact lists
+    const sortedCollabs = [...approvedCollaborators].sort((a, b) => 
+      (a.name || "").localeCompare(b.name || "", "pt-BR")
+    );
+
+    const rows = sortedCollabs.map((c) => {
+      const cleanFullName = (c.name || "").trim().replace(/[\r\n\t]/g, " ").replace(/\s+/g, " ");
+      const nameParts = cleanFullName.split(" ").filter(Boolean);
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+      
+      const cleanEmail = (c.email || "").trim().toLowerCase().replace(/[\r\n\t\s]/g, "");
+      const cleanPhone = cleanPhoneNumber(c.whatsapp);
+      const cleanCpf = (c.cpf || "").trim().replace(/[\r\n\t";]/g, "");
+      const role = (c.assignedRole || (c.isReserve ? "Fiscal Reserva" : "Aplicador")).trim().replace(/[\r\n\t";]/g, "");
+      const room = (c.assignedRoom ? (rooms.some(r => r.number === c.assignedRoom) ? `Sala ${c.assignedRoom}` : c.assignedRoom) : "Não Alocado / Reserva").trim().replace(/[\r\n\t";]/g, "");
+      const buildingName = (building?.name || "Local de Aplicação").trim().replace(/[\r\n\t";]/g, "");
+      const notes = `CPF: ${cleanCpf} | Função: ${role} | Sala: ${room} | Local: ${buildingName} | CLA: ${(claName || "Coordenação").trim()}`;
+      const orgName = `ENEM 2026 - ${buildingName}`;
+      const orgTitle = role;
+
+      return [
+        escapeCsvCell(firstName),
+        escapeCsvCell(lastName),
+        escapeCsvCell(cleanEmail),
+        escapeCsvCell(cleanPhone),
+        escapeCsvCell(notes),
+        escapeCsvCell(orgName),
+        escapeCsvCell(orgTitle)
+      ].join(",");
+    });
+
+    // UTF-8 BOM (\uFEFF) ensures Portuguese characters (ã, ç, é, etc.) load flawlessly in Google Contacts and Excel
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const sanitizedBuilding = (building?.name || "Local").replace(/[^a-zA-Z0-9]/g, "_");
+    link.download = `Contatos_Google_ENEM2026_${sanitizedBuilding}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+    setSuccessMsg(`✓ Arquivo CSV de Contatos do Google baixado com sucesso! (${sortedCollabs.length} colaboradores mapeados com First Name, Last Name, E-mail e Phone)`);
+    setTimeout(() => setSuccessMsg(null), 5000);
+  };
+
   // Copy textual summary of current template to clipboard
   const handleCopyReportText = () => {
     const templateMeta = EXPORT_TEMPLATES.find(t => t.id === selectedExportTemplate) || EXPORT_TEMPLATES[0];
@@ -1223,8 +1303,21 @@ export default function DragAndDropReserves({
           </p>
         </div>
 
-        {/* Action Buttons: PDF Export & Print */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Action Buttons: Google Contacts, PDF Export & Print */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleDownloadGoogleContactsCsv}
+            className="cursor-pointer px-3.5 py-2.5 rounded-xl font-display font-black text-xs uppercase tracking-wider bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white transition-all duration-200 active:scale-95 shadow-[3px_3px_0px_0px_#1e3a8a] flex items-center gap-2"
+            title="Baixar arquivo CSV formatado para Contatos do Google com First Name, Last Name, E-mail, Phone e CPF"
+          >
+            <Phone className="w-4 h-4 text-blue-200" />
+            <span>Contatos</span>
+            <span className="bg-blue-950/40 text-blue-200 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold">
+              {approvedCollaborators.length}
+            </span>
+          </button>
+
           <button
             onClick={() => setIsPdfModalOpen(true)}
             className="cursor-pointer px-4 py-2.5 rounded-xl font-display font-black text-xs uppercase tracking-wider bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white transition-all duration-200 active:scale-95 shadow-[3px_3px_0px_0px_#065f46] flex items-center gap-2"
@@ -3655,6 +3748,16 @@ export default function DragAndDropReserves({
                 >
                   <FileText className="w-4 h-4" />
                   <span className="hidden sm:inline">CSV</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadGoogleContactsCsv}
+                  className="cursor-pointer px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-xs"
+                  title="Exportar CSV formatado para Contatos do Google (First Name, Last Name, E-mail, Phone, CPF)"
+                >
+                  <Phone className="w-4 h-4 text-blue-200" />
+                  <span className="hidden sm:inline">Contatos Google</span>
                 </button>
 
                 <button
