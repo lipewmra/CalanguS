@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { EventConfigInfo, UserProfile, UserRole, BuildingInfo, CollaboratorInfo, ClaActivities } from "../types";
 import { saveEventConfig, subscribeToUsers, updateUserRole, updateUserRoles, updateUserDetails, createPreRegisteredUser, subscribeToAllBuildings, subscribeToAllClaActivities, subscribeToAllCollaborators, saveBuilding } from "../lib/db-services";
-import { ShieldCheck, Calendar, Settings, CheckCircle, Save, Users, RefreshCw, AlertCircle, PlusCircle, Trash2, AlertTriangle, Building, Activity, CheckSquare, Server, Layers, Pencil, X, Search, Mail, UserCheck, Hash } from "lucide-react";
+import { ShieldCheck, Calendar, Settings, CheckCircle, Save, Users, RefreshCw, AlertCircle, PlusCircle, Trash2, AlertTriangle, Building, Activity, CheckSquare, Server, Layers, Pencil, X, Search, Mail, UserCheck, Hash, Clock } from "lucide-react";
 import BuildingConfigView from "./BuildingConfigView";
 import CollaboratorMetricsAdminView from "./CollaboratorMetricsAdminView";
 import DidacticMaterialsManager from "./DidacticMaterialsManager";
+import AdminAgendaEditor from "./AdminAgendaEditor";
 
 interface SuperAdminProps {
   initialConfig: EventConfigInfo | null;
@@ -124,7 +125,10 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
       examDates: [examDate1, examDate2],
       trainingDates: [trainingDate],
       generalInstructions,
-      initialClaTasks: tasks.split(";").map(t => t.trim()).filter(Boolean)
+      initialClaTasks: tasks.split(";").map(t => t.trim()).filter(Boolean),
+      collaboratorMetrics: initialConfig?.collaboratorMetrics,
+      collaboratorSchedule: initialConfig?.collaboratorSchedule,
+      collaboratorInstructions: initialConfig?.collaboratorInstructions
     };
 
     try {
@@ -751,6 +755,17 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
     return (
       <DidacticMaterialsManager 
         currentUserName="SuperAdmin" 
+      />
+    );
+  }
+
+  // Render for "agenda" sub-tab
+  if (activeSubTab === "agenda") {
+    return (
+      <AdminAgendaEditor 
+        initialConfig={initialConfig} 
+        onSaveConfig={onSaveConfig} 
+        allBuildings={allBuildings} 
       />
     );
   }

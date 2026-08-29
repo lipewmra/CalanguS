@@ -200,10 +200,14 @@ export default function CollaboratorDashboard({
     }
   };
 
-  // Agenda Timeline List - loaded dynamically from building settings or default official schedule
+  // Agenda Timeline List - loaded dynamically from building settings, global SuperAdmin event config or default official schedule
   const activeSchedule = (building?.collaboratorSchedule && building.collaboratorSchedule.length > 0)
     ? building.collaboratorSchedule 
-    : DEFAULT_ENEM_SCHEDULE;
+    : (eventConfig?.collaboratorSchedule && eventConfig.collaboratorSchedule.length > 0)
+      ? eventConfig.collaboratorSchedule
+      : DEFAULT_ENEM_SCHEDULE;
+
+  const activeInstructions = building?.collaboratorInstructions || eventConfig?.collaboratorInstructions || "";
 
   // Is Snack released?
   const isSnackMenuReleased = catering?.releasedToCollaborators === true;
@@ -1515,15 +1519,15 @@ export default function CollaboratorDashboard({
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Observe a contagem rigorosa de horários regulada pela coordenação do local e pelo Cebraspe.</p>
             </div>
 
-            {/* CLA Custom Instructions/Notices if configured */}
-            {building?.collaboratorInstructions && (
+            {/* Custom Instructions/Notices from CLA or SuperAdmin */}
+            {activeInstructions && (
               <div className="p-4 bg-indigo-500/10 border-2 border-indigo-500/20 rounded-2xl space-y-1.5 animate-fade-in">
                 <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 font-extrabold text-xs uppercase tracking-wider">
                   <Info className="w-4 h-4 text-indigo-500 shrink-0" />
-                  <span>Avisos & Instruções da Coordenação (CLA)</span>
+                  <span>Avisos & Instruções da Coordenação</span>
                 </div>
                 <p className="text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed whitespace-pre-line">
-                  {building.collaboratorInstructions}
+                  {activeInstructions}
                 </p>
               </div>
             )}

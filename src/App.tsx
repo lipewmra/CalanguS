@@ -1350,10 +1350,11 @@ export default function App() {
                 { id: "admin-dashboard", label: "0. Painel Operacional", icon: Activity, iconColor: "text-emerald-450" },
                 { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
                 { id: "admin-directives", label: "2. Diretivas Gerais", icon: Calendar, iconColor: "text-sky-400" },
-                { id: "admin-profiles", label: "3. Gestão de Perfis", icon: Users, iconColor: "text-indigo-400" },
-                { id: "admin-register", label: "4. Cadastrar CLA/Admin", icon: PlusCircle, iconColor: "text-amber-400" },
-                { id: "admin-metrics", label: "5. Métricas de Colaborador", icon: SlidersHorizontal, iconColor: "text-teal-400" },
-                { id: "admin-materials", label: "6. Material Didático & Capacitação", icon: BookOpen, iconColor: "text-indigo-400" }
+                { id: "admin-agenda", label: "3. Agenda & Itinerário", icon: Clock, iconColor: "text-amber-400" },
+                { id: "admin-profiles", label: "4. Gestão de Perfis", icon: Users, iconColor: "text-indigo-400" },
+                { id: "admin-register", label: "5. Cadastrar CLA/Admin", icon: PlusCircle, iconColor: "text-emerald-400" },
+                { id: "admin-metrics", label: "6. Métricas de Colaborador", icon: SlidersHorizontal, iconColor: "text-teal-400" },
+                { id: "admin-materials", label: "7. Material Didático & Capacitação", icon: BookOpen, iconColor: "text-indigo-400" }
               ] : [
                 { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
                 { id: "staff", label: "2. Fiscais e Inscrições", icon: Users, iconColor: "text-sky-400" },
@@ -1383,6 +1384,12 @@ export default function App() {
                     return effectiveRole === "SuperAdmin" ? (
                       <div className="animate-fade-in">
                         <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="directives" />
+                      </div>
+                    ) : null;
+                  case "admin-agenda":
+                    return effectiveRole === "SuperAdmin" ? (
+                      <div className="animate-fade-in">
+                        <SuperAdminDash initialConfig={eventConfig} onSaveConfig={saveEventConfig} activeSubTab="agenda" />
                       </div>
                     ) : null;
                   case "admin-profiles":

@@ -342,6 +342,8 @@ export interface EventConfigInfo {
   generalInstructions: string;
   initialClaTasks: string[];
   collaboratorMetrics?: CollaboratorMetricsConfig;
+  collaboratorSchedule?: CollaboratorScheduleItem[];
+  collaboratorInstructions?: string;
 }
 
 export interface ClaActivities {
