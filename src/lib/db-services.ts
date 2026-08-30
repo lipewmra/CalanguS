@@ -511,6 +511,44 @@ export async function migrateClaData(oldClaId: string, newClaId: string): Promis
   }
 }
 
+// Check if email is registered in system (users, collaborators, or SuperAdmin)
+export async function checkEmailRegistered(email: string): Promise<{
+  isRegistered: boolean;
+  name?: string;
+  role?: string;
+  source?: "superadmin" | "user" | "collaborator";
+}> {
+  const targetEmail = (email || "").toLowerCase().trim();
+  if (!targetEmail) return { isRegistered: false };
+
+  // 1. Check SuperAdmin
+  if (areEmailsMatching(targetEmail, "lipewmra@gmail.com") || areEmailsMatching(targetEmail, "philippewagnermra@gmail.com")) {
+    return { isRegistered: true, name: "Philippe Wagner", role: "SuperAdmin", source: "superadmin" };
+  }
+
+  // 2. Check users collection
+  try {
+    const userProfile = await getUserProfileByEmail(targetEmail);
+    if (userProfile) {
+      return { isRegistered: true, name: userProfile.name, role: userProfile.role, source: "user" };
+    }
+  } catch (e) {
+    console.warn("Could not check users collection:", e);
+  }
+
+  // 3. Check collaborators collection
+  try {
+    const collab = await findCollaboratorByEmail(targetEmail);
+    if (collab) {
+      return { isRegistered: true, name: collab.name, role: "Colaborador", source: "collaborator" };
+    }
+  } catch (e) {
+    console.warn("Could not check collaborators collection:", e);
+  }
+
+  return { isRegistered: false };
+}
+
 // Seamlessly resolve and synchronize SuperAdmin & CLA master profile
 export async function resolveSuperAdminAndClaProfile(user: any): Promise<UserProfile> {
   const currentEmail = (user.email || "").toLowerCase().trim();

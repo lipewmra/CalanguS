@@ -42,7 +42,8 @@ import {
   resolveSuperAdminAndClaProfile,
   resetAllClaMessages,
   normalizeEmail,
-  areEmailsMatching
+  areEmailsMatching,
+  checkEmailRegistered
 } from "./lib/db-services";
 
 import SuperAdminDash from "./components/SuperAdminDash";
@@ -73,9 +74,20 @@ import {
   Navigation, CheckCircle2, AlertTriangle, Play, LogOut, CheckSquare, UserCheck,
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
   Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck, Clock,
-  SlidersHorizontal, Eye, ArrowRightLeft, BookOpen, Bot, ExternalLink
+  SlidersHorizontal, Eye, EyeOff, ArrowRightLeft, BookOpen, Bot, ExternalLink,
+  Lock, Mail, ArrowRight, RefreshCw, AlertCircle, KeyRound, Check
 } from "lucide-react";
-import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { 
+  GoogleAuthProvider, 
+  OAuthProvider,
+  signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  fetchSignInMethodsForEmail,
+  signOut, 
+  onAuthStateChanged 
+} from "firebase/auth";
 import { auth } from "./firebase";
 
 export default function App() {
@@ -176,6 +188,17 @@ export default function App() {
 
   // CLA and SuperAdmin UI Active Section
   const [activeTab, setActiveTab] = useState<string>("");
+
+  // Secondary Authentication (Apple & Email/Password) States
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authConfirmPassword, setAuthConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailFlowStep, setEmailFlowStep] = useState<"check" | "login" | "register">("check");
+  const [emailFlowLoading, setEmailFlowLoading] = useState(false);
+  const [emailFlowError, setEmailFlowError] = useState("");
+  const [emailFlowSuccess, setEmailFlowSuccess] = useState("");
+  const [identifiedName, setIdentifiedName] = useState("");
 
   // Public recruitment form bypass state (supports route query parameters of Vercel production)
   const [isPublicForm, setIsPublicForm] = useState<boolean>(() => {
@@ -381,14 +404,7 @@ export default function App() {
     if (!user || !user.email) return null;
     const email = (user.email || "").toLowerCase().trim();
 
-    // 1. Enforce ONLY gmail.com domain login
-    if (!email.endsWith("@gmail.com")) {
-      await signOut(auth);
-      alert("Apenas contas de e-mail do Gmail (@gmail.com) são permitidas para acessar o sistema.");
-      return null;
-    }
-
-    // 2. SuperAdmin hardcoded authorized emails
+    // 1. SuperAdmin hardcoded authorized emails
     const isSuperAdminEmail = areEmailsMatching(email, "lipewmra@gmail.com") || areEmailsMatching(email, "philippewagnermra@gmail.com");
     if (isSuperAdminEmail) {
       try {
@@ -523,8 +539,10 @@ export default function App() {
     return null;
   };
 
-  // Google Login popup authentication
+  // Google Login popup authentication (Primary & Default)
   const handleGmailLogin = async () => {
+    setEmailFlowError("");
+    setEmailFlowSuccess("");
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
       prompt: "select_account"
@@ -539,9 +557,199 @@ export default function App() {
         setCurrentUser(null);
         setSelectedRole(null);
       }
-    } catch (err) {
-      console.error("Login popup failed:", err);
+    } catch (err: any) {
+      console.error("Google login popup failed:", err);
+      if (err?.code !== "auth/popup-closed-by-user" && err?.code !== "auth/cancelled-popup-request") {
+        setEmailFlowError("Não foi possível autenticar com o Google. Tente novamente.");
+      }
     }
+  };
+
+  // Apple Login popup authentication (Secondary)
+  const handleAppleLogin = async () => {
+    setEmailFlowError("");
+    setEmailFlowSuccess("");
+    const provider = new OAuthProvider("apple.com");
+    provider.addScope("email");
+    provider.addScope("name");
+    
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const profile = await validateAndResolveUser(result.user);
+      if (profile) {
+        setCurrentUser(profile);
+      } else {
+        setCurrentUser(null);
+        setSelectedRole(null);
+      }
+    } catch (err: any) {
+      console.error("Apple login failed:", err);
+      if (err?.code === "auth/operation-not-allowed" || err?.code === "auth/configuration-not-found") {
+        setEmailFlowError("O provedor Apple precisa estar ativado no console do Firebase (Authentication > Sign-in method > Apple).");
+      } else if (err?.code !== "auth/popup-closed-by-user" && err?.code !== "auth/cancelled-popup-request") {
+        setEmailFlowError(err?.message || "Não foi possível autenticar com a Apple. Tente novamente ou use E-mail e Senha.");
+      }
+    }
+  };
+
+  // Email/Password Step 1: Verify if email is registered in system
+  const handleCheckEmail = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanEmail = authEmail.trim().toLowerCase();
+    setEmailFlowError("");
+    setEmailFlowSuccess("");
+
+    if (!cleanEmail || !cleanEmail.includes("@") || !cleanEmail.includes(".")) {
+      setEmailFlowError("Por favor, informe um endereço de e-mail válido.");
+      return;
+    }
+
+    setEmailFlowLoading(true);
+    try {
+      // 1. Check if email is in database (users, collaborators, or superadmin)
+      const regStatus = await checkEmailRegistered(cleanEmail);
+      if (!regStatus.isRegistered) {
+        setEmailFlowLoading(false);
+        setPublicFormPrefill({ email: cleanEmail, name: "" });
+        setUnregisteredNotice(
+          `E-mail não localizado: O endereço "${cleanEmail}" não possui cadastro ativo na equipe do ENEM 2026. Preencha o formulário de inscrição abaixo para solicitar seu cadastro.`
+        );
+        setIsPublicForm(true);
+        return;
+      }
+
+      setIdentifiedName(regStatus.name || "");
+
+      // 2. Check if user already created credentials / password in Firebase Auth
+      let methods: string[] = [];
+      try {
+        methods = await fetchSignInMethodsForEmail(auth, cleanEmail);
+      } catch (methodsErr) {
+        console.warn("fetchSignInMethodsForEmail warning:", methodsErr);
+      }
+
+      if (methods.includes("password") || methods.length > 0) {
+        setEmailFlowStep("login");
+        setEmailFlowSuccess(`Olá, ${regStatus.name || "Colaborador"}! Digite sua senha cadastrada para entrar.`);
+      } else {
+        setEmailFlowStep("register");
+        setEmailFlowSuccess(`Cadastro localizado para ${regStatus.name || cleanEmail}! Como este é seu primeiro acesso com senha, crie uma senha de acesso abaixo.`);
+      }
+    } catch (err: any) {
+      console.error("Error checking email:", err);
+      setEmailFlowError("Erro ao verificar o e-mail no sistema. Verifique a conexão e tente novamente.");
+    } finally {
+      setEmailFlowLoading(false);
+    }
+  };
+
+  // Email/Password Step 2A: Login with existing password
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = authEmail.trim().toLowerCase();
+    setEmailFlowError("");
+    setEmailFlowSuccess("");
+
+    if (!authPassword) {
+      setEmailFlowError("Por favor, digite sua senha de acesso.");
+      return;
+    }
+
+    setEmailFlowLoading(true);
+    try {
+      const result = await signInWithEmailAndPassword(auth, cleanEmail, authPassword);
+      const profile = await validateAndResolveUser(result.user);
+      if (profile) {
+        setCurrentUser(profile);
+      } else {
+        setCurrentUser(null);
+        setSelectedRole(null);
+      }
+    } catch (err: any) {
+      console.error("Password login error:", err);
+      if (err?.code === "auth/wrong-password" || err?.code === "auth/invalid-credential") {
+        setEmailFlowError("Senha incorreta. Verifique os dados digitados ou redefina sua senha.");
+      } else if (err?.code === "auth/user-not-found") {
+        setEmailFlowStep("register");
+        setEmailFlowError("Ainda não há senha cadastrada para este e-mail. Crie sua senha de acesso abaixo.");
+      } else if (err?.code === "auth/too-many-requests") {
+        setEmailFlowError("Muitas tentativas sem sucesso. Aguarde alguns instantes ou utilize a redefinição de senha.");
+      } else {
+        setEmailFlowError(err?.message || "Erro ao efetuar login com senha.");
+      }
+    } finally {
+      setEmailFlowLoading(false);
+    }
+  };
+
+  // Email/Password Step 2B: First Access - Create password
+  const handleCreatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = authEmail.trim().toLowerCase();
+    setEmailFlowError("");
+    setEmailFlowSuccess("");
+
+    if (authPassword.length < 6) {
+      setEmailFlowError("A senha deve conter no mínimo 6 caracteres.");
+      return;
+    }
+    if (authPassword !== authConfirmPassword) {
+      setEmailFlowError("As senhas digitadas não coincidem. Digite a mesma senha em ambos os campos.");
+      return;
+    }
+
+    setEmailFlowLoading(true);
+    try {
+      const result = await createUserWithEmailAndPassword(auth, cleanEmail, authPassword);
+      const profile = await validateAndResolveUser(result.user);
+      if (profile) {
+        setCurrentUser(profile);
+      } else {
+        setCurrentUser(null);
+        setSelectedRole(null);
+      }
+    } catch (err: any) {
+      console.error("Create password error:", err);
+      if (err?.code === "auth/email-already-in-use") {
+        setEmailFlowStep("login");
+        setEmailFlowError("Este e-mail já possui uma conta no sistema. Digite sua senha existente para entrar.");
+      } else if (err?.code === "auth/weak-password") {
+        setEmailFlowError("A senha é muito fraca. Utilize uma combinação de letras e números.");
+      } else {
+        setEmailFlowError(err?.message || "Erro ao registrar senha de acesso.");
+      }
+    } finally {
+      setEmailFlowLoading(false);
+    }
+  };
+
+  // Forgot password handler
+  const handleForgotPassword = async () => {
+    const cleanEmail = authEmail.trim().toLowerCase();
+    if (!cleanEmail) {
+      setEmailFlowError("Informe o e-mail acima para receber o link de redefinição de senha.");
+      return;
+    }
+    setEmailFlowLoading(true);
+    setEmailFlowError("");
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+      setEmailFlowSuccess(`Link de redefinição de senha enviado para "${cleanEmail}". Verifique sua caixa de entrada e pasta de spam.`);
+    } catch (err: any) {
+      console.error("Forgot password error:", err);
+      setEmailFlowError("Não foi possível enviar o e-mail de redefinição. Verifique o endereço e tente novamente.");
+    } finally {
+      setEmailFlowLoading(false);
+    }
+  };
+
+  const handleResetEmailFlow = () => {
+    setEmailFlowStep("check");
+    setAuthPassword("");
+    setAuthConfirmPassword("");
+    setEmailFlowError("");
+    setEmailFlowSuccess("");
+    setIdentifiedName("");
   };
 
   const handleLogout = async () => {
@@ -1034,16 +1242,254 @@ export default function App() {
               </p>
             </div>
 
-            {/* Google Gmail Login Button */}
+            {/* Primary & Default: Google Gmail Login Button */}
             <button
               onClick={handleGmailLogin}
-              className="w-full btn-3d btn-3d-primary py-4 rounded-xl flex items-center justify-center gap-3 font-mono font-black text-xs uppercase cursor-pointer text-white tracking-wider border-b-4 border-emerald-800"
+              className="w-full btn-3d btn-3d-primary py-3.5 rounded-xl flex items-center justify-center gap-3 font-mono font-black text-xs uppercase cursor-pointer text-white tracking-wider border-b-4 border-emerald-800 shadow-md transition active:scale-[0.98]"
             >
               <svg className="w-5 h-5 fill-current text-white shrink-0" viewBox="0 0 24 24">
                 <path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114A5.73 5.73 0 018.2 12.8a5.73 5.73 0 015.791-5.714c2.53 0 4.218 1.064 5.102 1.912l3.227-3.235C20.252 3.794 17.382 2.4 13.992 2.4c-5.897 0-10.79 4.885-10.79 10.4s4.893 10.4 10.79 10.4c6.155 0 11.134-4.7 11.134-10.4 0-.69-.074-1.353-.223-2.115H12.24z"/>
               </svg>
-              <span>Entrar com Gmail</span>
+              <span>Entrar com Gmail (Padrão)</span>
             </button>
+
+            {/* Secondary: Apple Login Button */}
+            <button
+              type="button"
+              onClick={handleAppleLogin}
+              className="w-full py-3 px-4 bg-slate-900 hover:bg-black text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 rounded-xl font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2.5 shadow-sm border border-slate-800 dark:border-slate-200 active:scale-[0.98]"
+            >
+              <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 170 170">
+                <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.04-7.6-7.79-11.73-14.25-5.87-9.35-10.48-19.78-13.82-31.31-3.34-11.52-5.01-22.38-5.01-32.57 0-14.13 3.58-25.76 10.74-34.88 7.16-9.13 16.27-13.79 27.33-13.99 4.35 0 9.27 1.16 14.76 3.48 5.49 2.32 9.27 3.53 11.35 3.63 1.85 0 5.79-1.29 11.83-3.88 6.04-2.58 11.27-3.72 15.7-3.41 12.33.64 22.09 5.34 29.28 14.1-10.76 6.53-16.03 15.54-15.82 27.05.21 9.03 3.53 16.59 9.97 22.68 6.43 6.09 14.19 9.54 23.27 10.36-2.07 6.31-4.7 12.63-7.89 18.96zM119.22 31.86c0-6.74 2.45-13.06 7.36-18.96 4.91-5.9 10.97-9.49 18.17-10.76.22 1.52.33 2.93.33 4.24 0 6.63-2.61 13.05-7.83 19.27-5.22 6.22-11.41 9.77-18.57 10.65-.22-1.3-.33-2.63-.33-4.44z"/>
+              </svg>
+              <span>Entrar com Apple</span>
+            </button>
+
+            {/* Divider */}
+            <div className="relative flex items-center justify-center my-2">
+              <div className="border-t border-slate-200 dark:border-slate-800 w-full" />
+              <span className="bg-white dark:bg-[#0c1220] px-3 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider shrink-0">
+                ou com E-mail e Senha
+              </span>
+            </div>
+
+            {/* Email & Password Interactive Flow */}
+            <div className="text-left bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+              {/* Alert Feedback Messages */}
+              {emailFlowError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start gap-2 animate-fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span className="leading-tight">{emailFlowError}</span>
+                </div>
+              )}
+
+              {emailFlowSuccess && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-start gap-2 animate-fade-in">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
+                  <span className="leading-tight">{emailFlowSuccess}</span>
+                </div>
+              )}
+
+              {/* STEP 1: Verify Email */}
+              {emailFlowStep === "check" && (
+                <form onSubmit={handleCheckEmail} className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                      E-mail Cadastrado (Outlook, Hotmail, Gmail, etc.)
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        value={authEmail}
+                        onChange={(e) => setAuthEmail(e.target.value)}
+                        placeholder="seu-email@outlook.com ou @gmail.com"
+                        required
+                        className="w-full pl-9 pr-3 py-2.5 text-xs font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none transition"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={emailFlowLoading || !authEmail.trim()}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-xs active:scale-[0.98]"
+                  >
+                    {emailFlowLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Verificando cadastro...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Avançar</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+
+              {/* STEP 2A: Login with Existing Password */}
+              {emailFlowStep === "login" && (
+                <form onSubmit={handlePasswordLogin} className="space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between bg-white dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div className="min-w-0 flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
+                        {authEmail}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetEmailFlow}
+                      className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline shrink-0 ml-2"
+                    >
+                      Trocar
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                      Sua Senha de Acesso
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        placeholder="Digite sua senha"
+                        required
+                        className="w-full pl-9 pr-9 py-2.5 text-xs font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      disabled={emailFlowLoading}
+                      className="text-[11px] font-bold text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 underline transition cursor-pointer"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={emailFlowLoading || !authPassword}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-xs active:scale-[0.98]"
+                  >
+                    {emailFlowLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Entrando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Entrar no Sistema</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+
+              {/* STEP 2B: First Access - Create Password */}
+              {emailFlowStep === "register" && (
+                <form onSubmit={handleCreatePassword} className="space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between bg-white dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div className="min-w-0 flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
+                        {authEmail}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetEmailFlow}
+                      className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline shrink-0 ml-2"
+                    >
+                      Trocar
+                    </button>
+                  </div>
+
+                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-700 dark:text-emerald-300 text-[11px] font-medium leading-relaxed">
+                    ✨ <strong>Primeiro acesso com este e-mail:</strong> Crie uma senha segura (mínimo 6 dígitos) para acessar seu ambiente de colaborador/coordenação.
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                      Criar Nova Senha (mín. 6 dígitos)
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        placeholder="Mínimo de 6 caracteres"
+                        required
+                        minLength={6}
+                        className="w-full pl-9 pr-9 py-2.5 text-xs font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                      Confirmar Senha
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={authConfirmPassword}
+                        onChange={(e) => setAuthConfirmPassword(e.target.value)}
+                        placeholder="Repita a mesma senha"
+                        required
+                        minLength={6}
+                        className="w-full pl-9 pr-3 py-2.5 text-xs font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none transition"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={emailFlowLoading || !authPassword || !authConfirmPassword}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-xs active:scale-[0.98]"
+                  >
+                    {emailFlowLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Registrando senha...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Criar Senha e Acessar</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+            </div>
 
             {/* Inscription redirect section for new fiscais */}
             <div className="pt-4 border-t-2 border-slate-100 dark:border-slate-800/80 space-y-2">

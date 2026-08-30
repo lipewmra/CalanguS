@@ -31,8 +31,8 @@ export default function AccessManagementView({ currentUser, colegas, activeClaId
       setErrorMsg("Por favor, digite o nome completo.");
       return;
     }
-    if (!email.trim() || !email.toLowerCase().endsWith("@gmail.com")) {
-      setErrorMsg("Por favor, informe um endereço do Gmail (@gmail.com) válido.");
+    if (!email.trim() || !email.includes("@") || !email.includes(".")) {
+      setErrorMsg("Por favor, informe um endereço de e-mail válido (ex: @gmail.com, @outlook.com, @apple.com, etc.).");
       return;
     }
 
