@@ -748,9 +748,12 @@ export default function CollaboratorDashboard({
               const rolePayment = getCustomOrStandardPayment(displayRoleName);
 
               // Exam dates list
-              const examDates = (eventConfig?.examDates && eventConfig.examDates.length > 0)
-                ? eventConfig.examDates
-                : ["08/11/2026", "15/11/2026"];
+              const rawDate1 = eventConfig?.examDates?.[0];
+              const rawDate2 = eventConfig?.examDates?.[1];
+              const examDates = [
+                (rawDate1 && rawDate1 !== "01/11/2026" && rawDate1 !== "03/11/2024" && rawDate1 !== "03/11/2026") ? rawDate1 : "08/11/2026",
+                (rawDate2 && rawDate2 !== "08/11/2026" && rawDate2 !== "10/11/2024") ? rawDate2 : "15/11/2026"
+              ];
 
               // Only show presence confirmation when collaborator is authorized AND has an assigned active role (not reserve)
               if (isAuthorized && hasAssignedRole) {

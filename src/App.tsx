@@ -40,7 +40,9 @@ import {
   rejectCollaboratorTransfer,
   cancelCollaboratorTransfer,
   resolveSuperAdminAndClaProfile,
-  resetAllClaMessages
+  resetAllClaMessages,
+  normalizeEmail,
+  areEmailsMatching
 } from "./lib/db-services";
 
 import SuperAdminDash from "./components/SuperAdminDash";
@@ -332,10 +334,52 @@ export default function App() {
     }
   };
 
+  // Helper to determine if a collaborator is authorized to access the system
+  const isCollaboratorAuthorized = (collab: CollaboratorInfo | null | undefined): boolean => {
+    if (!collab) return false;
+    if (collab.status === "Recusado" || collab.status === "Cancelado" || (collab as any).status === "Desistente") {
+      return false;
+    }
+    const statusLower = (collab.status || "").toLowerCase().trim();
+    if (
+      statusLower === "confirmado" || 
+      statusLower === "aprovado" || 
+      statusLower === "homologado" || 
+      statusLower === "alocado" || 
+      statusLower === "convocado" || 
+      statusLower === "ativo" || 
+      statusLower === "autorizado" ||
+      statusLower === "atribuído"
+    ) {
+      return true;
+    }
+    // Has an assigned role (alocado em função)
+    if (collab.assignedRole && collab.assignedRole.trim() !== "") {
+      return true;
+    }
+    // Has an assigned room (alocado em sala)
+    if (collab.assignedRoom && collab.assignedRoom.trim() !== "") {
+      return true;
+    }
+    // Is designated as reserve
+    if (collab.isReserve === true) {
+      return true;
+    }
+    // Attendance confirmed
+    if (collab.attendanceStatus === "Confirmado") {
+      return true;
+    }
+    // Has claId and building association while not being purely pending without any assignment
+    if (collab.claId && collab.claId.trim() !== "" && statusLower !== "pendente") {
+      return true;
+    }
+    return false;
+  };
+
   // Helper to strictly validate and resolve authorized profiles
   const validateAndResolveUser = async (user: any): Promise<UserProfile | null> => {
     if (!user || !user.email) return null;
-    const email = user.email.toLowerCase().trim();
+    const email = (user.email || "").toLowerCase().trim();
 
     // 1. Enforce ONLY gmail.com domain login
     if (!email.endsWith("@gmail.com")) {
@@ -345,7 +389,7 @@ export default function App() {
     }
 
     // 2. SuperAdmin hardcoded authorized emails
-    const isSuperAdminEmail = email === "lipewmra@gmail.com" || email === "philippewagnermra@gmail.com";
+    const isSuperAdminEmail = areEmailsMatching(email, "lipewmra@gmail.com") || areEmailsMatching(email, "philippewagnermra@gmail.com");
     if (isSuperAdminEmail) {
       try {
         const profile = await resolveSuperAdminAndClaProfile(user);
@@ -404,10 +448,10 @@ export default function App() {
         return profile;
       }
 
-      // Colaborador is valid if registered in collaborators collection with status Confirmado or Aprovado
+      // Colaborador verification
       if (profile.role === "Colaborador") {
         const collab = await findCollaboratorByEmail(email);
-        const isApproved = collab && (collab.status === "Confirmado" || (collab as any).status === "Aprovado");
+        const isApproved = isCollaboratorAuthorized(collab);
         if (collab && isApproved) {
           if (!profile.hasAccessed || !profile.claId || (collab.claId && profile.claId !== collab.claId)) {
             profile.hasAccessed = true;
@@ -416,20 +460,35 @@ export default function App() {
           }
           return profile;
         }
+        if (profile.claId) {
+          return profile;
+        }
       }
 
-      // If user profile is not immediately confirmed as Colaborador, don't delete yet—let's check collaborators collection first
       profile = null;
     }
 
     // 6. Check if registered in collaborators collection
     const collabRecord = await findCollaboratorByEmail(email);
-    const isApprovedCollab = collabRecord && (collabRecord.status === "Confirmado" || (collabRecord as any).status === "Aprovado");
+    const isApprovedCollab = isCollaboratorAuthorized(collabRecord);
     
     if (collabRecord && isApprovedCollab) {
+      if (collabRecord.status !== "Confirmado" && collabRecord.id) {
+        try {
+          await updateCollaborator(collabRecord.id, { status: "Confirmado" });
+        } catch { /* ignore non-blocking */ }
+      }
+
+      const allCollabEmails = Array.from(new Set([
+        email,
+        collabRecord.email,
+        ...(Array.isArray((collabRecord as any).emails) ? (collabRecord as any).emails : [])
+      ].filter(Boolean)));
+
       profile = {
         uid: user.uid,
         email: email,
+        emails: allCollabEmails,
         name: collabRecord.name || user.displayName || "Colaborador ENEM",
         role: "Colaborador",
         roles: ["Colaborador"],
@@ -440,7 +499,7 @@ export default function App() {
       return profile;
     }
 
-    // 7. If collaborator exists but is still Pending approval by CLA
+    // 7. If collaborator exists but is still Pending approval by CLA (no allocation, no role)
     if (collabRecord && collabRecord.status === "Pendente") {
       await signOut(auth);
       setCurrentUser(null);
@@ -529,16 +588,15 @@ export default function App() {
           unsubUserProfileList = subscribeToUserProfile(user.uid, async (updatedProfile) => {
             if (active) {
               if (updatedProfile) {
-                // If the profile role is Colaborador, verify that their status is still Confirmado / Aprovado
+                // If the profile role is Colaborador, verify if explicitly revoked
                 if (updatedProfile.role === "Colaborador") {
                   const collab = await findCollaboratorByEmail(user.email);
-                  const isApproved = collab && (collab.status === "Confirmado" || (collab as any).status === "Aprovado");
-                  if (!collab || !isApproved) {
+                  if (collab && (collab.status === "Recusado" || collab.status === "Cancelado" || (collab as any).status === "Desistente")) {
                     await signOut(auth);
                     setCurrentUser(null);
                     setSelectedRole(null);
                     setUnregisteredNotice(
-                      `Acesso em análise: O cadastro associado ao e-mail "${user.email}" aguarda homologação e confirmação pela Coordenação (CLA).`
+                      `Acesso revogado: Seu cadastro foi marcado como recusado ou cancelado pela Coordenação.`
                     );
                     setIsPublicForm(false);
                     return;
@@ -675,10 +733,13 @@ export default function App() {
     };
   }, [authInitialized, effectiveUser?.uid, effectiveUser?.role, effectiveUser?.claId]);
 
-  // Sync individual status tatically from DB state
+  // Sync individual status statically from DB state
   useEffect(() => {
-    if (effectiveUser && effectiveUser.role === "Colaborador" && collaborators.length > 0) {
-      const rec = collaborators.find(c => c.email === effectiveUser.email);
+    if (effectiveUser && effectiveUser.role === "Colaborador" && (collaborators.length > 0 || allCollaborators.length > 0)) {
+      const activeEmail = (effectiveUser.email || "").toLowerCase().trim();
+      const rec = 
+        collaborators.find(c => areEmailsMatching(c.email, activeEmail) || ((c as any).emails || []).some((e: string) => areEmailsMatching(e, activeEmail))) ||
+        allCollaborators.find(c => areEmailsMatching(c.email, activeEmail) || ((c as any).emails || []).some((e: string) => areEmailsMatching(e, activeEmail)));
       if (rec) {
         const actualStatus = rec.attendanceStatus || (rec.status === "Confirmado" && rec.assignedRole ? "Confirmado" : rec.status);
         if (actualStatus !== individualConfirmationStatus) {
@@ -686,15 +747,16 @@ export default function App() {
         }
       }
     }
-  }, [effectiveUser?.role, effectiveUser?.email, collaborators, individualConfirmationStatus]);
+  }, [effectiveUser?.role, effectiveUser?.email, collaborators, allCollaborators, individualConfirmationStatus]);
 
   // Handler to update individual confirmation status
   const handleUpdateConfirmationStatus = async (status: "Pendente" | "Confirmado" | "Recusado", roleNameToRefuse?: string) => {
     if (!currentUser) return;
     setIndividualConfirmationStatus(status);
     const activeEmail = (currentUser.email || "").toLowerCase().trim();
-    const rec = collaborators.find(c => (c.email || "").toLowerCase().trim() === activeEmail) ||
-                allCollaborators.find(c => (c.email || "").toLowerCase().trim() === activeEmail);
+    const rec = 
+      collaborators.find(c => areEmailsMatching(c.email, activeEmail) || ((c as any).emails || []).some((e: string) => areEmailsMatching(e, activeEmail))) ||
+      allCollaborators.find(c => areEmailsMatching(c.email, activeEmail) || ((c as any).emails || []).some((e: string) => areEmailsMatching(e, activeEmail)));
     if (rec?.id) {
       if (status === "Recusado") {
         const refusedRoleName = roleNameToRefuse || rec.assignedRole || "Função Designada";
@@ -1813,8 +1875,8 @@ export default function App() {
         {effectiveRole === "Colaborador" && (() => {
           const activeCollabEmail = ((effectiveUser || currentUser)?.email || "").toLowerCase().trim();
           const resolvedCollabRecord = 
-            collaborators.find(c => (c.email || "").toLowerCase().trim() === activeCollabEmail || ((c as any).emails || []).some((e: string) => (e || "").toLowerCase().trim() === activeCollabEmail)) ||
-            allCollaborators.find(c => (c.email || "").toLowerCase().trim() === activeCollabEmail || ((c as any).emails || []).some((e: string) => (e || "").toLowerCase().trim() === activeCollabEmail)) ||
+            collaborators.find(c => areEmailsMatching(c.email, activeCollabEmail) || ((c as any).emails || []).some((e: string) => areEmailsMatching(e, activeCollabEmail))) ||
+            allCollaborators.find(c => areEmailsMatching(c.email, activeCollabEmail) || ((c as any).emails || []).some((e: string) => areEmailsMatching(e, activeCollabEmail))) ||
             null;
           const effectiveBuildingForCollab = building || allBuildings.find(b => b.claId === resolvedCollabRecord?.claId || b.id === resolvedCollabRecord?.buildingId) || null;
           const effectiveClaNameForCollab = resolvedClaName || effectiveBuildingForCollab?.claName || resolvedCollabRecord?.claName || "Coordenação do Local (CLA)";

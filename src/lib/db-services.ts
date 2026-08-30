@@ -73,6 +73,51 @@ export function cleanUndefined<T extends Record<string, any>>(obj: T): T {
 }
 
 // ==========================================
+// 0. Email Normalization & Matching Helpers
+// ==========================================
+
+export function normalizeEmail(email: string | null | undefined): string {
+  if (!email) return "";
+  let clean = String(email).toLowerCase().trim().replace(/[\u200B-\u200D\uFEFF]/g, ""); // remove zero-width / hidden chars
+  clean = clean.replace(/\s+/g, ""); // remove internal whitespace
+  
+  if (clean.includes("@")) {
+    const [user, domain] = clean.split("@");
+    let normDomain = domain;
+    if (normDomain === "googlemail.com") normDomain = "gmail.com";
+    if (normDomain === "gmail.com") {
+      // Remove dots and plus-tag addressing for gmail accounts
+      const cleanUser = user.replace(/\./g, "").split("+")[0];
+      return `${cleanUser}@${normDomain}`;
+    }
+    return `${user}@${normDomain}`;
+  }
+  return clean;
+}
+
+export function areEmailsMatching(emailA: string | null | undefined, emailB: string | null | undefined): boolean {
+  if (!emailA || !emailB) return false;
+  const rawA = String(emailA).toLowerCase().trim();
+  const rawB = String(emailB).toLowerCase().trim();
+  if (rawA === rawB) return true;
+  
+  const normA = normalizeEmail(rawA);
+  const normB = normalizeEmail(rawB);
+  if (normA && normB && normA === normB) return true;
+  
+  // Check if both are Gmail and the base username matches
+  const [userA, domainA] = rawA.split("@");
+  const [userB, domainB] = rawB.split("@");
+  if (domainA?.includes("gmail") && domainB?.includes("gmail")) {
+    const cleanUserA = (userA || "").replace(/[\._\-+]/g, "").replace(/\d+$/, "");
+    const cleanUserB = (userB || "").replace(/[\._\-+]/g, "").replace(/\d+$/, "");
+    if (cleanUserA && cleanUserB && cleanUserA.length >= 4 && cleanUserA === cleanUserB) return true;
+  }
+  
+  return false;
+}
+
+// ==========================================
 // 1. User Profiles & Auth Service
 // ==========================================
 
@@ -287,13 +332,14 @@ export async function deleteUserProfile(uid: string): Promise<void> {
 // Find user profile by email
 export async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
   const path = "users";
-  const targetEmail = email.toLowerCase().trim();
+  const targetEmail = (email || "").toLowerCase().trim();
+  if (!targetEmail) return null;
 
   // Try cached users first
   const allCached = getLocalCache<UserProfile[]>("all_users", []);
   const cachedMatch = allCached.find(u => 
-    (u.email || "").toLowerCase().trim() === targetEmail || 
-    (u.emails || []).some(e => (e || "").toLowerCase().trim() === targetEmail)
+    areEmailsMatching(u.email, targetEmail) || 
+    (u.emails || []).some(e => areEmailsMatching(e, targetEmail))
   );
   if (cachedMatch) return cachedMatch;
 
@@ -311,6 +357,16 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile 
       const uData = { ...snap2.docs[0].data() } as UserProfile;
       setLocalCache(`user_${uData.uid}`, uData);
       return uData;
+    }
+
+    // Fallback scan across users collection with flexible matching
+    const allUsersSnap = await getDocs(collection(db, "users"));
+    for (const docSnap of allUsersSnap.docs) {
+      const u = docSnap.data() as UserProfile;
+      if (areEmailsMatching(u.email, targetEmail) || (u.emails || []).some(e => areEmailsMatching(e, targetEmail))) {
+        setLocalCache(`user_${u.uid}`, u);
+        return u;
+      }
     }
     return null;
   } catch (error) {
@@ -332,7 +388,7 @@ export async function createPreRegisteredUser(profile: Omit<UserProfile, "uid"> 
 
     const finalProfile: UserProfile = { 
       ...profile, 
-      uid: userRef.id,
+      uid: userRef.id, 
       email: primary,
       emails: allEmails
     };
@@ -361,8 +417,8 @@ export async function claimProfileByEmail(email: string, newUid: string): Promis
   // Check local cache first
   const allUsers = getLocalCache<UserProfile[]>("all_users", []);
   const cachedMatch = allUsers.find(u => 
-    (u.email || "").toLowerCase().trim() === targetEmail || 
-    (u.emails || []).some(e => (e || "").toLowerCase().trim() === targetEmail)
+    areEmailsMatching(u.email, targetEmail) || 
+    (u.emails || []).some(e => areEmailsMatching(e, targetEmail))
   );
 
   try {
@@ -378,10 +434,8 @@ export async function claimProfileByEmail(email: string, newUid: string): Promis
       const allUsersSnap = await getDocs(collection(db, "users"));
       const matchedDoc = allUsersSnap.docs.find(d => {
         const u = d.data() as UserProfile;
-        const uEmail = (u.email || "").toLowerCase().trim();
-        if (uEmail === targetEmail) return true;
-        const uEmails: string[] = (u.emails || []).map(e => (e || "").toLowerCase().trim());
-        return uEmails.includes(targetEmail);
+        if (areEmailsMatching(u.email, targetEmail)) return true;
+        return (u.emails || []).some(e => areEmailsMatching(e, targetEmail));
       });
       if (matchedDoc) {
         snap = { empty: false, docs: [matchedDoc] } as any;
@@ -550,6 +604,10 @@ export async function getEventConfig(): Promise<EventConfigInfo | null> {
     if (!snap.empty) {
       const docVal = snap.docs[0];
       const data = { id: docVal.id, ...docVal.data() } as EventConfigInfo;
+      // Ensure exam dates are consistently [08/11/2026, 15/11/2026] if not specified or outdated
+      if (!data.examDates || data.examDates.length === 0 || data.examDates[0] === "01/11/2026" || data.examDates[0] === "03/11/2024" || data.examDates[0] === "03/11/2026") {
+        data.examDates = ["08/11/2026", "15/11/2026"];
+      }
       setLocalCache("event_config", data);
       return data;
     }
@@ -563,6 +621,10 @@ export async function getEventConfig(): Promise<EventConfigInfo | null> {
 export async function saveEventConfig(config: Omit<EventConfigInfo, "id"> & { id?: string }): Promise<string> {
   const path = "eventConfigs";
   const cleaned = cleanUndefined(config);
+  // Ensure examDates are sanitized
+  if (!cleaned.examDates || cleaned.examDates.length === 0 || cleaned.examDates[0] === "01/11/2026" || cleaned.examDates[0] === "03/11/2024" || cleaned.examDates[0] === "03/11/2026") {
+    cleaned.examDates = ["08/11/2026", "15/11/2026"];
+  }
   const cfgId = cleaned.id || "default_event_config";
   const fullData: EventConfigInfo = { id: cfgId, ...cleaned };
   
@@ -590,6 +652,9 @@ export function subscribeToEventConfig(onUpdate: (config: EventConfigInfo | null
 
   const cached = getLocalCache<EventConfigInfo | null>(cacheKey, null);
   if (cached) {
+    if (!cached.examDates || cached.examDates.length === 0 || cached.examDates[0] === "01/11/2026" || cached.examDates[0] === "03/11/2024" || cached.examDates[0] === "03/11/2026") {
+      cached.examDates = ["08/11/2026", "15/11/2026"];
+    }
     onUpdate(cached);
   }
 
@@ -598,6 +663,9 @@ export function subscribeToEventConfig(onUpdate: (config: EventConfigInfo | null
     if (!snapshot.empty) {
       const docVal = snapshot.docs[0];
       const data = { id: docVal.id, ...docVal.data() } as EventConfigInfo;
+      if (!data.examDates || data.examDates.length === 0 || data.examDates[0] === "01/11/2026" || data.examDates[0] === "03/11/2024" || data.examDates[0] === "03/11/2026") {
+        data.examDates = ["08/11/2026", "15/11/2026"];
+      }
       setLocalCache(cacheKey, data);
       onUpdate(data);
     } else {
@@ -706,13 +774,12 @@ export async function findCollaboratorByEmail(email: string): Promise<Collaborat
   const targetEmail = (email || "").toLowerCase().trim();
   if (!targetEmail) return null;
 
-  // Search local cache first
+  // Search local cache first with flexible email matching
   const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
   const cachedMatch = allCollabs.find(c => {
-    const cEmail = (c.email || "").toLowerCase().trim();
-    if (cEmail === targetEmail) return true;
+    if (areEmailsMatching(c.email, targetEmail)) return true;
     const cEmails: string[] = (c as any).emails || [];
-    return cEmails.some(e => (e || "").toLowerCase().trim() === targetEmail);
+    return cEmails.some(e => areEmailsMatching(e, targetEmail));
   });
   if (cachedMatch) return cachedMatch;
 
@@ -723,31 +790,44 @@ export async function findCollaboratorByEmail(email: string): Promise<Collaborat
     if (!snap.empty) {
       const docVal = snap.docs[0];
       const data = { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
-      return data;
+      return postProcessCollabMatch(data, targetEmail);
     }
 
-    // 2. Query where emails array contains targetEmail
+    // 2. Direct normalized email match
+    const normEmail = normalizeEmail(targetEmail);
+    if (normEmail && normEmail !== targetEmail) {
+      try {
+        const qNorm = query(collection(db, "collaborators"), where("email", "==", normEmail));
+        const snapNorm = await getDocs(qNorm);
+        if (!snapNorm.empty) {
+          const docVal = snapNorm.docs[0];
+          const data = { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
+          return postProcessCollabMatch(data, targetEmail);
+        }
+      } catch { /* ignore */ }
+    }
+
+    // 3. Query where emails array contains targetEmail
     try {
       q = query(collection(db, "collaborators"), where("emails", "array-contains", targetEmail));
       snap = await getDocs(q);
       if (!snap.empty) {
         const docVal = snap.docs[0];
         const data = { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
-        return data;
+        return postProcessCollabMatch(data, targetEmail);
       }
     } catch { /* array-contains index fallback */ }
 
-    // 3. Fallback scan across all collaborators to guarantee case-insensitive & trimmed matching
+    // 4. Fallback scan across all collaborators to guarantee flexible & trimmed matching
     const allSnap = await getDocs(collection(db, "collaborators"));
     for (const docVal of allSnap.docs) {
       const data = { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
-      const cEmail = (data.email || "").toLowerCase().trim();
-      if (cEmail === targetEmail) {
-        return data;
+      if (areEmailsMatching(data.email, targetEmail)) {
+        return postProcessCollabMatch(data, targetEmail);
       }
       const cEmails: string[] = (data as any).emails || [];
-      if (cEmails.some(e => (e || "").toLowerCase().trim() === targetEmail)) {
-        return data;
+      if (cEmails.some(e => areEmailsMatching(e, targetEmail))) {
+        return postProcessCollabMatch(data, targetEmail);
       }
     }
 
@@ -756,6 +836,42 @@ export async function findCollaboratorByEmail(email: string): Promise<Collaborat
     handleFirestoreError(error, OperationType.GET, path);
     return cachedMatch || null;
   }
+}
+
+// Helper to auto-upgrade status to Confirmado if allocated and ensure emails list has active login
+async function postProcessCollabMatch(data: CollaboratorInfo, activeLoginEmail: string): Promise<CollaboratorInfo> {
+  const isAllocatedOrConfirmed = 
+    (data.assignedRole && data.assignedRole.trim() !== "") ||
+    (data.assignedRoom && data.assignedRoom.trim() !== "") ||
+    data.isReserve === true ||
+    data.attendanceStatus === "Confirmado" ||
+    data.status === "Confirmado" ||
+    (data as any).status === "Aprovado";
+
+  let needsSave = false;
+  const updates: Partial<CollaboratorInfo> = {};
+
+  if (isAllocatedOrConfirmed && data.status !== "Confirmado" && data.status !== "Recusado") {
+    data.status = "Confirmado";
+    updates.status = "Confirmado";
+    needsSave = true;
+  }
+
+  const existingEmails = Array.isArray((data as any).emails) ? (data as any).emails : [];
+  if (!existingEmails.some((e: string) => areEmailsMatching(e, activeLoginEmail)) && !areEmailsMatching(data.email, activeLoginEmail)) {
+    const updatedEmails = Array.from(new Set([...existingEmails, activeLoginEmail, data.email].filter(Boolean)));
+    (data as any).emails = updatedEmails;
+    updates.emails = updatedEmails;
+    needsSave = true;
+  }
+
+  if (needsSave && data.id) {
+    try {
+      await updateDoc(doc(db, "collaborators", data.id), cleanUndefined(updates));
+    } catch { /* ignore non-blocking */ }
+  }
+
+  return data;
 }
 
 export async function findCollaboratorByCpf(cpf: string): Promise<CollaboratorInfo | null> {

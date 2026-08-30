@@ -44,8 +44,10 @@ export default function AttendanceListView({
   const [batchLoading, setBatchLoading] = useState(false);
 
   // Exam Dates & Themes
-  const examDay1Label = eventConfig?.examDates?.[0] || "01/11/2026";
-  const examDay2Label = eventConfig?.examDates?.[1] || "08/11/2026";
+  const rawDay1 = eventConfig?.examDates?.[0];
+  const rawDay2 = eventConfig?.examDates?.[1];
+  const examDay1Label = (rawDay1 && rawDay1 !== "01/11/2026" && rawDay1 !== "03/11/2024" && rawDay1 !== "03/11/2026") ? rawDay1 : "08/11/2026";
+  const examDay2Label = (rawDay2 && rawDay2 !== "08/11/2026" && rawDay2 !== "10/11/2024") ? rawDay2 : "15/11/2026";
 
   // Filter ONLY allocated collaborators (allocated to a role or room) and sort alphabetically
   const allocatedCollaborators = useMemo(() => {
