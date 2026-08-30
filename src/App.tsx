@@ -404,46 +404,55 @@ export default function App() {
         return profile;
       }
 
-      // Colaborador is valid ONLY if registered in collaborators collection with status Confirmado
+      // Colaborador is valid if registered in collaborators collection with status Confirmado or Aprovado
       if (profile.role === "Colaborador") {
         const collab = await findCollaboratorByEmail(email);
-        if (collab && collab.status === "Confirmado" && (collab.claId === profile.claId || !profile.claId)) {
-          if (!profile.hasAccessed || !profile.claId) {
+        const isApproved = collab && (collab.status === "Confirmado" || (collab as any).status === "Aprovado");
+        if (collab && isApproved) {
+          if (!profile.hasAccessed || !profile.claId || (collab.claId && profile.claId !== collab.claId)) {
             profile.hasAccessed = true;
-            profile.claId = collab.claId;
+            profile.claId = collab.claId || profile.claId || "";
             await saveUserProfile(profile);
           }
           return profile;
         }
       }
 
-      // If we reach here, this profile was an invalid, unconfirmed, or orphaned profile.
-      // Delete the invalid profile from Firestore so it no longer grants access!
-      try {
-        await deleteUserProfile(user.uid);
-      } catch (err) {
-        console.warn("Could not delete orphan profile:", err);
-      }
+      // If user profile is not immediately confirmed as Colaborador, don't delete yet—let's check collaborators collection first
       profile = null;
     }
 
-    // 6. Check if registered in collaborators collection with status Confirmado
+    // 6. Check if registered in collaborators collection
     const collabRecord = await findCollaboratorByEmail(email);
-    if (collabRecord && collabRecord.claId && collabRecord.status === "Confirmado") {
+    const isApprovedCollab = collabRecord && (collabRecord.status === "Confirmado" || (collabRecord as any).status === "Aprovado");
+    
+    if (collabRecord && isApprovedCollab) {
       profile = {
         uid: user.uid,
         email: email,
         name: collabRecord.name || user.displayName || "Colaborador ENEM",
         role: "Colaborador",
         roles: ["Colaborador"],
-        claId: collabRecord.claId,
+        claId: collabRecord.claId || "",
         hasAccessed: true,
       };
       await saveUserProfile(profile);
       return profile;
     }
 
-    // 7. USER IS UNREGISTERED OR NOT YET APPROVED: block access, sign out, and redirect to public fiscal form
+    // 7. If collaborator exists but is still Pending approval by CLA
+    if (collabRecord && collabRecord.status === "Pendente") {
+      await signOut(auth);
+      setCurrentUser(null);
+      setSelectedRole(null);
+      setUnregisteredNotice(
+        `Cadastro em Análise: Olá, ${collabRecord.name}! Sua inscrição foi registrada e está aguardando homologação e autorização pela Coordenação (CLA). Assim que for aprovada pelo CLA, seu acesso ao ambiente do Colaborador será liberado com este mesmo e-mail Google (${email}).`
+      );
+      setIsPublicForm(false);
+      return null;
+    }
+
+    // 8. USER IS UNREGISTERED: block access, sign out, and redirect to public fiscal form
     await signOut(auth);
     setCurrentUser(null);
     setSelectedRole(null);
@@ -520,17 +529,18 @@ export default function App() {
           unsubUserProfileList = subscribeToUserProfile(user.uid, async (updatedProfile) => {
             if (active) {
               if (updatedProfile) {
-                // If the profile role is Colaborador, verify that their status is still Confirmado
+                // If the profile role is Colaborador, verify that their status is still Confirmado / Aprovado
                 if (updatedProfile.role === "Colaborador") {
                   const collab = await findCollaboratorByEmail(user.email);
-                  if (!collab || collab.status !== "Confirmado") {
+                  const isApproved = collab && (collab.status === "Confirmado" || (collab as any).status === "Aprovado");
+                  if (!collab || !isApproved) {
                     await signOut(auth);
                     setCurrentUser(null);
                     setSelectedRole(null);
                     setUnregisteredNotice(
-                      `Acesso revogado: O cadastro associado ao e-mail "${user.email}" não se encontra com status Confirmado.`
+                      `Acesso em análise: O cadastro associado ao e-mail "${user.email}" aguarda homologação e confirmação pela Coordenação (CLA).`
                     );
-                    setIsPublicForm(true);
+                    setIsPublicForm(false);
                     return;
                   }
                 }
@@ -682,7 +692,9 @@ export default function App() {
   const handleUpdateConfirmationStatus = async (status: "Pendente" | "Confirmado" | "Recusado", roleNameToRefuse?: string) => {
     if (!currentUser) return;
     setIndividualConfirmationStatus(status);
-    const rec = collaborators.find(c => c.email === currentUser.email);
+    const activeEmail = (currentUser.email || "").toLowerCase().trim();
+    const rec = collaborators.find(c => (c.email || "").toLowerCase().trim() === activeEmail) ||
+                allCollaborators.find(c => (c.email || "").toLowerCase().trim() === activeEmail);
     if (rec?.id) {
       if (status === "Recusado") {
         const refusedRoleName = roleNameToRefuse || rec.assignedRole || "Função Designada";
@@ -718,7 +730,9 @@ export default function App() {
   // Handler to update collaborator details
   const handleUpdateCollaboratorProfile = async (updates: Partial<CollaboratorInfo>) => {
     if (!currentUser) return;
-    const rec = collaborators.find(c => c.email === currentUser.email);
+    const activeEmail = (currentUser.email || "").toLowerCase().trim();
+    const rec = collaborators.find(c => (c.email || "").toLowerCase().trim() === activeEmail) ||
+                allCollaborators.find(c => (c.email || "").toLowerCase().trim() === activeEmail);
     if (rec?.id) {
       await updateCollaborator(rec.id, updates);
     }
@@ -1796,20 +1810,30 @@ export default function App() {
         {/* ========================================================= */}
         {/* CASE 3: CANDIDATE COLLABORATOR INDIVIDUAL PORTAL          */}
         {/* ========================================================= */}
-        {effectiveRole === "Colaborador" && (
-          <CollaboratorDashboard
-            currentUser={effectiveUser || currentUser}
-            building={building}
-            catering={catering}
-            collaboratorRecord={collaborators.find(c => c.email === (effectiveUser || currentUser).email) || null}
-            individualConfirmationStatus={individualConfirmationStatus}
-            onUpdateConfirmationStatus={handleUpdateConfirmationStatus}
-            onUpdateProfile={handleUpdateCollaboratorProfile}
-            onSaveBuilding={saveBuilding}
-            eventConfig={eventConfig}
-            claName={resolvedClaName}
-          />
-        )}
+        {effectiveRole === "Colaborador" && (() => {
+          const activeCollabEmail = ((effectiveUser || currentUser)?.email || "").toLowerCase().trim();
+          const resolvedCollabRecord = 
+            collaborators.find(c => (c.email || "").toLowerCase().trim() === activeCollabEmail || ((c as any).emails || []).some((e: string) => (e || "").toLowerCase().trim() === activeCollabEmail)) ||
+            allCollaborators.find(c => (c.email || "").toLowerCase().trim() === activeCollabEmail || ((c as any).emails || []).some((e: string) => (e || "").toLowerCase().trim() === activeCollabEmail)) ||
+            null;
+          const effectiveBuildingForCollab = building || allBuildings.find(b => b.claId === resolvedCollabRecord?.claId || b.id === resolvedCollabRecord?.buildingId) || null;
+          const effectiveClaNameForCollab = resolvedClaName || effectiveBuildingForCollab?.claName || resolvedCollabRecord?.claName || "Coordenação do Local (CLA)";
+
+          return (
+            <CollaboratorDashboard
+              currentUser={effectiveUser || currentUser}
+              building={effectiveBuildingForCollab}
+              catering={catering}
+              collaboratorRecord={resolvedCollabRecord}
+              individualConfirmationStatus={individualConfirmationStatus}
+              onUpdateConfirmationStatus={handleUpdateConfirmationStatus}
+              onUpdateProfile={handleUpdateCollaboratorProfile}
+              onSaveBuilding={saveBuilding}
+              eventConfig={eventConfig}
+              claName={effectiveClaNameForCollab}
+            />
+          );
+        })()}
           </>
         )}
 

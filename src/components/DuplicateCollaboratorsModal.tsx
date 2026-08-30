@@ -274,7 +274,7 @@ export default function DuplicateCollaboratorsModal({
       // 5. Consolidate status & role details
       const assignedRole = group.collaborators.find(c => Boolean(c.assignedRole))?.assignedRole || primaryCollab.assignedRole || "";
       const assignedRoom = group.collaborators.find(c => Boolean(c.assignedRoom))?.assignedRoom || primaryCollab.assignedRoom || "";
-      const isConfirmed = group.collaborators.some(c => c.status === "Confirmado");
+      const isConfirmed = group.collaborators.some(c => c.status === "Confirmado" || (c as any).status === "Aprovado");
       const isAttendanceConfirmed = group.collaborators.some(c => c.attendanceStatus === "Confirmado");
       const specialRole = group.collaborators.find(c => c.specialRole && c.specialRole !== "Nenhuma")?.specialRole || primaryCollab.specialRole || "Nenhuma";
       const disability = group.collaborators.find(c => c.disability && c.disability !== "Nenhuma")?.disability || primaryCollab.disability || "Nenhuma";
@@ -282,19 +282,30 @@ export default function DuplicateCollaboratorsModal({
       const snackPreference = group.collaborators.find(c => Boolean(c.snackPreference))?.snackPreference || primaryCollab.snackPreference || "Padrão";
       const pixKey = group.collaborators.find(c => Boolean(c.pixKey))?.pixKey || primaryCollab.pixKey || primaryCollab.cpf;
       const referencePerson = group.collaborators.find(c => Boolean(c.referencePerson))?.referencePerson || primaryCollab.referencePerson || "";
+      const claId = group.collaborators.find(c => Boolean(c.claId))?.claId || primaryCollab.claId || "";
+      const buildingId = group.collaborators.find(c => Boolean(c.buildingId))?.buildingId || primaryCollab.buildingId || "";
 
-      // 6. Best formatting for core strings
+      // 6. Best formatting for core strings - prioritize @gmail.com for seamless login
       const name = group.collaborators.reduce((prev, curr) => (curr.name.length > prev.length ? curr.name : prev), primaryCollab.name);
-      const email = group.collaborators.find(c => c.email && c.email.includes("@"))?.email || primaryCollab.email || "";
+      
+      const allEmails = Array.from(new Set(
+        group.collaborators
+          .map(c => (c.email || "").toLowerCase().trim())
+          .filter(e => Boolean(e) && e.includes("@"))
+      ));
+      const gmailEmail = allEmails.find(e => e.endsWith("@gmail.com"));
+      const bestEmail = (gmailEmail || allEmails[0] || primaryCollab.email || "").toLowerCase().trim();
+
       const whatsapp = group.collaborators.find(c => cleanDigits(c.whatsapp).length >= 10)?.whatsapp || primaryCollab.whatsapp || "";
       const birthDate = group.collaborators.find(c => Boolean(c.birthDate))?.birthDate || primaryCollab.birthDate || "";
       const cpf = group.collaborators.find(c => cleanDigits(c.cpf).length === 11)?.cpf || primaryCollab.cpf;
 
       // 7. Update primary record with consolidated fields
-      const updates: Partial<CollaboratorInfo> = {
+      const updates: Partial<CollaboratorInfo> & Record<string, any> = {
         name,
         cpf,
-        email,
+        email: bestEmail,
+        emails: allEmails,
         whatsapp,
         birthDate,
         pixKey,
@@ -308,6 +319,8 @@ export default function DuplicateCollaboratorsModal({
         foodRestrictions,
         snackPreference,
         referencePerson,
+        claId,
+        buildingId,
         pastEditions: consolidatedEditions,
         hasWorkedEnem: consolidatedEditions.length > 0 || group.collaborators.some(c => c.hasWorkedEnem),
         languages: Array.from(langSet)
@@ -324,7 +337,7 @@ export default function DuplicateCollaboratorsModal({
         }
       }
 
-      setActionSuccessMsg(`Grupo mesclado com sucesso! Mantido cadastro de "${name}" com fotos e dados consolidados.`);
+      setActionSuccessMsg(`Grupo mesclado com sucesso! Mantido cadastro de "${name}" com status ${isConfirmed ? "Autorizado/Confirmado" : primaryCollab.status} e dados sincronizados.`);
       setTimeout(() => setActionSuccessMsg(null), 4000);
     } catch (err) {
       console.error("Erro ao mesclar grupo de duplicatas:", err);
@@ -336,7 +349,7 @@ export default function DuplicateCollaboratorsModal({
 
   /**
    * Delete specific selected duplicates and keep the chosen one,
-   * ALWAYS PRESERVING PHOTOS to the winner if any existed in the discarded ones!
+   * ALWAYS PRESERVING PHOTOS, EMAILS, ROLES, AND CONFIRMED STATUS to the winner!
    */
   const handleDeleteSelectedInGroup = async (group: DuplicateGroup) => {
     const chosenWinnerId = selectedPrimaryMap[group.id] || group.collaborators[group.recommendedIndex]?.id || group.collaborators[0].id!;
@@ -355,31 +368,49 @@ export default function DuplicateCollaboratorsModal({
       return;
     }
 
-    if (!confirm(`Confirma a exclusão de ${collabsToDelete.length} cadastro(s) duplicado(s), mantendo "${winnerCollab.name}"? Fotos e dados essenciais serão preservados no cadastro mantido.`)) {
+    if (!confirm(`Confirma a exclusão de ${collabsToDelete.length} cadastro(s) duplicado(s), mantendo "${winnerCollab.name}"? Fotos, status de aprovação e e-mail Google serão preservados no cadastro mantido.`)) {
       return;
     }
 
     setIsProcessing(true);
 
     try {
-      // Check if any collaborator to be deleted has a photo while winner has none
+      const allGroupCollabs = [winnerCollab, ...collabsToDelete];
+      const missingUpdates: Partial<CollaboratorInfo> & Record<string, any> = {};
+
+      // 1. Preserve photo
       let updatedPhoto = winnerCollab.photoUrl;
       if (!updatedPhoto) {
         const photoDonor = collabsToDelete.find(c => Boolean(c.photoUrl));
         if (photoDonor?.photoUrl) {
           updatedPhoto = photoDonor.photoUrl;
+          missingUpdates.photoUrl = updatedPhoto;
         }
       }
 
-      // Fill in any missing vital fields in winner from deleted records
-      const missingUpdates: Partial<CollaboratorInfo> = {};
-      if (updatedPhoto && updatedPhoto !== winnerCollab.photoUrl) {
-        missingUpdates.photoUrl = updatedPhoto;
+      // 2. Preserve confirmed status if ANY record was confirmed
+      const isConfirmed = allGroupCollabs.some(c => c.status === "Confirmado" || (c as any).status === "Aprovado");
+      if (isConfirmed && winnerCollab.status !== "Confirmado") {
+        missingUpdates.status = "Confirmado";
       }
-      if (!winnerCollab.email) {
-        const foundEmail = collabsToDelete.find(c => Boolean(c.email))?.email;
-        if (foundEmail) missingUpdates.email = foundEmail;
+
+      // 3. Preserve best email, prioritizing @gmail.com
+      const allEmails = Array.from(new Set(
+        allGroupCollabs
+          .map(c => (c.email || "").toLowerCase().trim())
+          .filter(e => Boolean(e) && e.includes("@"))
+      ));
+      const gmailEmail = allEmails.find(e => e.endsWith("@gmail.com"));
+      const winnerCurrentEmail = (winnerCollab.email || "").toLowerCase().trim();
+      const bestEmail = gmailEmail || winnerCurrentEmail || allEmails[0] || "";
+      if (bestEmail && bestEmail !== winnerCurrentEmail) {
+        missingUpdates.email = bestEmail;
       }
+      if (allEmails.length > 0) {
+        missingUpdates.emails = allEmails;
+      }
+
+      // 4. Preserve whatsapp, pixKey, roles, claId
       if (!winnerCollab.whatsapp) {
         const foundPhone = collabsToDelete.find(c => Boolean(c.whatsapp))?.whatsapp;
         if (foundPhone) missingUpdates.whatsapp = foundPhone;
@@ -387,6 +418,22 @@ export default function DuplicateCollaboratorsModal({
       if (!winnerCollab.pixKey) {
         const foundPix = collabsToDelete.find(c => Boolean(c.pixKey))?.pixKey;
         if (foundPix) missingUpdates.pixKey = foundPix;
+      }
+      if (!winnerCollab.assignedRole) {
+        const foundRole = collabsToDelete.find(c => Boolean(c.assignedRole))?.assignedRole;
+        if (foundRole) missingUpdates.assignedRole = foundRole;
+      }
+      if (!winnerCollab.assignedRoom) {
+        const foundRoom = collabsToDelete.find(c => Boolean(c.assignedRoom))?.assignedRoom;
+        if (foundRoom) missingUpdates.assignedRoom = foundRoom;
+      }
+      if (!winnerCollab.claId) {
+        const foundCla = collabsToDelete.find(c => Boolean(c.claId))?.claId;
+        if (foundCla) missingUpdates.claId = foundCla;
+      }
+      if (!winnerCollab.buildingId) {
+        const foundBld = collabsToDelete.find(c => Boolean(c.buildingId))?.buildingId;
+        if (foundBld) missingUpdates.buildingId = foundBld;
       }
 
       if (Object.keys(missingUpdates).length > 0 && winnerCollab.id) {
@@ -400,7 +447,7 @@ export default function DuplicateCollaboratorsModal({
         }
       }
 
-      setActionSuccessMsg(`${collabsToDelete.length} cadastro(s) duplicado(s) removido(s). Cadastro de "${winnerCollab.name}" preservado com sucesso.`);
+      setActionSuccessMsg(`${collabsToDelete.length} cadastro(s) duplicado(s) removido(s). Cadastro de "${winnerCollab.name}" atualizado e preservado com sucesso.`);
       setTimeout(() => setActionSuccessMsg(null), 4000);
     } catch (err) {
       console.error("Erro ao excluir duplicatas:", err);

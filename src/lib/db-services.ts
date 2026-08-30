@@ -355,7 +355,8 @@ export async function createPreRegisteredUser(profile: Omit<UserProfile, "uid"> 
 // Claim draft profiles on Google Auth login
 export async function claimProfileByEmail(email: string, newUid: string): Promise<UserProfile | null> {
   const path = "users";
-  const targetEmail = email.toLowerCase().trim();
+  const targetEmail = (email || "").toLowerCase().trim();
+  if (!targetEmail) return null;
 
   // Check local cache first
   const allUsers = getLocalCache<UserProfile[]>("all_users", []);
@@ -367,8 +368,26 @@ export async function claimProfileByEmail(email: string, newUid: string): Promis
   try {
     let snap = await getDocs(query(collection(db, "users"), where("email", "==", targetEmail)));
     if (snap.empty) {
-      snap = await getDocs(query(collection(db, "users"), where("emails", "array-contains", targetEmail)));
+      try {
+        snap = await getDocs(query(collection(db, "users"), where("emails", "array-contains", targetEmail)));
+      } catch { /* ignore */ }
     }
+    
+    // If not found directly, scan users collection for case-insensitive match
+    if (snap.empty) {
+      const allUsersSnap = await getDocs(collection(db, "users"));
+      const matchedDoc = allUsersSnap.docs.find(d => {
+        const u = d.data() as UserProfile;
+        const uEmail = (u.email || "").toLowerCase().trim();
+        if (uEmail === targetEmail) return true;
+        const uEmails: string[] = (u.emails || []).map(e => (e || "").toLowerCase().trim());
+        return uEmails.includes(targetEmail);
+      });
+      if (matchedDoc) {
+        snap = { empty: false, docs: [matchedDoc] } as any;
+      }
+    }
+
     if (!snap.empty) {
       const firstDoc = snap.docs[0];
       const data = firstDoc.data() as UserProfile;
@@ -685,19 +704,77 @@ export function subscribeToAllBuildings(onUpdate: (buildings: BuildingInfo[]) =>
 export async function findCollaboratorByEmail(email: string): Promise<CollaboratorInfo | null> {
   const path = "collaborators";
   const targetEmail = (email || "").toLowerCase().trim();
+  if (!targetEmail) return null;
 
   // Search local cache first
   const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
-  const cachedMatch = allCollabs.find(c => (c.email || "").toLowerCase().trim() === targetEmail);
+  const cachedMatch = allCollabs.find(c => {
+    const cEmail = (c.email || "").toLowerCase().trim();
+    if (cEmail === targetEmail) return true;
+    const cEmails: string[] = (c as any).emails || [];
+    return cEmails.some(e => (e || "").toLowerCase().trim() === targetEmail);
+  });
   if (cachedMatch) return cachedMatch;
 
   try {
-    const q = query(collection(db, "collaborators"), where("email", "==", targetEmail));
-    const snap = await getDocs(q);
+    // 1. Direct lowercase email match
+    let q = query(collection(db, "collaborators"), where("email", "==", targetEmail));
+    let snap = await getDocs(q);
     if (!snap.empty) {
       const docVal = snap.docs[0];
       const data = { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
       return data;
+    }
+
+    // 2. Query where emails array contains targetEmail
+    try {
+      q = query(collection(db, "collaborators"), where("emails", "array-contains", targetEmail));
+      snap = await getDocs(q);
+      if (!snap.empty) {
+        const docVal = snap.docs[0];
+        const data = { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
+        return data;
+      }
+    } catch { /* array-contains index fallback */ }
+
+    // 3. Fallback scan across all collaborators to guarantee case-insensitive & trimmed matching
+    const allSnap = await getDocs(collection(db, "collaborators"));
+    for (const docVal of allSnap.docs) {
+      const data = { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
+      const cEmail = (data.email || "").toLowerCase().trim();
+      if (cEmail === targetEmail) {
+        return data;
+      }
+      const cEmails: string[] = (data as any).emails || [];
+      if (cEmails.some(e => (e || "").toLowerCase().trim() === targetEmail)) {
+        return data;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+    return cachedMatch || null;
+  }
+}
+
+export async function findCollaboratorByCpf(cpf: string): Promise<CollaboratorInfo | null> {
+  const path = "collaborators";
+  const targetCpf = (cpf || "").replace(/\D/g, "");
+  if (!targetCpf || targetCpf.length < 11) return null;
+
+  // Search local cache first
+  const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
+  const cachedMatch = allCollabs.find(c => (c.cpf || "").replace(/\D/g, "") === targetCpf);
+  if (cachedMatch) return cachedMatch;
+
+  try {
+    const allSnap = await getDocs(collection(db, "collaborators"));
+    for (const docVal of allSnap.docs) {
+      const data = { id: docVal.id, ...docVal.data() } as CollaboratorInfo;
+      if ((data.cpf || "").replace(/\D/g, "") === targetCpf) {
+        return data;
+      }
     }
     return null;
   } catch (error) {
@@ -757,7 +834,13 @@ export function subscribeToAllCollaborators(onUpdate: (collabs: CollaboratorInfo
 export async function addCollaborator(collab: Omit<CollaboratorInfo, "id">): Promise<string> {
   const path = "collaborators";
   const tempId = `collab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const fullCollab: CollaboratorInfo = { id: tempId, ...collab };
+  
+  const normalizedEmail = (collab.email || "").toLowerCase().trim();
+  const fullCollab: CollaboratorInfo = { 
+    id: tempId, 
+    ...collab,
+    email: normalizedEmail
+  };
 
   // Optimistic cache update
   const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
@@ -771,7 +854,11 @@ export async function addCollaborator(collab: Omit<CollaboratorInfo, "id">): Pro
   }
 
   try {
-    const res = await addDoc(collection(db, "collaborators"), cleanUndefined(collab));
+    const toSave = cleanUndefined({
+      ...collab,
+      email: normalizedEmail
+    });
+    const res = await addDoc(collection(db, "collaborators"), toSave);
     fullCollab.id = res.id;
     setLocalCache("all_collaborators", allCollabs);
     return res.id;
@@ -806,43 +893,48 @@ function sanitizeFirestoreUpdates(updates: Record<string, any>, isRoot = true): 
 export async function updateCollaborator(id: string, updates: Partial<CollaboratorInfo>): Promise<void> {
   const path = `collaborators/${id}`;
 
+  const cleanUpdates: Partial<CollaboratorInfo> = { ...updates };
+  if (cleanUpdates.email !== undefined) {
+    cleanUpdates.email = (cleanUpdates.email || "").toLowerCase().trim();
+  }
+
   // Optimistic local cache update
   const allCollabs = getLocalCache<CollaboratorInfo[]>("all_collaborators", []);
   const target = allCollabs.find(c => c.id === id);
   if (target) {
     const oldClaId = target.claId;
-    Object.assign(target, updates);
+    Object.assign(target, cleanUpdates);
     setLocalCache("all_collaborators", allCollabs);
 
     // Sync old CLA cache
     if (oldClaId) {
       const oldClaCollabs = getLocalCache<CollaboratorInfo[]>(`collabs_${oldClaId}`, []);
-      if (updates.claId && updates.claId !== oldClaId) {
+      if (cleanUpdates.claId && cleanUpdates.claId !== oldClaId) {
         setLocalCache(`collabs_${oldClaId}`, oldClaCollabs.filter(c => c.id !== id));
       } else {
         const cIdx = oldClaCollabs.findIndex(c => c.id === id);
         if (cIdx >= 0) {
-          Object.assign(oldClaCollabs[cIdx], updates);
+          Object.assign(oldClaCollabs[cIdx], cleanUpdates);
           setLocalCache(`collabs_${oldClaId}`, oldClaCollabs);
         }
       }
     }
 
     // Sync new CLA cache
-    if (updates.claId && updates.claId !== oldClaId) {
-      const newClaCollabs = getLocalCache<CollaboratorInfo[]>(`collabs_${updates.claId}`, []);
+    if (cleanUpdates.claId && cleanUpdates.claId !== oldClaId) {
+      const newClaCollabs = getLocalCache<CollaboratorInfo[]>(`collabs_${cleanUpdates.claId}`, []);
       const nIdx = newClaCollabs.findIndex(c => c.id === id);
       if (nIdx >= 0) {
         Object.assign(newClaCollabs[nIdx], target);
       } else {
         newClaCollabs.push(target);
       }
-      setLocalCache(`collabs_${updates.claId}`, newClaCollabs);
+      setLocalCache(`collabs_${cleanUpdates.claId}`, newClaCollabs);
     }
   }
 
   try {
-    const sanitizedUpdates = sanitizeFirestoreUpdates(updates as Record<string, any>);
+    const sanitizedUpdates = sanitizeFirestoreUpdates(cleanUpdates as Record<string, any>);
     await updateDoc(doc(db, "collaborators", id), sanitizedUpdates);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);

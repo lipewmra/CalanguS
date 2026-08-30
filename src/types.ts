@@ -177,6 +177,7 @@ export interface CollaboratorInfo {
   id?: string;
   claId: string;
   claName?: string; // Name of currently assigned CLA
+  buildingId?: string; // Assigned building/school ID
   originalClaId?: string; // CLA who originally registered the fiscal
   originalClaName?: string; // Name/School of origin CLA
   name: string;
@@ -184,6 +185,7 @@ export interface CollaboratorInfo {
   cpf: string;
   whatsapp: string;
   email: string;
+  emails?: string[]; // Secondary/historical email addresses for Google login matching
   education: "Ensino Fundamental (Alfabetizado)" | "Ensino Médio" | "Ensino Técnico" | "Ensino Superior Cursando" | "Ensino Superior Completo" | "Pós-Graduação" | "Mestrado" | "Doutorado";
   disability: string; // "Nenhuma" or text
   hasWorkedEnem: boolean;
