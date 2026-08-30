@@ -157,9 +157,11 @@ export default function CollaboratorManager({
   const [activeSubTab, setActiveSubTab] = useState<"list" | "network_reserves" | "add" | "import" | "edit">("list");
   const [filterType, setFilterType] = useState<
     | "todos"
+    | "presenca_confirmada"
+    | "presenca_pendente"
+    | "confirmados"
     | "com_funcao_sem_sala"
     | "sem_funcao"
-    | "confirmados"
     | "pendentes"
     | "efetivos"
     | "reservas"
@@ -711,7 +713,11 @@ export default function CollaboratorManager({
     let result = [...collaborators];
 
     // 1. Status Filter
-    if (filterType === "confirmados") {
+    if (filterType === "presenca_confirmada") {
+      result = result.filter(c => c.attendanceStatus === "Confirmado");
+    } else if (filterType === "presenca_pendente") {
+      result = result.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && c.attendanceStatus !== "Confirmado" && c.attendanceStatus !== "Recusado" && !c.refusedRole);
+    } else if (filterType === "confirmados") {
       result = result.filter(c => c.status === "Confirmado");
     } else if (filterType === "com_funcao_sem_sala") {
       // Tem função mas não está associado a sala/posto
@@ -1283,8 +1289,19 @@ export default function CollaboratorManager({
 
 function activeTabSubList(
   activeSubTab: string,
-  filterType: "todos" | "confirmados" | "pendentes" | "efetivos" | "reservas" | "recusados" | "com_erro",
-  setFilterType: (f: "todos" | "confirmados" | "pendentes" | "efetivos" | "reservas" | "recusados" | "com_erro") => void,
+  filterType: 
+    | "todos"
+    | "presenca_confirmada"
+    | "presenca_pendente"
+    | "confirmados"
+    | "com_funcao_sem_sala"
+    | "sem_funcao"
+    | "pendentes"
+    | "efetivos"
+    | "reservas"
+    | "recusados"
+    | "com_erro",
+  setFilterType: (f: any) => void,
   filteredCollaborators: CollaboratorInfo[],
   allCollaborators: CollaboratorInfo[],
   sendEmailNotification: any,
@@ -1599,7 +1616,9 @@ function activeTabSubList(
         <div className="flex gap-1.5 flex-wrap pt-3 border-t border-slate-200 dark:border-slate-800">
           {[
             { id: "todos", label: "Todos", count: allCollaborators.length },
-            { id: "confirmados", label: "Confirmados", count: allCollaborators.filter(c => c.status === "Confirmado").length },
+            { id: "presenca_confirmada", label: "✓ Presença Confirmada", count: allCollaborators.filter(c => c.attendanceStatus === "Confirmado").length, badgeColor: "bg-emerald-600 text-white" },
+            { id: "presenca_pendente", label: "⏳ Aguardando Presença", count: allCollaborators.filter(c => c.status === "Confirmado" && c.assignedRole && c.attendanceStatus !== "Confirmado" && c.attendanceStatus !== "Recusado" && !c.refusedRole).length, badgeColor: "bg-amber-500 text-white" },
+            { id: "confirmados", label: "Cad. Homologados", count: allCollaborators.filter(c => c.status === "Confirmado").length },
             { id: "efetivos", label: "Efetivos c/ Sala", count: allCollaborators.filter(c => !c.isReserve && c.status === "Confirmado" && c.assignedRoom && c.assignedRoom.trim() !== "").length },
             { id: "reservas", label: "Reservas", count: allCollaborators.filter(c => c.isReserve && c.status === "Confirmado").length },
             { id: "com_funcao_sem_sala", label: "Com Função (Não Ensalados)", count: allCollaborators.filter(c => c.status === "Confirmado" && c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === "")).length },
@@ -1616,7 +1635,11 @@ function activeTabSubList(
                 onClick={() => setFilterType(f.id as any)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition active:scale-95 ${
                   isActive
-                    ? "bg-slate-900 dark:bg-emerald-600 text-white shadow-sm border border-transparent"
+                    ? f.id === "presenca_confirmada" 
+                      ? "bg-emerald-600 text-white shadow-sm border border-transparent ring-2 ring-emerald-500/50"
+                      : f.id === "presenca_pendente"
+                      ? "bg-amber-600 text-white shadow-sm border border-transparent ring-2 ring-amber-500/50"
+                      : "bg-slate-900 dark:bg-emerald-600 text-white shadow-sm border border-transparent"
                     : "bg-white dark:bg-[#0c1220] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
@@ -1624,6 +1647,8 @@ function activeTabSubList(
                 <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
                   isActive
                     ? "bg-white/20 text-white"
+                    : (f as any).badgeColor 
+                    ? `${(f as any).badgeColor} bg-opacity-20 text-slate-700 dark:text-slate-200`
                     : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                 }`}>
                   {f.count}
