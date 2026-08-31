@@ -135,9 +135,9 @@ export const DEFAULT_COLLABORATOR_METRICS: CollaboratorMetricsConfig = {
   ledorTranscritorPerSpecialRoom: 2,   // legacy alias (default 2 ledores)
   interpreteLibrasPerSpecialRoom: 2,   // legacy alias (default 2 libras)
 
-  // Salas Extras / Contingência
+  // Salas Extras / Contingência (Apenas 01 Chefe de Sala e SEM aplicadores)
   chefesPerExtraRoom: 1,
-  aplicadoresPerExtraRoom: 1,
+  aplicadoresPerExtraRoom: 0,
 
   // Apoio e Circulação por Prédio / Coordenação
   useOfficialTiersForCorredorAndBanheiro: true,
@@ -240,8 +240,8 @@ export function getRoomTargetRequirements(
 
   if (isExtra || room.type === "extra") {
     return {
-      targetChefes: hasCustomChefes ? room.targetChefes! : metricsConfig.chefesPerExtraRoom,
-      targetAplicadores: hasCustomAplicadores ? room.targetAplicadores! : (isDuplaAplicador ? 2 : metricsConfig.aplicadoresPerExtraRoom),
+      targetChefes: hasCustomChefes ? room.targetChefes! : (metricsConfig.chefesPerExtraRoom || 1),
+      targetAplicadores: hasCustomAplicadores ? room.targetAplicadores! : (metricsConfig.aplicadoresPerExtraRoom || 0),
       targetLedores: hasCustomLedores ? room.targetLedores! : 0,
       targetTranscritores: 0,
       targetLibras: hasCustomLibras ? room.targetLibras! : 0,
@@ -302,7 +302,7 @@ export function calculateBuildingTargetQuantities(
   }
 
   const specialAplicadores = specialRoomsCount * (metricsConfig.aplicadoresPerSpecialRoom || 0);
-  const extraAplicadores = extraRoomsCount * (metricsConfig.aplicadoresPerExtraRoom || 1);
+  const extraAplicadores = extraRoomsCount * (metricsConfig.aplicadoresPerExtraRoom || 0);
   const totalAplicadores = calculatedRegularAplicadores + specialAplicadores + extraAplicadores;
 
   // 3. Tradutor-Intérprete de Libras: 2 por sala especializada com demanda

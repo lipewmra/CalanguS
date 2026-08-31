@@ -125,7 +125,7 @@ export default function CollaboratorMetricsAdminView({
         count: calculated["Aplicador"] || 0, 
         desc: isDuplaRegular 
           ? `Dupla por sala (>60 inscritos): ${simRegularRooms * 2} aplicadores` 
-          : `1 por sala regular (${simRegularRooms}) + ${simExtraRooms} em extras`,
+          : `1 por sala regular (${simRegularRooms}) (Salas extras têm apenas 1 Chefe e 0 Aplicador)`,
         payment: "R$ 180,00",
         rawVal: 180.00
       },

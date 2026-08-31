@@ -173,6 +173,43 @@ export interface TransferRequestInfo {
   notes?: string;
 }
 
+export type CollaboratorLogActionType = 
+  | "cadastro"              // Inscrição / Cadastro inicial
+  | "alteracao_dados"       // Edição de dados (CPF, telefone, foto, restrições)
+  | "alteracao_status"      // Mudança de status (Pendente, Confirmado, Recusado, etc.)
+  | "alocacao_funcao"       // Atribuição de função (Associação)
+  | "desalocacao_funcao"    // Remoção de função / Retorno para reserva
+  | "alocacao_sala"         // Alocação em sala
+  | "desalocacao_sala"      // Desalocação de sala
+  | "designacao_reserva"    // Definido como Reserva Técnica
+  | "confirmacao_presenca"   // Presença confirmada no dia da prova
+  | "recusa_funcao"         // Fiscal recusou a função atribuída
+  | "substituicao"          // Substituído por outro fiscal
+  | "transferencia"         // Transferência entre CLAs
+  | "acesso_material"       // Acessou material didático
+  | "mensagem_enviada"      // Recebeu/leu mensagem do CLA
+  | "resposta_enquete"      // Respondeu enquete/comunicação
+  | "foto_atualizada"       // Atualizou foto do crachá
+  | "refeicao_lanche"       // Entregue lanche/refeição
+  | "observacao_auditoria"  // Observação manual de auditoria registrada pelo CLA/Admin
+  | "outro";
+
+export interface CollaboratorLogEntry {
+  id: string;
+  collaboratorId: string;
+  collaboratorName?: string;
+  collaboratorCpf?: string;
+  claId?: string;
+  claName?: string;
+  action: CollaboratorLogActionType;
+  title: string;
+  description: string;
+  details?: Record<string, any>;
+  performedBy?: string; // Nome do operador / autor (ex: "CLA Maria", "SuperAdmin", "Colaborador", "Sistema")
+  performedByRole?: string; // "CLA" | "SuperAdmin" | "Colaborador" | "Sistema"
+  timestamp: string; // ISO string
+}
+
 export interface CollaboratorInfo {
   id?: string;
   claId: string;
@@ -233,6 +270,7 @@ export interface CollaboratorInfo {
   substitutionTag?: string; // Tag / Badge text for substitution
   isSubstituted?: boolean; // Flag indicating collaborator was substituted and returned to reserve
   materialsAccessed?: MaterialAccessLog[];
+  activityLogs?: CollaboratorLogEntry[];
   createdAt?: string; // Form submission/registration ISO date
 }
 
@@ -317,9 +355,9 @@ export interface CollaboratorMetricsConfig {
   ledorTranscritorPerSpecialRoom?: number; // legacy alias
   interpreteLibrasPerSpecialRoom?: number; // legacy alias
 
-  // Salas Extras / Contingência
-  chefesPerExtraRoom: number; // 1 por sala
-  aplicadoresPerExtraRoom: number; // 1 por sala
+  // Salas Extras / Contingência (Apenas 01 Chefe de Sala, sem aplicador)
+  chefesPerExtraRoom: number; // 1 por sala extra
+  aplicadoresPerExtraRoom: number; // 0 por sala extra (sala extra só tem 1 chefe e não possui aplicador)
 
   // Apoio e Circulação por Prédio / Coordenação (Tabela Escalonada ou Customizável)
   useOfficialTiersForCorredorAndBanheiro: boolean; // 01-15 (2); 16-30 (4); 31-45 (6); 46-52 (8); 53-59 (10); 60-66 (12)
@@ -346,6 +384,7 @@ export interface EventConfigInfo {
   collaboratorMetrics?: CollaboratorMetricsConfig;
   collaboratorSchedule?: CollaboratorScheduleItem[];
   collaboratorInstructions?: string;
+  notebookUrl?: string;
 }
 
 export interface ClaActivities {

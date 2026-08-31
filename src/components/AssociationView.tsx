@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { CollaboratorInfo, BuildingInfo, EventConfigInfo } from "../types";
 import { calculateBuildingTargetQuantities } from "../lib/metrics-calculator";
+import { appendCollaboratorLog } from "../lib/collaborator-logger";
+import CollaboratorAuditLogModal from "./CollaboratorAuditLogModal";
 import { 
   Users, UserCheck, Search, Filter, Sparkles, CheckCircle, Check,
   HelpCircle, ShieldAlert, ArrowRight, RotateCcw, AlertCircle,
   Save, ChevronDown, ChevronUp, Plus, Minus, Banknote, DollarSign,
   Award, Shield, Bath, Footprints, FileText, Building2, Calculator,
-  SlidersHorizontal
+  SlidersHorizontal, History
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
 import FiscalAvatar from "./FiscalAvatar";
@@ -236,6 +238,8 @@ export default function AssociationView({
     return sum;
   }, 0);
 
+  const [selectedAuditCollab, setSelectedAuditCollab] = useState<CollaboratorInfo | null>(null);
+
   // Handle role setting
   const handleAssignRole = async (collabId: string, roleName: string) => {
     setIsUpdatingId(collabId);
@@ -243,6 +247,20 @@ export default function AssociationView({
       const isReserve = roleName === ""; // unassociated is reserve
       const collab = approvedCollaborators.find(c => c.id === collabId);
       if (collab) {
+        const updatedLogs = appendCollaboratorLog(
+          collab,
+          isReserve ? "designacao_reserva" : "alocacao_funcao",
+          isReserve ? "Movido para a Reserva" : `Função Associada: ${roleName}`,
+          isReserve 
+            ? `Colaborador desalocado da função "${collab.assignedRole}" e transferido para a Reserva do prédio.`
+            : `Designada a função "${roleName}" (Remuneração: ${getRolePayment(roleName)}).`,
+          {
+            performedBy: building?.claId || "Coordenação CLA",
+            performedByRole: "CLA",
+            details: { previousRole: collab.assignedRole, newRole: roleName, payment: getRolePayment(roleName) }
+          }
+        );
+
         await onUpdate(collabId, {
           assignedRole: roleName,
           isReserve,
@@ -253,7 +271,8 @@ export default function AssociationView({
           refusedRole: undefined,
           refusedRoleDate: undefined,
           // If moving to reserve, clear room; otherwise preserve room if already set
-          assignedRoom: isReserve ? "" : (collab.assignedRoom || "")
+          assignedRoom: isReserve ? "" : (collab.assignedRoom || ""),
+          activityLogs: updatedLogs
         });
         setSuccessMsg(roleName !== "" ? `Função de ${collab.name} associada para "${roleName}" (${getRolePayment(roleName)}) com sucesso!` : `${collab.name} movido(a) para a equipe de Reserva com sucesso!`);
         setTimeout(() => setSuccessMsg(null), 3000);
@@ -563,20 +582,30 @@ export default function AssociationView({
                       </div>
                       
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        {isAssigned ? (
-                          <>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAuditCollab(collab)}
+                            title="Ver histórico e auditoria completa do colaborador (Logs)"
+                            className="p-1 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-500 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </button>
+
+                          {isAssigned ? (
                             <span className="bg-rose-500/15 text-rose-700 dark:text-rose-300 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-rose-500/30">
                               Alocado
                             </span>
-                            {currentPayment && (
-                              <span className="text-[9px] font-mono font-extrabold text-rose-600 dark:text-rose-400">
-                                {currentPayment}
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <span className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-500/30">
-                            Disponível
+                          ) : (
+                            <span className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-500/30">
+                              Disponível
+                            </span>
+                          )}
+                        </div>
+
+                        {isAssigned && currentPayment && (
+                          <span className="text-[9px] font-mono font-extrabold text-rose-600 dark:text-rose-400">
+                            {currentPayment}
                           </span>
                         )}
                       </div>
@@ -935,6 +964,21 @@ export default function AssociationView({
       <ImageLightboxModal
         data={lightboxData}
         onClose={() => setLightboxData(null)}
+      />
+
+      {/* Individual Collaborator Audit Log Modal */}
+      <CollaboratorAuditLogModal
+        collaborator={selectedAuditCollab}
+        isOpen={!!selectedAuditCollab}
+        onClose={() => setSelectedAuditCollab(null)}
+        onUpdateCollaborator={async (updated) => {
+          if (updated.id) {
+            await onUpdate(updated.id, updated);
+            setSelectedAuditCollab(updated);
+          }
+        }}
+        operatorName={building?.claId || "Coordenação CLA"}
+        operatorRole="CLA"
       />
     </div>
   );

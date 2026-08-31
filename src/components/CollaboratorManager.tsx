@@ -9,11 +9,15 @@ import FiscalAvatar from "./FiscalAvatar";
 import ImageLightboxModal, { LightboxData } from "./ImageLightboxModal";
 import PhotoUploader from "./PhotoUploader";
 import DuplicateCollaboratorsModal, { findDuplicateCollaborators } from "./DuplicateCollaboratorsModal";
+import CollaboratorAuditLogModal from "./CollaboratorAuditLogModal";
+import BuildingAuditTrailView from "./BuildingAuditTrailView";
+import { appendCollaboratorLog } from "../lib/collaborator-logger";
 import { 
   Users, UserPlus, Upload, ShieldAlert, BadgeInfo, Trash, Mail, 
   MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
   Building2, Globe, Clock, ArrowRightLeft, Sparkles, Search, Filter,
-  Calendar, ArrowUpDown, FileSpreadsheet, RotateCcw, Send, MessageSquare, BookOpen
+  Calendar, ArrowUpDown, FileSpreadsheet, RotateCcw, Send, MessageSquare, BookOpen,
+  History
 } from "lucide-react";
 
 export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "colaboradores_enem_calangus") {
@@ -154,7 +158,8 @@ export default function CollaboratorManager({
   onSimulatePublicRecruit
 }: CollaboratorManagerProps) {
   
-  const [activeSubTab, setActiveSubTab] = useState<"list" | "network_reserves" | "add" | "import" | "edit">("list");
+  const [activeSubTab, setActiveSubTab] = useState<"list" | "network_reserves" | "add" | "import" | "edit" | "audit_trail">("list");
+  const [selectedAuditCollab, setSelectedAuditCollab] = useState<CollaboratorInfo | null>(null);
   const [filterType, setFilterType] = useState<
     | "todos"
     | "presenca_confirmada"
@@ -342,6 +347,22 @@ export default function CollaboratorManager({
     const hasAuditError = validations.length > 0;
     const errorsList = validations.map(v => v.message);
 
+    const existing = collaborators.find(c => c.id === editingCollabId);
+    let updatedActivityLogs = existing?.activityLogs || [];
+    if (existing) {
+      updatedActivityLogs = appendCollaboratorLog(
+        existing,
+        "alteracao_dados",
+        "Atualização Cadastral",
+        `Dados cadastrais atualizados pela coordenação ${currentUserName || buildingName || "CLA"}.`,
+        {
+          performedBy: currentUserName || "Coordenação CLA",
+          performedByRole: "CLA",
+          details: { nome: name, cpf, email, whatsapp, isReserve }
+        }
+      );
+    }
+
     const edits: Partial<CollaboratorInfo> = {
       name,
       birthDate,
@@ -361,6 +382,7 @@ export default function CollaboratorManager({
       orionStatus: hasAuditError ? "Erro" : "Ok",
       orionErrors: errorsList,
       orionSynced: !hasAuditError,
+      activityLogs: updatedActivityLogs,
     };
 
     try {
@@ -434,6 +456,23 @@ export default function CollaboratorManager({
       orionStatus: hasAuditError ? "Erro" : "Ok",
       orionErrors: errorsList,
       orionSynced: !hasAuditError,
+      activityLogs: [
+        {
+          id: `log_init_${Date.now()}`,
+          collaboratorId: "",
+          collaboratorName: name,
+          collaboratorCpf: cpf,
+          claId,
+          claName: currentUserName || buildingName || "Coordenação CLA",
+          action: "cadastro",
+          title: "Cadastro de Colaborador",
+          description: `Colaborador cadastrado no sistema pela coordenação ${currentUserName || buildingName || "CLA"}.`,
+          details: { nome: name, cpf, email, whatsapp },
+          performedBy: currentUserName || "Coordenação CLA",
+          performedByRole: "CLA",
+          timestamp: new Date().toISOString()
+        }
+      ],
     };
 
     try {
@@ -517,13 +556,37 @@ export default function CollaboratorManager({
       if (!target.assignedRoom) {
         updates.isReserve = true;
       }
+      updates.activityLogs = appendCollaboratorLog(
+        target,
+        "confirmacao_presenca",
+        "Cadastro Aprovado / Confirmado",
+        `Colaborador aprovado e integrado à equipe pela coordenação ${currentUserName || buildingName || "CLA"}.`,
+        {
+          performedBy: currentUserName || "Coordenação CLA",
+          performedByRole: "CLA"
+        }
+      );
     }
     await onUpdate(id, updates);
   };
 
   // Toggle Recused
   const refuseStaff = async (id: string) => {
-    await onUpdate(id, { status: "Recusado" });
+    const target = collaborators.find(c => c.id === id);
+    let updatedLogs = target?.activityLogs;
+    if (target) {
+      updatedLogs = appendCollaboratorLog(
+        target,
+        "recusa_funcao",
+        "Cadastro Recusado / Desativado",
+        `Colaborador marcado como Recusado/Desativado pela coordenação ${currentUserName || buildingName || "CLA"}.`,
+        {
+          performedBy: currentUserName || "Coordenação CLA",
+          performedByRole: "CLA"
+        }
+      );
+    }
+    await onUpdate(id, { status: "Recusado", activityLogs: updatedLogs });
   };
 
   // Batch Accept All Pending Collaborators
@@ -909,6 +972,19 @@ export default function CollaboratorManager({
           </button>
 
           <button
+            onClick={() => { setActiveSubTab("audit_trail"); setParseStatus("idle"); setEditingCollabId(null); }}
+            className={`btn-3d py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === "audit_trail"
+                ? "bg-slate-900 text-white dark:bg-indigo-600 dark:text-white border-indigo-700 shadow-md"
+                : "bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+            }`}
+            title="Histórico completo de auditoria e logs de colaboradores"
+          >
+            <History className="w-3.5 h-3.5 text-indigo-400" />
+            <span>🕒 Histórico & Auditoria (Logs)</span>
+          </button>
+
+          <button
             onClick={() => { setActiveSubTab("add"); setParseStatus("idle"); setEditingCollabId(null); }}
             className={`btn-3d py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${activeSubTab === "add" ? "btn-3d-secondary" : "bg-slate-150 dark:bg-slate-800/80 text-slate-705 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"}`}
           >
@@ -977,7 +1053,22 @@ export default function CollaboratorManager({
         () => setIsDuplicateModalOpen(true),
         duplicateGroups.length,
         handleAcceptAllPending,
-        collaborators.filter(c => c.status === "Pendente").length
+        collaborators.filter(c => c.status === "Pendente").length,
+        (c) => setSelectedAuditCollab(c)
+      )}
+
+      {/* SUBTAB: AUDIT TRAIL & LOGS */}
+      {activeSubTab === "audit_trail" && (
+        <BuildingAuditTrailView
+          collaborators={collaborators}
+          buildingName={buildingName}
+          onUpdateCollaborator={async (updated) => {
+            if (updated.id) {
+              await onUpdate(updated.id, updated);
+            }
+          }}
+          operatorName={currentUserName || buildingName || "Coordenação CLA"}
+        />
       )}
 
       {/* SUBTAB 2: NETWORK RESERVES POOL (BANCO GERAL DE RESERVAS) */}
@@ -1283,6 +1374,21 @@ export default function CollaboratorManager({
         onDelete={onDelete}
         onViewPhoto={(data) => setLightboxData(data)}
       />
+
+      {/* Individual Collaborator Audit Log & Timeline Modal */}
+      <CollaboratorAuditLogModal
+        collaborator={selectedAuditCollab}
+        isOpen={!!selectedAuditCollab}
+        onClose={() => setSelectedAuditCollab(null)}
+        onUpdateCollaborator={async (updated) => {
+          if (updated.id) {
+            await onUpdate(updated.id, updated);
+            setSelectedAuditCollab(updated);
+          }
+        }}
+        operatorName={currentUserName || buildingName || "Coordenação CLA"}
+        operatorRole="CLA"
+      />
     </div>
   );
 }
@@ -1328,7 +1434,8 @@ function activeTabSubList(
   onOpenDuplicateFinder?: () => void,
   duplicateGroupsCount: number = 0,
   onAcceptAllPending?: () => void,
-  pendingCount: number = 0
+  pendingCount: number = 0,
+  onOpenAuditLog?: (c: CollaboratorInfo) => void
 ) {
   if (activeSubTab !== "list") return null;
 
@@ -1859,6 +1966,16 @@ function activeTabSubList(
                   {/* Quick trigger Actions */}
                   <td className="p-4 text-right font-bold">
                     <div className="flex justify-end gap-1.5 items-center">
+                      {onOpenAuditLog && (
+                        <button
+                          onClick={() => onOpenAuditLog(c)}
+                          title="Ver Histórico & Auditoria Completa do Colaborador"
+                          className="p-2 hover:bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 cursor-pointer border border-indigo-500/20 active:scale-95 transition-all flex items-center gap-1"
+                        >
+                          <History className="w-4 h-4" />
+                          <span className="text-[10px] font-black font-mono hidden xl:inline">Logs</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => sendEmailNotification(c)}
                         title="Enviar ou reenviar solicitação de confirmação por e-mail"

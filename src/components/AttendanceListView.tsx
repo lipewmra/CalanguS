@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { CollaboratorInfo, BuildingInfo, EventConfigInfo } from "../types";
 import FiscalAvatar from "./FiscalAvatar";
+import CollaboratorAuditLogModal from "./CollaboratorAuditLogModal";
+import { appendCollaboratorLog } from "../lib/collaborator-logger";
 import { 
   ClipboardCheck, 
   Calendar, 
@@ -18,7 +20,8 @@ import {
   Clock, 
   ShieldAlert,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  History
 } from "lucide-react";
 
 interface AttendanceListViewProps {
@@ -42,6 +45,7 @@ export default function AttendanceListView({
   const [roleFilter, setRoleFilter] = useState("all");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [batchLoading, setBatchLoading] = useState(false);
+  const [selectedAuditCollab, setSelectedAuditCollab] = useState<CollaboratorInfo | null>(null);
 
   // Exam Dates & Themes
   const rawDay1 = eventConfig?.examDates?.[0];
@@ -133,18 +137,35 @@ export default function AttendanceListView({
       const isCurrentlyPresent = isCollaboratorPresentOnActiveDay(collaborator);
       const newPresenceState = !isCurrentlyPresent;
       const now = new Date().toISOString();
+      const dayName = activeDay === "day1" ? "1º Dia" : "2º Dia";
+
+      const updatedLogs = appendCollaboratorLog(
+        collaborator,
+        "confirmacao_presenca",
+        newPresenceState ? `Presença Registrada (${dayName})` : `Presença Desmarcada (${dayName})`,
+        newPresenceState 
+          ? `Presença física confirmada no local de aplicação (${dayName}) na sala ${collaborator.assignedRoom || "Coordenação"}.`
+          : `Registro de presença desmarcado pela coordenação (${dayName}).`,
+        {
+          performedBy: building?.claId || "Coordenação CLA",
+          performedByRole: "CLA",
+          details: { dia: dayName, presente: newPresenceState, horario: now }
+        }
+      );
 
       if (activeDay === "day1") {
         await onUpdateCollaborator(collaborator.id, {
           isPresent: newPresenceState,
           presenceCheckedAt: newPresenceState ? now : undefined,
           isPresentDay1: newPresenceState,
-          presenceCheckedAtDay1: newPresenceState ? now : undefined
+          presenceCheckedAtDay1: newPresenceState ? now : undefined,
+          activityLogs: updatedLogs
         });
       } else {
         await onUpdateCollaborator(collaborator.id, {
           isPresentDay2: newPresenceState,
-          presenceCheckedAtDay2: newPresenceState ? now : undefined
+          presenceCheckedAtDay2: newPresenceState ? now : undefined,
+          activityLogs: updatedLogs
         });
       }
     } catch (err) {
@@ -560,9 +581,18 @@ export default function AttendanceListView({
                         )}
                       </td>
 
-                      {/* APENAS O BOTÃO DE CONFIRMA PRESENÇA */}
+                      {/* APENAS O BOTÃO DE CONFIRMA PRESENÇA E LOGS */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAuditCollab(collab)}
+                            title="Ver histórico e auditoria completa do colaborador (Logs)"
+                            className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-300 rounded-xl border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                          >
+                            <History className="w-4 h-4" />
+                          </button>
+
                           <button
                             onClick={() => handleTogglePresence(collab)}
                             disabled={readOnly || isUpdating}
@@ -675,6 +705,21 @@ export default function AttendanceListView({
           </div>
         </div>
       </div>
+
+      {/* Individual Collaborator Audit Log Modal */}
+      <CollaboratorAuditLogModal
+        collaborator={selectedAuditCollab}
+        isOpen={!!selectedAuditCollab}
+        onClose={() => setSelectedAuditCollab(null)}
+        onUpdateCollaborator={async (updated) => {
+          if (updated.id) {
+            await onUpdateCollaborator(updated.id, updated);
+            setSelectedAuditCollab(updated);
+          }
+        }}
+        operatorName={building?.claId || "Coordenação CLA"}
+        operatorRole="CLA"
+      />
 
     </div>
   );

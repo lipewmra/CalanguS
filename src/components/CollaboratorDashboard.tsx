@@ -35,13 +35,15 @@ import {
   Award,
   CalendarCheck,
   Building2,
-  ShieldCheck
+  ShieldCheck,
+  Bot
 } from "lucide-react";
 import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage, MessageReadReceipt, MessageCollaboratorResponse, DidacticMaterial, MaterialAccessLog, EventConfigInfo } from "../types";
 import { subscribeToDidacticMaterials, recordCollaboratorMaterialAccess } from "../lib/db-services";
 import PhotoUploader from "./PhotoUploader";
 import { DEFAULT_ENEM_SCHEDULE } from "./CollaboratorSettingsView";
 import { getRolePayment } from "./AssociationView";
+import CalangusIaView from "./CalangusIaView";
 
 interface CollaboratorDashboardProps {
   currentUser: UserProfile;
@@ -645,6 +647,26 @@ export default function CollaboratorDashboard({
           </span>
           <span className="text-[9px] font-bold font-mono text-slate-400 mr-1">{finalPercent}%</span>
           <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "checklist" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+        </button>
+
+        {/* 12. CALANGUS IA */}
+        <button
+          onClick={() => setActiveMenuTab((prev) => (prev === "calangusia" ? "" : "calangusia"))}
+          className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+            activeMenuTab === "calangusia"
+              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+          }`}
+        >
+          <span className="flex items-center gap-2.5 flex-1">
+            <Bot className="w-4 h-4 text-amber-500" />
+            <span className="flex items-center gap-1.5">
+              <span>12. CalangusIA</span>
+              <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
+            </span>
+          </span>
+          <span className="text-[8px] bg-gradient-to-r from-amber-500 to-indigo-600 text-white font-extrabold px-1.5 py-0.5 rounded-full shadow-xs">IA</span>
+          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "calangusia" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
         </button>
 
         <div className="mt-8 border-t border-slate-100 dark:border-slate-850 pt-4 px-2">
@@ -1938,6 +1960,13 @@ export default function CollaboratorDashboard({
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* TAB 12: CALANGUS IA */}
+        {desktopMenuTab === "calangusia" && (
+          <div className="space-y-4">
+            <CalangusIaView notebookUrl={eventConfig?.notebookUrl || "https://notebook.google.com/notebook/c3e64642-72e2-4ced-9d2c-685fcb910084"} />
           </div>
         )}
 
