@@ -499,190 +499,11 @@ export default function CollaboratorDashboard({
 
   const desktopMenuTab = activeMenuTab || "messages";
 
-  return (
-    <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-6 animate-fade-in text-sans">
-      
-      {/* LEFT SIDE NAVIGATION PANEL - 3D Tactile Sidebar */}
-      <div className="w-full md:w-64 shrink-0 bg-white dark:bg-[#0c1220]/90 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.05)] dark:shadow-[4px_4px_0px_0px_#10b981]/10 flex flex-col gap-2">
-        <div className="px-3 py-2 text-center border-b border-slate-100 dark:border-slate-850 pb-4 mb-2 flex flex-col items-center">
-          <div 
-            className="relative group mb-2.5 cursor-pointer"
-            onClick={() => setActiveMenuTab("profile")}
-            title="Clique para enviar ou alterar sua foto"
-          >
-            {photoUrl ? (
-              <img 
-                src={photoUrl} 
-                alt="Foto do Fiscal" 
-                className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500 shadow-md bg-slate-100 group-hover:scale-105 transition duration-200" 
-              />
-            ) : (
-              <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-indigo-650 text-white rounded-full flex items-center justify-center font-black text-xl border-2 border-indigo-500/10 shadow-md group-hover:scale-105 transition duration-200">
-                {name ? name.substring(0, 2).toUpperCase() : "CM"}
-              </div>
-            )}
-            <div className="absolute -bottom-1 -right-1 bg-indigo-500 group-hover:bg-emerald-500 text-white rounded-full p-1.5 border-2 border-white dark:border-slate-900 shadow-sm transition">
-              <Camera className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <h2 className="font-display font-black text-slate-850 dark:text-white text-sm line-clamp-1">{name || "Carregando..."}</h2>
-          <span className="text-[9px] font-extrabold uppercase bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 px-2 py-0.5 rounded-full mt-1 tracking-wide">
-            {collaboratorRecord?.isReserve ? "Fiscal de Reserva " : `Fiscal Sala: ${collaboratorRecord?.assignedRoom || "Sem Sala"}`}
-          </span>
-          <button
-            type="button"
-            onClick={() => setActiveMenuTab("profile")}
-            className="mt-2 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 active:scale-95"
-          >
-            <Camera className="w-3 h-3" />
-            <span>{photoUrl ? "Alterar Foto" : "Enviar Foto"}</span>
-          </button>
-        </div>
-
-        {/* Navigation Buttons - Toggle on click */}
-        {/* 1. MENSAGENS DO CLA (MENU INICIAL DO COLABORADOR) */}
-        <button
-          onClick={() => setActiveMenuTab((prev) => (prev === "messages" ? "" : "messages"))}
-          className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
-            activeMenuTab === "messages"
-              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
-          }`}
-        >
-          <span className="flex items-center gap-2.5 flex-1">
-            <MessageSquare className="w-4 h-4 text-sky-500" />
-            <span>Mensagens do CLA</span>
-          </span>
-          {unreadMessagesCount > 0 && (
-            <span className="text-[9px] bg-rose-500 text-white font-extrabold px-1.5 py-0.5 rounded-full animate-bounce">
-              {unreadMessagesCount} {unreadMessagesCount === 1 ? "nova" : "novas"}
-            </span>
-          )}
-          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "messages" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
-        </button>
-
-        {/* 2. STATUS & LOCAL */}
-        <button
-          onClick={() => setActiveMenuTab((prev) => (prev === "status" ? "" : "status"))}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
-            activeMenuTab === "status"
-              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
-          }`}
-        >
-          <MapPin className="w-4 h-4" />
-          <span className="flex-1">Status & Local</span>
-          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "status" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
-        </button>
-
-        {/* 3. EDITAR PERFIL */}
-        <button
-          onClick={() => setActiveMenuTab((prev) => (prev === "profile" ? "" : "profile"))}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
-            activeMenuTab === "profile"
-              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
-          }`}
-        >
-          <User className="w-4 h-4" />
-          <span className="flex-1">Editar Perfil</span>
-          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "profile" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
-        </button>
-
-        {isSnackMenuReleased && (
-          <button
-            onClick={() => setActiveMenuTab((prev) => (prev === "snack" ? "" : "snack"))}
-            className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
-              activeMenuTab === "snack"
-                ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850 animate-pulse"
-            }`}
-          >
-            <span className="flex items-center gap-2.5 flex-1">
-              <Coffee className="w-4 h-4 text-emerald-500" />
-              <span>Cardápio & Lanche</span>
-            </span>
-            <span className="text-[8px] bg-emerald-500 text-white font-extrabold px-1.5 py-0.5 rounded-full mr-1">LIBERADO</span>
-            <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "snack" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
-          </button>
-        )}
-
-        <button
-          onClick={() => setActiveMenuTab((prev) => (prev === "materials" ? "" : "materials"))}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
-            activeMenuTab === "materials"
-              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span className="flex-1">Materiais de Apoio</span>
-          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "materials" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
-        </button>
-
-        <button
-          onClick={() => setActiveMenuTab((prev) => (prev === "agenda" ? "" : "agenda"))}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
-            activeMenuTab === "agenda"
-              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span className="flex-1">Agenda & Itinerário</span>
-          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "agenda" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
-        </button>
-
-        <button
-          onClick={() => setActiveMenuTab((prev) => (prev === "checklist" ? "" : "checklist"))}
-          className={`flex items-center justify-between gap-1 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
-            activeMenuTab === "checklist"
-              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
-          }`}
-        >
-          <span className="flex items-center gap-2.5 flex-1">
-            <CheckSquare className="w-4 h-4" />
-            <span>Check-list</span>
-          </span>
-          <span className="text-[9px] font-bold font-mono text-slate-400 mr-1">{finalPercent}%</span>
-          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "checklist" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
-        </button>
-
-        {/* 12. CALANGUS IA */}
-        <button
-          onClick={() => setActiveMenuTab((prev) => (prev === "calangusia" ? "" : "calangusia"))}
-          className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
-            activeMenuTab === "calangusia"
-              ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
-          }`}
-        >
-          <span className="flex items-center gap-2.5 flex-1">
-            <Bot className="w-4 h-4 text-amber-500" />
-            <span className="flex items-center gap-1.5">
-              <span>12. CalangusIA</span>
-              <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
-            </span>
-          </span>
-          <span className="text-[8px] bg-gradient-to-r from-amber-500 to-indigo-600 text-white font-extrabold px-1.5 py-0.5 rounded-full shadow-xs">IA</span>
-          <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "calangusia" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
-        </button>
-
-        <div className="mt-8 border-t border-slate-100 dark:border-slate-850 pt-4 px-2">
-          <div className="p-3 bg-indigo-500/5 dark:bg-[#101726]/40 border border-indigo-500/10 rounded-xl text-center">
-            <Sparkles className="w-4 h-4 text-amber-500 mx-auto mb-1" />
-            <span className="block text-[8px] uppercase font-extrabold text-indigo-550 dark:text-indigo-400 tracking-widest">Portal CalanguS</span>
-            <span className="block text-[9px] text-slate-400 font-semibold mt-0.5">Fiscais autorizados Cebraspe.</span>
-          </div>
-        </div>
-      </div>
-
-      {/* RIGHT SIDE DETAILS AREA */}
-      <div className={`grow bg-white dark:bg-[#0c1220]/90 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.05)] dark:shadow-[4px_4px_0px_0px_#10b981]/10 ${activeMenuTab === "" ? "hidden md:block" : "block"}`}>
-        
+  const renderTabContent = (targetTab: string) => {
+    return (
+      <div className="space-y-6">
         {/* TAB 1: STATUS & LOCAL_ */}
-        {desktopMenuTab === "status" && (
+        {targetTab === "status" && (
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Status do Colaborador & Local de Aplicação</h3>
@@ -1163,7 +984,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 2: EDITAR PERFIL_ */}
-        {desktopMenuTab === "profile" && (
+        {targetTab === "profile" && (
           <form onSubmit={handleSaveProfile} className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Editar Dados Cadastrais & Foto</h3>
@@ -1289,7 +1110,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 3: LANCHE_ */}
-        {desktopMenuTab === "snack" && isSnackMenuReleased && (
+        {targetTab === "snack" && isSnackMenuReleased && (
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Seleção de Cardápio & Restrições Alimentares</h3>
@@ -1414,7 +1235,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 4: MATERIAL_ */}
-        {desktopMenuTab === "materials" && (
+        {targetTab === "materials" && (
           <div className="space-y-6 animate-fade-in">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2 flex items-center justify-between">
@@ -1537,7 +1358,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 5: AGENDA_ */}
-        {desktopMenuTab === "agenda" && (
+        {targetTab === "agenda" && (
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Agenda & Itinerário Tático do Fiscal</h3>
@@ -1584,7 +1405,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 6: CHECK-LIST_ */}
-        {desktopMenuTab === "checklist" && (
+        {targetTab === "checklist" && (
           <div className="space-y-6">
             <div>
               <h3 className="text-sm font-black text-slate-850 dark:text-white uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-850 pb-2">Check-list de Preparação do Aplicador</h3>
@@ -1634,7 +1455,7 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB: MENSAGENS DO CLA (CAIXA PESSOAL CALANGUS) */}
-        {desktopMenuTab === "messages" && (
+        {targetTab === "messages" && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-slate-100 dark:border-slate-850 pb-3 text-left">
               <div>
@@ -1964,12 +1785,254 @@ export default function CollaboratorDashboard({
         )}
 
         {/* TAB 12: CALANGUS IA */}
-        {desktopMenuTab === "calangusia" && (
+        {targetTab === "calangusia" && (
           <div className="space-y-4">
             <CalangusIaView notebookUrl={eventConfig?.notebookUrl || "https://notebook.google.com/notebook/c3e64642-72e2-4ced-9d2c-685fcb910084"} />
           </div>
         )}
 
+      </div>
+    );
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-6 animate-fade-in text-sans">
+      
+      {/* LEFT SIDE NAVIGATION PANEL - 3D Tactile Sidebar */}
+      <div className="w-full md:w-64 shrink-0 bg-white dark:bg-[#0c1220]/90 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.05)] dark:shadow-[4px_4px_0px_0px_#10b981]/10 flex flex-col gap-2">
+        <div className="px-3 py-2 text-center border-b border-slate-100 dark:border-slate-850 pb-4 mb-2 flex flex-col items-center">
+          <div 
+            className="relative group mb-2.5 cursor-pointer"
+            onClick={() => setActiveMenuTab("profile")}
+            title="Clique para enviar ou alterar sua foto"
+          >
+            {photoUrl ? (
+              <img 
+                src={photoUrl} 
+                alt="Foto do Fiscal" 
+                className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500 shadow-md bg-slate-100 group-hover:scale-105 transition duration-200" 
+              />
+            ) : (
+              <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-indigo-650 text-white rounded-full flex items-center justify-center font-black text-xl border-2 border-indigo-500/10 shadow-md group-hover:scale-105 transition duration-200">
+                {name ? name.substring(0, 2).toUpperCase() : "CM"}
+              </div>
+            )}
+            <div className="absolute -bottom-1 -right-1 bg-indigo-500 group-hover:bg-emerald-500 text-white rounded-full p-1.5 border-2 border-white dark:border-slate-900 shadow-sm transition">
+              <Camera className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <h2 className="font-display font-black text-slate-850 dark:text-white text-sm line-clamp-1">{name || "Carregando..."}</h2>
+          <span className="text-[9px] font-extrabold uppercase bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 px-2 py-0.5 rounded-full mt-1 tracking-wide">
+            {collaboratorRecord?.isReserve ? "Fiscal de Reserva " : `Fiscal Sala: ${collaboratorRecord?.assignedRoom || "Sem Sala"}`}
+          </span>
+          <button
+            type="button"
+            onClick={() => setActiveMenuTab("profile")}
+            className="mt-2 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 active:scale-95"
+          >
+            <Camera className="w-3 h-3" />
+            <span>{photoUrl ? "Alterar Foto" : "Enviar Foto"}</span>
+          </button>
+        </div>
+
+        {/* Navigation Buttons - Toggle on click with Mobile Inline View */}
+        {/* 1. MENSAGENS DO CLA (MENU INICIAL DO COLABORADOR) */}
+        <div className="flex flex-col">
+          <button
+            onClick={() => setActiveMenuTab((prev) => (prev === "messages" ? "" : "messages"))}
+            className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+              activeMenuTab === "messages"
+                ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+            }`}
+          >
+            <span className="flex items-center gap-2.5 flex-1">
+              <MessageSquare className="w-4 h-4 text-sky-500" />
+              <span>Mensagens do CLA</span>
+            </span>
+            {unreadMessagesCount > 0 && (
+              <span className="text-[9px] bg-rose-500 text-white font-extrabold px-1.5 py-0.5 rounded-full animate-bounce">
+                {unreadMessagesCount} {unreadMessagesCount === 1 ? "nova" : "novas"}
+              </span>
+            )}
+            <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "messages" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+          </button>
+          {activeMenuTab === "messages" && (
+            <div className="md:hidden mt-2 mb-3 p-4 bg-slate-50/90 dark:bg-[#070b13] rounded-2xl border-2 border-emerald-500/30 shadow-md animate-fade-in">
+              {renderTabContent("messages")}
+            </div>
+          )}
+        </div>
+
+        {/* 2. STATUS & LOCAL */}
+        <div className="flex flex-col">
+          <button
+            onClick={() => setActiveMenuTab((prev) => (prev === "status" ? "" : "status"))}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+              activeMenuTab === "status"
+                ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+            }`}
+          >
+            <MapPin className="w-4 h-4" />
+            <span className="flex-1">Status & Local</span>
+            <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "status" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+          </button>
+          {activeMenuTab === "status" && (
+            <div className="md:hidden mt-2 mb-3 p-4 bg-slate-50/90 dark:bg-[#070b13] rounded-2xl border-2 border-emerald-500/30 shadow-md animate-fade-in">
+              {renderTabContent("status")}
+            </div>
+          )}
+        </div>
+
+        {/* 3. EDITAR PERFIL */}
+        <div className="flex flex-col">
+          <button
+            onClick={() => setActiveMenuTab((prev) => (prev === "profile" ? "" : "profile"))}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+              activeMenuTab === "profile"
+                ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+            }`}
+          >
+            <User className="w-4 h-4" />
+            <span className="flex-1">Editar Perfil</span>
+            <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "profile" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+          </button>
+          {activeMenuTab === "profile" && (
+            <div className="md:hidden mt-2 mb-3 p-4 bg-slate-50/90 dark:bg-[#070b13] rounded-2xl border-2 border-emerald-500/30 shadow-md animate-fade-in">
+              {renderTabContent("profile")}
+            </div>
+          )}
+        </div>
+
+        {isSnackMenuReleased && (
+          <div className="flex flex-col">
+            <button
+              onClick={() => setActiveMenuTab((prev) => (prev === "snack" ? "" : "snack"))}
+              className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+                activeMenuTab === "snack"
+                  ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850 animate-pulse"
+              }`}
+            >
+              <span className="flex items-center gap-2.5 flex-1">
+                <Coffee className="w-4 h-4 text-emerald-500" />
+                <span>Cardápio & Lanche</span>
+              </span>
+              <span className="text-[8px] bg-emerald-500 text-white font-extrabold px-1.5 py-0.5 rounded-full mr-1">LIBERADO</span>
+              <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "snack" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+            </button>
+            {activeMenuTab === "snack" && (
+              <div className="md:hidden mt-2 mb-3 p-4 bg-slate-50/90 dark:bg-[#070b13] rounded-2xl border-2 border-emerald-500/30 shadow-md animate-fade-in">
+                {renderTabContent("snack")}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-col">
+          <button
+            onClick={() => setActiveMenuTab((prev) => (prev === "materials" ? "" : "materials"))}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+              activeMenuTab === "materials"
+                ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span className="flex-1">Materiais de Apoio</span>
+            <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "materials" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+          </button>
+          {activeMenuTab === "materials" && (
+            <div className="md:hidden mt-2 mb-3 p-4 bg-slate-50/90 dark:bg-[#070b13] rounded-2xl border-2 border-emerald-500/30 shadow-md animate-fade-in">
+              {renderTabContent("materials")}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col">
+          <button
+            onClick={() => setActiveMenuTab((prev) => (prev === "agenda" ? "" : "agenda"))}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+              activeMenuTab === "agenda"
+                ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span className="flex-1">Agenda & Itinerário</span>
+            <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "agenda" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+          </button>
+          {activeMenuTab === "agenda" && (
+            <div className="md:hidden mt-2 mb-3 p-4 bg-slate-50/90 dark:bg-[#070b13] rounded-2xl border-2 border-emerald-500/30 shadow-md animate-fade-in">
+              {renderTabContent("agenda")}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col">
+          <button
+            onClick={() => setActiveMenuTab((prev) => (prev === "checklist" ? "" : "checklist"))}
+            className={`flex items-center justify-between gap-1 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+              activeMenuTab === "checklist"
+                ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+            }`}
+          >
+            <span className="flex items-center gap-2.5 flex-1">
+              <CheckSquare className="w-4 h-4" />
+              <span>Check-list</span>
+            </span>
+            <span className="text-[9px] font-bold font-mono text-slate-400 mr-1">{finalPercent}%</span>
+            <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "checklist" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+          </button>
+          {activeMenuTab === "checklist" && (
+            <div className="md:hidden mt-2 mb-3 p-4 bg-slate-50/90 dark:bg-[#070b13] rounded-2xl border-2 border-emerald-500/30 shadow-md animate-fade-in">
+              {renderTabContent("checklist")}
+            </div>
+          )}
+        </div>
+
+        {/* 12. CALANGUS IA */}
+        <div className="flex flex-col">
+          <button
+            onClick={() => setActiveMenuTab((prev) => (prev === "calangusia" ? "" : "calangusia"))}
+            className={`flex items-center justify-between gap-2.5 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-left transition-all duration-300 cursor-pointer ${
+              activeMenuTab === "calangusia"
+                ? "bg-slate-950 text-white dark:bg-emerald-500/15 dark:text-emerald-450 border-l-4 border-emerald-500"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-850"
+            }`}
+          >
+            <span className="flex items-center gap-2.5 flex-1">
+              <Bot className="w-4 h-4 text-amber-500" />
+              <span className="flex items-center gap-1.5">
+                <span>12. CalangusIA</span>
+                <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
+              </span>
+            </span>
+            <span className="text-[8px] bg-gradient-to-r from-amber-500 to-indigo-600 text-white font-extrabold px-1.5 py-0.5 rounded-full shadow-xs">IA</span>
+            <ChevronDown className={`w-4 h-4 md:hidden transition-transform duration-200 ${activeMenuTab === "calangusia" ? "rotate-180 text-emerald-400" : "text-slate-400"}`} />
+          </button>
+          {activeMenuTab === "calangusia" && (
+            <div className="md:hidden mt-2 mb-3 p-4 bg-slate-50/90 dark:bg-[#070b13] rounded-2xl border-2 border-emerald-500/30 shadow-md animate-fade-in">
+              {renderTabContent("calangusia")}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-8 border-t border-slate-100 dark:border-slate-850 pt-4 px-2">
+          <div className="p-3 bg-indigo-500/5 dark:bg-[#101726]/40 border border-indigo-500/10 rounded-xl text-center">
+            <Sparkles className="w-4 h-4 text-amber-500 mx-auto mb-1" />
+            <span className="block text-[8px] uppercase font-extrabold text-indigo-550 dark:text-indigo-400 tracking-widest">Portal CalanguS</span>
+            <span className="block text-[9px] text-slate-400 font-semibold mt-0.5">Fiscais autorizados Cebraspe.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT SIDE DETAILS AREA (DESKTOP ONLY) */}
+      <div className="hidden md:block grow bg-white dark:bg-[#0c1220]/90 p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.05)] dark:shadow-[4px_4px_0px_0px_#10b981]/10">
+        {renderTabContent(desktopMenuTab)}
       </div>
     </div>
   );
