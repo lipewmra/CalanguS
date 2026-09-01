@@ -67,6 +67,7 @@ import MessagingCenter from "./components/MessagingCenter";
 import AttendanceListView from "./components/AttendanceListView";
 import SimulateCollaboratorModal from "./components/SimulateCollaboratorModal";
 import CalangusIaView from "./components/CalangusIaView";
+import ClaDashboardOverview from "./components/ClaDashboardOverview";
 
 import { 
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
@@ -75,7 +76,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
   Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck, Clock,
   SlidersHorizontal, Eye, EyeOff, ArrowRightLeft, BookOpen, Bot, ExternalLink,
-  Lock, Mail, ArrowRight, RefreshCw, AlertCircle, KeyRound, Check
+  Lock, Mail, ArrowRight, RefreshCw, AlertCircle, KeyRound, Check, LayoutDashboard
 } from "lucide-react";
 import { 
   GoogleAuthProvider, 
@@ -1872,24 +1873,54 @@ export default function App() {
                 { id: "admin-metrics", label: "6. Métricas de Colaborador", icon: SlidersHorizontal, iconColor: "text-teal-400" },
                 { id: "admin-materials", label: "7. Material Didático & Capacitação", icon: BookOpen, iconColor: "text-indigo-400" }
               ] : [
-                { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
-                { id: "staff", label: "2. Fiscais e Inscrições", icon: Users, iconColor: "text-sky-400" },
+                { id: "dashboard", label: "0. Painel & Indicadores", icon: LayoutDashboard, iconColor: "text-emerald-400" },
+                { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-sky-400" },
+                { id: "staff", label: "2. Equipe, Inscrições & Funções", icon: Users, iconColor: "text-emerald-450" },
                 ...((effectiveRole === "CLA" || effectiveRole === "ALA") ? [
-                  { id: "association", label: "3. Associação de Função", icon: UserCheck, iconColor: "text-emerald-450" },
-                  { id: "alloc", label: "4. Alocação e Reservas", icon: Layers, iconColor: "text-indigo-400" },
-                  { id: "attendance", label: "5. Lista de Presença", icon: ClipboardCheck, iconColor: "text-emerald-400" }
+                  { id: "alloc", label: "3. Alocação por Salas & Reservas", icon: Layers, iconColor: "text-indigo-400" },
+                  { id: "attendance", label: "4. Frequência & Presença", icon: ClipboardCheck, iconColor: "text-teal-400" }
                 ] : []),
-                { id: "team", label: "6. Gestão de Equipe", icon: Users, iconColor: "text-emerald-450" },
-                { id: "catering", label: "7. Alimentação", icon: Coffee, iconColor: "text-amber-400" },
-                { id: "plates", label: "8. Impressão", icon: Printer, iconColor: "text-pink-400" },
-                { id: "activities", label: "9. Atividades do CLA", icon: CheckSquare, iconColor: "text-emerald-450" },
-                { id: "collab-settings", label: "10. Dados Colaboradores", icon: Calendar, iconColor: "text-emerald-400" },
-                { id: "messages", label: "11. Mensagens & Comunicação", icon: MessageSquare, iconColor: "text-teal-400" },
-                { id: "calangusia", label: "12. CalangusIA", icon: Sparkles, iconColor: "text-amber-400", externalUrl: "https://notebook.google.com/notebook/c3e64642-72e2-4ced-9d2c-685fcb910084" }
+                { id: "team", label: "5. Gestão de Acessos & ALA", icon: UserCheck, iconColor: "text-blue-400" },
+                { id: "catering", label: "6. Alimentação & Lanches", icon: Coffee, iconColor: "text-amber-400" },
+                { id: "plates", label: "7. Impressão de Placas & Crachás", icon: Printer, iconColor: "text-pink-400" },
+                { id: "activities", label: "8. Checklist de Atividades CLA", icon: CheckSquare, iconColor: "text-emerald-450" },
+                { id: "collab-settings", label: "9. Parâmetros de Fiscais", icon: Calendar, iconColor: "text-emerald-400" },
+                { id: "messages", label: "10. Central de Mensagens", icon: MessageSquare, iconColor: "text-teal-400" },
+                { id: "calangusia", label: "11. Assistente CalangusIA", icon: Sparkles, iconColor: "text-amber-400", externalUrl: "https://notebook.google.com/notebook/c3e64642-72e2-4ced-9d2c-685fcb910084" }
               ];
 
               const renderTabContent = (tabId: string) => {
                 switch (tabId) {
+                  case "dashboard":
+                    return (
+                      <div className="animate-fade-in">
+                        <ClaDashboardOverview
+                          collaborators={collaborators}
+                          allCollaborators={allCollaborators}
+                          building={building}
+                          eventConfig={eventConfig}
+                          claId={effectiveUser?.uid || currentUser.uid}
+                          onNavigateTab={(targetTab: string) => {
+                            setActiveTab(targetTab);
+                          }}
+                          onApproveCollaborator={async (id, roleName) => {
+                            const target = (collaborators || []).find(c => c.id === id);
+                            if (target) {
+                              const updates: Partial<CollaboratorInfo> = {
+                                status: "Confirmado",
+                                assignedRole: roleName && roleName.trim() !== "" ? roleName : undefined,
+                                isReserve: !roleName || roleName.trim() === ""
+                              };
+                              if (!target.originalClaId) updates.originalClaId = effectiveUser?.uid || currentUser.uid;
+                              if (!target.originalClaName) updates.originalClaName = effectiveUser?.name || currentUser.name || building?.name || "CLA";
+                              if (!target.claName) updates.claName = effectiveUser?.name || currentUser.name || building?.name || "CLA";
+                              await updateCollaborator(id, updates);
+                            }
+                          }}
+                          onUpdateCollaborator={updateCollaborator}
+                        />
+                      </div>
+                    );
                   case "admin-dashboard":
                     return effectiveRole === "SuperAdmin" ? (
                       <div className="animate-fade-in">
@@ -1960,6 +1991,9 @@ export default function App() {
                           buildingName={building?.name}
                           allBuildings={allBuildings}
                           allUsers={allUsers}
+                          building={building}
+                          onSaveBuilding={saveBuilding}
+                          eventConfig={eventConfig}
                           onAdd={addCollaborator} 
                           onUpdate={updateCollaborator} 
                           onDelete={deleteCollaborator} 
@@ -2122,7 +2156,7 @@ export default function App() {
 
                     {effectiveRole === "ALA" && (
                       <div className="p-3 bg-indigo-500/10 border-2 border-indigo-500/30 text-indigo-300 rounded-2xl text-[10px] font-bold leading-relaxed font-sans shadow-sm mb-3">
-                        🚨 OBS (ALA): Você tem acesso para visualizar todos os menus do CLA, mas possui permissão de edição e alteração apenas nos menus: 2 (Fiscais e Inscrições), 3 (Associação de Função) e 4 (Alocação e Reservas).
+                        🚨 OBS (ALA): Você tem acesso para visualizar todos os menus do CLA, com permissão de edição e gestão focada nos menus: 2 (Equipe, Inscrições & Funções) e 3 (Alocação por Salas & Reservas).
                       </div>
                     )}
 
@@ -2177,7 +2211,7 @@ export default function App() {
 
                   {/* DESKTOP NAVIGATION VIEW (SIDEBAR + CONTENT PANEL) */}
                   {(() => {
-                    const desktopActiveTab = activeTab || currentMenuItems[0]?.id || "building";
+                    const desktopActiveTab = activeTab || currentMenuItems[0]?.id || (effectiveRole === "SuperAdmin" ? "admin-dashboard" : "dashboard");
                     const pendingTransfersCount = (collaborators || []).filter(c => c.transferRequest && c.transferRequest.status === "Pendente").length;
 
                     return (
@@ -2252,7 +2286,7 @@ export default function App() {
 
                           {effectiveRole === "ALA" && !isSidebarCollapsed && (
                             <div className="p-4 bg-indigo-500/10 border-2 border-indigo-500/30 text-indigo-900 dark:text-indigo-300 rounded-2xl text-[10px] mt-4 font-bold leading-relaxed font-sans shadow-xs">
-                              🚨 OBS (ALA): Você tem acesso para visualizar todos os menus do CLA, mas possui permissão de edição e alteração apenas nos menus: 2 (Fiscais e Inscrições), 3 (Associação de Função) e 4 (Alocação e Reservas).
+                              🚨 OBS (ALA): Você tem acesso para visualizar todos os menus do CLA, com permissão de edição e gestão focada nos menus: 2 (Equipe, Inscrições & Funções) e 3 (Alocação por Salas & Reservas).
                             </div>
                           )}
 

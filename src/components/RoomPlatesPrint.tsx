@@ -446,8 +446,14 @@ export default function RoomPlatesPrint({
         doc.line(25, boxY + 8, 25 + boxW, boxY + 8);
 
         // Box 2: Presentes 2º Dia
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(0, 0, 0);
         doc.setLineWidth(0.8);
         doc.rect(25 + boxW + 6, boxY, boxW, boxH, "FD");
+
+        doc.setFont("Helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
         doc.text("Presentes 2º Dia", 25 + boxW + 6 + boxW / 2, boxY + 6, { align: "center" });
         doc.setLineWidth(0.4);
         doc.line(25 + boxW + 6, boxY + 8, 25 + boxW + 6 + boxW, boxY + 8);

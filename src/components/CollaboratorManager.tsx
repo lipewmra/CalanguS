@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from "react";
-import { CollaboratorInfo, PastEdition, BuildingInfo, UserProfile } from "../types";
+import { CollaboratorInfo, PastEdition, BuildingInfo, UserProfile, EventConfigInfo } from "../types";
 import { downloadCsvTemplate } from "./CsvTemplate";
 import { auditCollaborator } from "../lib/data-validator";
 import CollaboratorFailureModal from "./CollaboratorFailureModal";
@@ -11,13 +11,14 @@ import PhotoUploader from "./PhotoUploader";
 import DuplicateCollaboratorsModal, { findDuplicateCollaborators } from "./DuplicateCollaboratorsModal";
 import CollaboratorAuditLogModal from "./CollaboratorAuditLogModal";
 import BuildingAuditTrailView from "./BuildingAuditTrailView";
+import AssociationView, { getRolePayment } from "./AssociationView";
 import { appendCollaboratorLog } from "../lib/collaborator-logger";
 import { 
   Users, UserPlus, Upload, ShieldAlert, BadgeInfo, Trash, Mail, 
   MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
   Building2, Globe, Clock, ArrowRightLeft, Sparkles, Search, Filter,
   Calendar, ArrowUpDown, FileSpreadsheet, RotateCcw, Send, MessageSquare, BookOpen,
-  History
+  History, UserCheck, CheckCircle2, RefreshCw
 } from "lucide-react";
 
 export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "colaboradores_enem_calangus") {
@@ -125,6 +126,10 @@ interface CollaboratorManagerProps {
   buildingName?: string;
   allBuildings?: BuildingInfo[];
   allUsers?: UserProfile[];
+  building?: BuildingInfo | null;
+  onSaveBuilding?: (building: BuildingInfo) => Promise<void>;
+  eventConfig?: EventConfigInfo | null;
+  initialSubTab?: "list" | "roles" | "network_reserves" | "add" | "import" | "edit" | "audit_trail";
   onAdd: (collab: Omit<CollaboratorInfo, "id">) => Promise<string>;
   onUpdate: (id: string, updates: Partial<CollaboratorInfo>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -148,6 +153,10 @@ export default function CollaboratorManager({
   buildingName,
   allBuildings = [],
   allUsers = [],
+  building,
+  onSaveBuilding,
+  eventConfig,
+  initialSubTab = "list",
   onAdd, 
   onUpdate, 
   onDelete,
@@ -158,8 +167,10 @@ export default function CollaboratorManager({
   onSimulatePublicRecruit
 }: CollaboratorManagerProps) {
   
-  const [activeSubTab, setActiveSubTab] = useState<"list" | "network_reserves" | "add" | "import" | "edit" | "audit_trail">("list");
+  const [activeSubTab, setActiveSubTab] = useState<"list" | "roles" | "network_reserves" | "add" | "import" | "edit" | "audit_trail">(initialSubTab);
   const [selectedAuditCollab, setSelectedAuditCollab] = useState<CollaboratorInfo | null>(null);
+  const [approveWithRoleCollab, setApproveWithRoleCollab] = useState<CollaboratorInfo | null>(null);
+  const [selectedRoleToAssign, setSelectedRoleToAssign] = useState<string>("");
   const [filterType, setFilterType] = useState<
     | "todos"
     | "presenca_confirmada"
@@ -539,35 +550,43 @@ export default function CollaboratorManager({
     }
   };
 
+  // Toggle Confirm / Approve with or without direct role
+  const handleApproveWithRole = async (collab: CollaboratorInfo, roleName?: string) => {
+    const updates: Partial<CollaboratorInfo> = { 
+      status: "Confirmado",
+      assignedRole: roleName && roleName.trim() !== "" ? roleName : undefined,
+      isReserve: !roleName || roleName.trim() === ""
+    };
+    if (!collab.originalClaId) updates.originalClaId = claId;
+    if (!collab.originalClaName) updates.originalClaName = currentUserName || buildingName || "CLA";
+    if (!collab.claName) updates.claName = currentUserName || buildingName || "CLA";
+    
+    updates.activityLogs = appendCollaboratorLog(
+      collab,
+      "confirmacao_presenca",
+      roleName ? `Aprovado como ${roleName}` : "Aprovado como Reserva",
+      `Colaborador aprovado pela coordenação ${currentUserName || buildingName || "CLA"}${roleName ? ` com a função de ${roleName}.` : " no banco de reservas."}`,
+      {
+        performedBy: currentUserName || "Coordenação CLA",
+        performedByRole: "CLA",
+        details: { role: roleName || "Reserva" }
+      }
+    );
+
+    await onUpdate(collab.id!, updates);
+    setApproveWithRoleCollab(null);
+    setSelectedRoleToAssign("");
+    setLocalSuccessMsg(`"${collab.name}" aprovado com sucesso como ${roleName || "Reserva"}!`);
+    setTimeout(() => setLocalSuccessMsg(null), 3500);
+  };
+
   // Toggle Confirm / Approve
   const confirmStaff = async (id: string) => {
     const target = collaborators.find(c => c.id === id);
-    const updates: Partial<CollaboratorInfo> = { status: "Confirmado" };
     if (target) {
-      if (!target.originalClaId) {
-        updates.originalClaId = claId;
-      }
-      if (!target.originalClaName) {
-        updates.originalClaName = currentUserName || buildingName || "CLA";
-      }
-      if (!target.claName) {
-        updates.claName = currentUserName || buildingName || "CLA";
-      }
-      if (!target.assignedRoom) {
-        updates.isReserve = true;
-      }
-      updates.activityLogs = appendCollaboratorLog(
-        target,
-        "confirmacao_presenca",
-        "Cadastro Aprovado / Confirmado",
-        `Colaborador aprovado e integrado à equipe pela coordenação ${currentUserName || buildingName || "CLA"}.`,
-        {
-          performedBy: currentUserName || "Coordenação CLA",
-          performedByRole: "CLA"
-        }
-      );
+      setApproveWithRoleCollab(target);
+      setSelectedRoleToAssign(target.assignedRole || "");
     }
-    await onUpdate(id, updates);
   };
 
   // Toggle Recused
@@ -929,6 +948,15 @@ export default function CollaboratorManager({
           </button>
 
           <button
+            onClick={() => { setActiveSubTab("roles"); setParseStatus("idle"); setEditingCollabId(null); }}
+            className={`btn-3d py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${activeSubTab === "roles" ? "bg-emerald-600 text-white border-emerald-800 shadow-md" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/20"}`}
+            title="Metas de alocação por sala e cargos, cálculo automático e remunerações"
+          >
+            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>🎯 Metas & Associação de Funções</span>
+          </button>
+
+          <button
             onClick={() => { setActiveSubTab("network_reserves"); setParseStatus("idle"); setEditingCollabId(null); }}
             className={`btn-3d py-2.5 px-3.5 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 ${activeSubTab === "network_reserves" ? "bg-indigo-600 text-white border-indigo-800 shadow-md" : "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/20 border border-indigo-500/20"}`}
           >
@@ -1055,6 +1083,20 @@ export default function CollaboratorManager({
         handleAcceptAllPending,
         collaborators.filter(c => c.status === "Pendente").length,
         (c) => setSelectedAuditCollab(c)
+      )}
+
+      {/* SUBTAB: ROLES & FUNCTION ASSOCIATION (MENU 3 INTEGRATED) */}
+      {activeSubTab === "roles" && (
+        <div className="space-y-4 animate-fade-in">
+          <AssociationView 
+            collaborators={collaborators}
+            onUpdate={onUpdate}
+            readOnly={false}
+            building={building}
+            onSaveBuilding={onSaveBuilding}
+            eventConfig={eventConfig}
+          />
+        </div>
       )}
 
       {/* SUBTAB: AUDIT TRAIL & LOGS */}
@@ -1389,6 +1431,133 @@ export default function CollaboratorManager({
         operatorName={currentUserName || buildingName || "Coordenação CLA"}
         operatorRole="CLA"
       />
+
+      {/* Approve with Function Modal */}
+      {approveWithRoleCollab && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in no-print">
+          <div className="bg-white dark:bg-[#0d1526] border-2 border-emerald-500/30 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-display font-black text-slate-900 dark:text-white">
+                    Aprovar Colaborador & Atribuir Função
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Defina a função oficial agora ou aprove como fiscal reserva.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setApproveWithRoleCollab(null); setSelectedRoleToAssign(""); }}
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Candidate Card info */}
+            <div className="p-4 bg-slate-50 dark:bg-[#070b13] rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="flex items-center gap-3">
+                {approveWithRoleCollab.photoUrl ? (
+                  <img
+                    src={approveWithRoleCollab.photoUrl}
+                    alt={approveWithRoleCollab.name}
+                    className="w-12 h-12 rounded-xl object-cover border border-emerald-500/30"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center font-black text-slate-600 dark:text-slate-300">
+                    {approveWithRoleCollab.name.substring(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="font-display font-bold text-sm text-slate-900 dark:text-white truncate">
+                    {approveWithRoleCollab.name}
+                  </div>
+                  <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                    CPF: {approveWithRoleCollab.cpf} • {approveWithRoleCollab.whatsapp}
+                  </div>
+                  {approveWithRoleCollab.specialRole && approveWithRoleCollab.specialRole !== "Nenhuma" && (
+                    <span className="inline-block mt-1 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-bold px-2 py-0.5 rounded text-[10px] border border-indigo-500/20">
+                      ★ Perfil: {approveWithRoleCollab.specialRole}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2 text-[11px] text-slate-500 dark:text-slate-400 grid grid-cols-2 gap-2 border-t border-slate-200/60 dark:border-slate-800">
+                <div><strong>Escolaridade:</strong> {approveWithRoleCollab.education || "Não informada"}</div>
+                <div><strong>PCD:</strong> {approveWithRoleCollab.disability || "Nenhuma"}</div>
+                {approveWithRoleCollab.pastEditions && approveWithRoleCollab.pastEditions.length > 0 && (
+                  <div className="col-span-2">
+                    <strong>Experiência ENEM:</strong> {approveWithRoleCollab.pastEditions.map(p => `${p.year} (${p.role || "Fiscal"})`).join(", ")}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Role Selector */}
+            <div className="space-y-2">
+              <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                Selecione a Função Oficial:
+              </label>
+              <select
+                value={selectedRoleToAssign}
+                onChange={(e) => setSelectedRoleToAssign(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-3 text-xs font-bold text-slate-800 dark:text-white focus:outline-hidden focus:border-emerald-500 transition"
+              >
+                <option value="">🛡️ Sem Função Específica (Aprovar como Fiscal Reserva)</option>
+                {ENEM_ROLES.map((r) => {
+                  const pay = getRolePayment(r.name);
+                  return (
+                    <option key={r.name} value={r.name}>
+                      {r.name} {pay ? `(${pay})` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                💡 Caso aprovado sem definir uma função agora, o colaborador ingressará automaticamente na lista de <strong>Fiscais Reservas</strong>. Você poderá vinculá-lo a uma sala a qualquer momento.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleApproveWithRole(approveWithRoleCollab, selectedRoleToAssign)}
+                className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>
+                  {selectedRoleToAssign ? `Aprovar como ${selectedRoleToAssign}` : "Aprovar como Reserva"}
+                </span>
+              </button>
+
+              {selectedRoleToAssign && (
+                <button
+                  type="button"
+                  onClick={() => handleApproveWithRole(approveWithRoleCollab, "")}
+                  className="py-3 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer"
+                >
+                  Aprovar como Reserva
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => { setApproveWithRoleCollab(null); setSelectedRoleToAssign(""); }}
+                className="py-3 px-4 border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
