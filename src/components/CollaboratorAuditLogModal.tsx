@@ -223,14 +223,26 @@ export default function CollaboratorAuditLogModal({
             <div className="bg-white/5 border border-white/10 rounded-xl p-2.5">
               <span className="text-[10px] uppercase font-bold text-slate-400 block">Status de Presença</span>
               <span className={`text-xs font-black flex items-center gap-1 mt-0.5 ${
-                collaborator.attendanceStatus === "Confirmado" || collaborator.status === "Confirmado"
+                collaborator.attendanceStatus === "Confirmado" && collaborator.assignedRoom && !collaborator.isReserve
                   ? "text-emerald-400"
-                  : collaborator.status === "Recusado"
+                  : collaborator.status === "Recusado" || collaborator.attendanceStatus === "Recusado" || collaborator.status === "Impedido"
                   ? "text-rose-400"
+                  : (!collaborator.assignedRoom || collaborator.isReserve)
+                  ? "text-indigo-400"
                   : "text-amber-400"
               }`}>
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>{collaborator.attendanceStatus || collaborator.status || "Pendente"}</span>
+                <span>
+                  {collaborator.status === "Impedido"
+                    ? "Impedido"
+                    : collaborator.attendanceStatus === "Recusado" || collaborator.refusedRole
+                    ? "Recusou Função"
+                    : (collaborator.isReserve || !collaborator.assignedRoom || collaborator.assignedRoom.trim() === "")
+                    ? (collaborator.assignedRole ? "Reserva c/ Função" : "Reserva Técnica")
+                    : collaborator.attendanceStatus === "Confirmado"
+                    ? "Presença Confirmada"
+                    : "Aguardando Fiscal"}
+                </span>
               </span>
             </div>
 

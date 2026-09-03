@@ -657,13 +657,17 @@ export default function AssociationView({
                       {isAssigned && (
                         <div className="mt-1 pt-1.5 border-t border-rose-200/60 dark:border-rose-900/40 flex items-center justify-between font-bold text-[9.5px]">
                           <span className="text-slate-400">Presença Fiscal:</span>
-                          {collab.attendanceStatus === "Confirmado" ? (
+                          {collab.attendanceStatus === "Confirmado" && collab.assignedRoom && !collab.isReserve ? (
                             <span className="text-emerald-600 dark:text-emerald-400 font-black flex items-center gap-1">
                               <Check className="w-3 h-3 stroke-[3]" /> Confirmado
                             </span>
                           ) : (collab.attendanceStatus === "Recusado" || collab.refusedRole) ? (
                             <span className="text-rose-600 dark:text-rose-400 font-black flex items-center gap-1">
                               <RotateCcw className="w-3 h-3" /> Recusou Função
+                            </span>
+                          ) : (!collab.assignedRoom || collab.isReserve) ? (
+                            <span className="text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-1" title="Colaborador com função definida no banco de reserva aguardando sala">
+                              <Users className="w-3 h-3" /> Reserva (Sem Sala)
                             </span>
                           ) : (
                             <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">

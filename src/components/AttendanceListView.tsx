@@ -650,7 +650,7 @@ export default function AttendanceListView({
             </div>
           </div>
           <div className="text-right font-mono text-[10px] border-2 border-black p-2 rounded">
-            <span className="block font-black text-xs">CALANGUS v2.3</span>
+            <span className="block font-black text-xs">CALANGUS v2.8</span>
             <span className="block">Emissão: {new Date().toLocaleDateString("pt-BR")}</span>
             <span className="block font-bold">Total: {allocatedCollaborators.length} fiscais</span>
           </div>

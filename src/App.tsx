@@ -363,7 +363,7 @@ export default function App() {
   // Helper to determine if a collaborator is authorized to access the system
   const isCollaboratorAuthorized = (collab: CollaboratorInfo | null | undefined): boolean => {
     if (!collab) return false;
-    if (collab.status === "Recusado" || collab.status === "Cancelado" || (collab as any).status === "Desistente") {
+    if (collab.status === "Recusado" || collab.status === "Cancelado" || collab.status === "Impedido" || (collab as any).status === "Desistente") {
       return false;
     }
     return true;
@@ -428,11 +428,15 @@ export default function App() {
       // Colaborador verification
       if (profile.role === "Colaborador") {
         const collab = await findCollaboratorByEmail(email);
-        if (collab && (collab.status === "Recusado" || collab.status === "Cancelado" || (collab as any).status === "Desistente")) {
+        if (collab && (collab.status === "Recusado" || collab.status === "Cancelado" || collab.status === "Impedido" || (collab as any).status === "Desistente")) {
           await signOut(auth);
           setCurrentUser(null);
           setSelectedRole(null);
-          setUnregisteredNotice("Acesso revogado: Seu cadastro foi cancelado ou recusado pela Coordenação.");
+          setUnregisteredNotice(
+            collab.status === "Impedido"
+              ? `Acesso impedido: Seu cadastro foi marcado como impedido pela Coordenação.${collab.refusalReason ? ` Motivo: ${collab.refusalReason}` : ""}`
+              : "Acesso revogado: Seu cadastro foi cancelado ou recusado pela Coordenação."
+          );
           return null;
         }
         if (collab) {
@@ -474,12 +478,14 @@ export default function App() {
     }
 
     // 7. If collaborator exists but is explicitly revoked/cancelled
-    if (collabRecord && (collabRecord.status === "Recusado" || collabRecord.status === "Cancelado" || (collabRecord as any).status === "Desistente")) {
+    if (collabRecord && (collabRecord.status === "Recusado" || collabRecord.status === "Cancelado" || collabRecord.status === "Impedido" || (collabRecord as any).status === "Desistente")) {
       await signOut(auth);
       setCurrentUser(null);
       setSelectedRole(null);
       setUnregisteredNotice(
-        `Acesso Revogado: Olá, ${collabRecord.name}! Seu cadastro foi marcado como cancelado ou recusado pela Coordenação.`
+        collabRecord.status === "Impedido"
+          ? `Acesso Impedido: Olá, ${collabRecord.name}! Seu cadastro foi marcado como impedido pela Coordenação.${collabRecord.refusalReason ? ` Motivo: ${collabRecord.refusalReason}` : ""}`
+          : `Acesso Revogado: Olá, ${collabRecord.name}! Seu cadastro foi marcado como cancelado ou recusado pela Coordenação.`
       );
       setIsPublicForm(false);
       return null;
@@ -906,7 +912,13 @@ export default function App() {
         collaborators.find(c => areEmailsMatching(c.email, activeEmail) || ((c as any).emails || []).some((e: string) => areEmailsMatching(e, activeEmail))) ||
         allCollaborators.find(c => areEmailsMatching(c.email, activeEmail) || ((c as any).emails || []).some((e: string) => areEmailsMatching(e, activeEmail)));
       if (rec) {
-        const actualStatus = rec.attendanceStatus || (rec.status === "Confirmado" && rec.assignedRole ? "Confirmado" : rec.status);
+        const isAllocated = Boolean(
+          rec.status === "Confirmado" && 
+          !rec.isReserve && 
+          rec.assignedRoom && rec.assignedRoom.trim() !== "" && 
+          rec.assignedRole && rec.assignedRole.trim() !== ""
+        );
+        const actualStatus = isAllocated ? (rec.attendanceStatus || "Pendente") : "Pendente";
         if (actualStatus !== individualConfirmationStatus) {
           setIndividualConfirmationStatus(actualStatus as any);
         }
@@ -1081,7 +1093,7 @@ export default function App() {
               CalanguS
             </h2>
             <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-              v2.5
+              v2.8
             </span>
           </div>
           <span className="text-[10px] uppercase font-extrabold text-slate-450 tracking-widest font-mono">
@@ -1185,7 +1197,7 @@ export default function App() {
                 <div className="flex items-center justify-center gap-2">
                   <h1 className="font-display font-black text-3xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</h1>
                   <span className="text-[11px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                    v2.5
+                    v2.8
                   </span>
                 </div>
                 <span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block mt-0.5">TACTILE TEAM DISPATCHER</span>
@@ -1538,7 +1550,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</span>
                     <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                      v2.5
+                      v2.8
                     </span>
                   </div>
                   <span className="text-[8px] sm:text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block">TACTILE TEAM DISPATCHER</span>

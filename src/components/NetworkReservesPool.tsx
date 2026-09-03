@@ -224,9 +224,24 @@ export default function NetworkReservesPool({
                             pastEditions: collab.pastEditions
                           })}
                         />
-                        <h4 className="font-extrabold text-slate-900 dark:text-white text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate" title={collab.name}>
+                        <button
+                          type="button"
+                          onClick={() => onViewPhoto?.({
+                            imageUrl: collab.photoUrl || "",
+                            name: collab.name,
+                            role: "Fiscal Reserva",
+                            cpf: collab.cpf,
+                            claName: originName,
+                            education: collab.education,
+                            specialRole: collab.specialRole,
+                            hasWorkedEnem: collab.hasWorkedEnem,
+                            pastEditions: collab.pastEditions
+                          })}
+                          className="font-extrabold text-slate-900 dark:text-white text-sm hover:text-indigo-600 dark:hover:text-indigo-400 transition truncate cursor-pointer text-left hover:underline"
+                          title={`Ver detalhamento de ${collab.name}`}
+                        >
                           {collab.name}
-                        </h4>
+                        </button>
                       </div>
                       <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-amber-500/20 shrink-0">
                         Reserva

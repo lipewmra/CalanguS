@@ -540,7 +540,7 @@ export async function checkEmailRegistered(email: string): Promise<{
   try {
     const collab = await findCollaboratorByEmail(targetEmail);
     if (collab) {
-      if (collab.status === "Recusado" || collab.status === "Cancelado" || (collab as any).status === "Desistente") {
+      if (collab.status === "Recusado" || collab.status === "Cancelado" || collab.status === "Impedido" || (collab as any).status === "Desistente") {
         return { isRegistered: false };
       }
       return { isRegistered: true, name: collab.name, role: "Colaborador", source: "collaborator" };

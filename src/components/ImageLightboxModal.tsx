@@ -30,6 +30,7 @@ export interface LightboxData {
   attendanceStatus?: string;
   refusedRole?: string;
   refusalTag?: string;
+  refusalReason?: string;
   createdAt?: string;
   isExternalRecruit?: boolean;
   paymentValue?: string;
@@ -176,6 +177,18 @@ export default function ImageLightboxModal({ data, onClose }: ImageLightboxModal
                 <div className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
                   <DoorOpen className="w-3.5 h-3.5 shrink-0" />
                   <span>Alocado na {data.assignedRoom}</span>
+                </div>
+              )}
+
+              {(data.status === "Impedido" || data.refusalReason) && (
+                <div className="p-3 bg-rose-500/10 border-2 border-rose-500/30 rounded-xl space-y-1 text-left">
+                  <div className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <span>Colaborador Impedido / Recusado</span>
+                  </div>
+                  <div className="text-xs font-bold text-rose-900 dark:text-rose-200">
+                    <strong>Motivo da Recusa:</strong> {data.refusalReason || data.refusalTag || "Participante marcado como impedido pela coordenação."}
+                  </div>
                 </div>
               )}
             </div>

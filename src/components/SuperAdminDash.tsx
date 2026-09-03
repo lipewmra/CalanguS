@@ -2124,7 +2124,7 @@ export default function SuperAdminDash({ initialConfig, onSaveConfig, activeSubT
 
           <div className="mt-4 pt-3.5 border-t-2 border-slate-100 dark:border-slate-800 text-[10px] text-slate-450 dark:text-slate-500 font-mono font-bold flex items-center justify-between">
             <span>CALANGUS INTEGRATOR ENGINE</span>
-            <span>v2.4 - ONLINE</span>
+            <span>v2.8 - ONLINE</span>
           </div>
         </div>
 

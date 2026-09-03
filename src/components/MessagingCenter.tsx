@@ -461,10 +461,10 @@ export default function MessagingCenter({
     return {
       totalAll: collaborators.length,
       approvedTotal: approved.length,
-      confirmedPresence: approved.filter(c => c.attendanceStatus === "Confirmado").length,
-      pendingPresence: approved.filter(c => c.attendanceStatus !== "Confirmado" && !c.isReserve).length,
-      reserves: approved.filter(c => c.isReserve).length,
-      assigned: approved.filter(c => !c.isReserve && !!c.assignedRole).length,
+      confirmedPresence: approved.filter(c => c.attendanceStatus === "Confirmado" && !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length,
+      pendingPresence: approved.filter(c => c.attendanceStatus !== "Confirmado" && !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && c.assignedRole && c.assignedRole.trim() !== "" && c.attendanceStatus !== "Recusado" && !c.refusedRole).length,
+      reserves: approved.filter(c => c.isReserve || !c.assignedRoom || c.assignedRoom.trim() === "").length,
+      assigned: approved.filter(c => !c.isReserve && !!c.assignedRole && !!c.assignedRoom && c.assignedRoom.trim() !== "").length,
       withErrors: approved.filter(c => c.orionStatus === "Erro").length,
       pendingApproval: pendingApprovalCollaborators.length,
       rejected: collaborators.filter(c => c.status === "Recusado").length,
@@ -498,11 +498,14 @@ export default function MessagingCenter({
 
     // For all standard groups: ONLY collaborators approved by the CLA in Menu 2 (c.status === "Confirmado")
     return approvedCollaborators.filter(c => {
+      const isCollabAllocated = !c.isReserve && Boolean(c.assignedRoom && c.assignedRoom.trim() !== "" && c.assignedRole && c.assignedRole.trim() !== "");
+      const isCollabReserve = Boolean(c.isReserve || !c.assignedRoom || c.assignedRoom.trim() === "");
+
       // Group filter
-      if (groupFilter === "confirmed_presence" && c.attendanceStatus !== "Confirmado") return false;
-      if (groupFilter === "pending_presence" && (c.attendanceStatus === "Confirmado" || c.isReserve)) return false;
-      if (groupFilter === "reserves" && !c.isReserve) return false;
-      if (groupFilter === "assigned" && (c.isReserve || !c.assignedRole)) return false;
+      if (groupFilter === "confirmed_presence" && (!isCollabAllocated || c.attendanceStatus !== "Confirmado")) return false;
+      if (groupFilter === "pending_presence" && (!isCollabAllocated || c.attendanceStatus === "Confirmado" || c.attendanceStatus === "Recusado" || c.refusedRole)) return false;
+      if (groupFilter === "reserves" && !isCollabReserve) return false;
+      if (groupFilter === "assigned" && !isCollabAllocated) return false;
       if (groupFilter === "with_errors" && c.orionStatus !== "Erro") return false;
 
       // Role filter

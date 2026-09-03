@@ -233,7 +233,7 @@ export interface CollaboratorInfo {
   certificateAttachedName?: string;
   isReserve: boolean;
   assignedRoom?: string; // e.g. "Sala 01", "Coordenação", or null
-  status: "Pendente" | "Confirmado" | "Recusado" | "Cancelado";
+  status: "Pendente" | "Confirmado" | "Recusado" | "Cancelado" | "Impedido";
   assignedRole?: string;
   orionStatus: "Ok" | "Erro";
   orionErrors: string[]; // lists data inconsistencies like CPFs, lower/uppercase structures
@@ -256,6 +256,7 @@ export interface CollaboratorInfo {
   refusedRole?: string;
   refusedRoleDate?: string;
   refusalTag?: string;
+  refusalReason?: string;
   attendanceConfirmedAt?: string;
   isPresent?: boolean;
   presenceCheckedAt?: string;

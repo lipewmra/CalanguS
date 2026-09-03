@@ -84,7 +84,7 @@ export default function ClaDashboardOverview({
 
   // 3. Count Collaborators in each category
   const activeCollabs = useMemo(() => {
-    return collaborators.filter(c => c.status !== "Recusado" && c.status !== "Cancelado");
+    return collaborators.filter(c => c.status !== "Recusado" && c.status !== "Cancelado" && c.status !== "Impedido");
   }, [collaborators]);
 
   // Collaborators with assigned official roles (excluding pure unassigned reserves)
@@ -97,9 +97,9 @@ export default function ClaDashboardOverview({
     return activeCollabs.filter(c => c.assignedRoom && c.assignedRoom.trim() !== "" && !c.isReserve);
   }, [activeCollabs]);
 
-  // Reserves available
+  // Reserves available: includes both isReserve and those with defined role but no room allocation
   const availableReserves = useMemo(() => {
-    return activeCollabs.filter(c => c.isReserve || (!c.assignedRole && !c.assignedRoom));
+    return activeCollabs.filter(c => c.isReserve || !c.assignedRoom || c.assignedRoom.trim() === "");
   }, [activeCollabs]);
 
   // Pending approval by CLA
@@ -107,20 +107,20 @@ export default function ClaDashboardOverview({
     return collaborators.filter(c => c.status === "Pendente");
   }, [collaborators]);
 
-  // Confirmed collaborators count (presence confirmed or CLA confirmed)
+  // Confirmed collaborators count (presence confirmed strictly for allocated personnel)
   const presenceConfirmedCollabs = useMemo(() => {
-    return collaborators.filter(c => c.status === "Confirmado");
-  }, [collaborators]);
+    return allocatedInRooms.filter(c => c.attendanceStatus === "Confirmado");
+  }, [allocatedInRooms]);
 
-  // Not confirmed yet (attendance is pending or absent)
+  // Allocated collaborators who haven't confirmed yet
   const presenceUnconfirmedCollabs = useMemo(() => {
-    return collaborators.filter(c => c.status === "Pendente");
-  }, [collaborators]);
+    return allocatedInRooms.filter(c => c.attendanceStatus !== "Confirmado");
+  }, [allocatedInRooms]);
 
   // Recused Collaborators (with details on what role or room was rejected)
   const recusedCollabs = useMemo(() => {
     return collaborators.filter(c => 
-      c.status === "Recusado" || !!c.refusedRole || !!c.refusalTag
+      c.status === "Recusado" || c.status === "Impedido" || !!c.refusedRole || !!c.refusalTag || !!c.refusalReason
     );
   }, [collaborators]);
 
@@ -491,12 +491,12 @@ export default function ClaDashboardOverview({
                 <CheckCircle2 className="w-5 h-5" />
               </div>
               <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                {collaborators.length > 0 ? Math.round((presenceConfirmedCollabs.length / collaborators.length) * 100) : 0}% Confirmação
+                {allocatedInRooms.length > 0 ? Math.round((presenceConfirmedCollabs.length / allocatedInRooms.length) * 100) : 0}% Confirmação
               </span>
             </div>
             <div className="mt-3">
               <span className="block text-2xl font-black text-slate-850 dark:text-white font-display">
-                {presenceConfirmedCollabs.length} <span className="text-xs font-bold text-slate-400">fiscais</span>
+                {presenceConfirmedCollabs.length} <span className="text-xs font-bold text-slate-400">de {allocatedInRooms.length} alocados</span>
               </span>
               <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                 Confirmaram Presença no Exame
@@ -853,15 +853,17 @@ export default function ClaDashboardOverview({
                       </div>
                     </div>
 
-                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-500 text-white shrink-0 shadow-xs">
-                      RECUSADO
+                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full text-white shrink-0 shadow-xs ${
+                      collab.status === "Impedido" ? "bg-rose-700" : "bg-rose-500"
+                    }`}>
+                      {collab.status === "Impedido" ? "IMPEDIDO" : "RECUSADO"}
                     </span>
                   </div>
 
                   {/* Information on What Was Refused */}
                   <div className="p-2.5 bg-white dark:bg-[#070b13] rounded-lg border border-rose-500/20 text-xs space-y-1">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-slate-500 font-bold">Função Recusada:</span>
+                      <span className="text-slate-500 font-bold">Função:</span>
                       <span className="font-black text-rose-600 dark:text-rose-400 font-sans">
                         {refusedFunction}
                       </span>
@@ -872,9 +874,9 @@ export default function ClaDashboardOverview({
                         {refusedRoom}
                       </span>
                     </div>
-                    {collab.refusalTag && (
-                      <div className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-100 dark:border-slate-800">
-                        Motivo: {collab.refusalTag}
+                    {(collab.refusalReason || collab.refusalTag) && (
+                      <div className="text-[10px] text-rose-600 dark:text-rose-400 font-bold pt-1 border-t border-slate-100 dark:border-slate-800">
+                        Motivo: {collab.refusalReason || collab.refusalTag}
                       </div>
                     )}
                   </div>

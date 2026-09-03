@@ -18,7 +18,7 @@ import {
   MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
   Building2, Globe, Clock, ArrowRightLeft, Sparkles, Search, Filter,
   Calendar, ArrowUpDown, FileSpreadsheet, RotateCcw, Send, MessageSquare, BookOpen,
-  History, UserCheck, CheckCircle2, RefreshCw
+  History, UserCheck, CheckCircle2, RefreshCw, Eye, Ban
 } from "lucide-react";
 
 export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "colaboradores_enem_calangus") {
@@ -171,6 +171,9 @@ export default function CollaboratorManager({
   const [selectedAuditCollab, setSelectedAuditCollab] = useState<CollaboratorInfo | null>(null);
   const [approveWithRoleCollab, setApproveWithRoleCollab] = useState<CollaboratorInfo | null>(null);
   const [selectedRoleToAssign, setSelectedRoleToAssign] = useState<string>("");
+  const [refuseModalCollab, setRefuseModalCollab] = useState<CollaboratorInfo | null>(null);
+  const [refuseReasonText, setRefuseReasonText] = useState<string>("");
+  const [refuseQuickReason, setRefuseQuickReason] = useState<string>("");
   const [filterType, setFilterType] = useState<
     | "todos"
     | "presenca_confirmada"
@@ -182,6 +185,7 @@ export default function CollaboratorManager({
     | "efetivos"
     | "reservas"
     | "recusados"
+    | "impedidos"
     | "com_erro"
   >("todos");
   const [searchQuery, setSearchQuery] = useState("");
@@ -589,23 +593,62 @@ export default function CollaboratorManager({
     }
   };
 
-  // Toggle Recused
-  const refuseStaff = async (id: string) => {
+  // Open Refusal & Impediment Dialog
+  const refuseStaff = (id: string) => {
     const target = collaborators.find(c => c.id === id);
-    let updatedLogs = target?.activityLogs;
     if (target) {
-      updatedLogs = appendCollaboratorLog(
-        target,
-        "recusa_funcao",
-        "Cadastro Recusado / Desativado",
-        `Colaborador marcado como Recusado/Desativado pela coordenação ${currentUserName || buildingName || "CLA"}.`,
-        {
-          performedBy: currentUserName || "Coordenação CLA",
-          performedByRole: "CLA"
-        }
-      );
+      setRefuseModalCollab(target);
+      setRefuseReasonText(target.refusalReason || "");
+      setRefuseQuickReason("");
     }
-    await onUpdate(id, { status: "Recusado", activityLogs: updatedLogs });
+  };
+
+  // Confirm Refusal: Unallocate from room, clear role, mark as Impedido, save reason and audit logs
+  const handleConfirmRefusal = async (collab: CollaboratorInfo, reason: string) => {
+    if (!reason || !reason.trim()) {
+      alert("Por favor, informe o motivo da recusa/impedimento antes de confirmar.");
+      return;
+    }
+
+    const previousRoom = collab.assignedRoom;
+    const previousRole = collab.assignedRole;
+
+    const updatedLogs = appendCollaboratorLog(
+      collab,
+      "recusa_funcao",
+      "Participante Recusado e Impedido",
+      `Colaborador recusado e marcado como Impedido pela coordenação ${currentUserName || buildingName || "CLA"}. Motivo: "${reason.trim()}". ${previousRoom ? `Desalocado e removido da Sala ${previousRoom}.` : ""}`,
+      {
+        performedBy: currentUserName || "Coordenação CLA",
+        performedByRole: "CLA",
+        details: {
+          motivo: reason.trim(),
+          salaAnterior: previousRoom || null,
+          funcaoAnterior: previousRole || null,
+          statusAnterior: collab.status
+        }
+      }
+    );
+
+    const updates: Partial<CollaboratorInfo> = {
+      status: "Impedido",
+      assignedRoom: "",
+      assignedRole: "",
+      isReserve: false,
+      refusedRole: previousRole || "Não associada",
+      refusalReason: reason.trim(),
+      refusalTag: `Impedido: ${reason.trim()}`,
+      refusedRoleDate: new Date().toLocaleDateString("pt-BR") + " às " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      attendanceStatus: "Recusado",
+      activityLogs: updatedLogs
+    };
+
+    await onUpdate(collab.id!, updates);
+    setRefuseModalCollab(null);
+    setRefuseReasonText("");
+    setRefuseQuickReason("");
+    setLocalSuccessMsg(`"${collab.name}" foi recusado, removido da sala e marcado como Impedido.`);
+    setTimeout(() => setLocalSuccessMsg(null), 3500);
   };
 
   // Batch Accept All Pending Collaborators
@@ -796,13 +839,13 @@ export default function CollaboratorManager({
 
     // 1. Status Filter
     if (filterType === "presenca_confirmada") {
-      result = result.filter(c => c.attendanceStatus === "Confirmado");
+      result = result.filter(c => c.status === "Confirmado" && !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && c.attendanceStatus === "Confirmado");
     } else if (filterType === "presenca_pendente") {
-      result = result.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && c.attendanceStatus !== "Confirmado" && c.attendanceStatus !== "Recusado" && !c.refusedRole);
+      result = result.filter(c => c.status === "Confirmado" && !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && c.assignedRole && c.assignedRole.trim() !== "" && c.attendanceStatus !== "Confirmado" && c.attendanceStatus !== "Recusado" && !c.refusedRole);
     } else if (filterType === "confirmados") {
       result = result.filter(c => c.status === "Confirmado");
     } else if (filterType === "com_funcao_sem_sala") {
-      // Tem função mas não está associado a sala/posto
+      // Tem função mas não está associado a sala/posto (Reserva com Função)
       result = result.filter(c => c.status === "Confirmado" && c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === ""));
     } else if (filterType === "sem_funcao") {
       // Não tem função atribuída
@@ -812,9 +855,12 @@ export default function CollaboratorManager({
     } else if (filterType === "efetivos") {
       result = result.filter(c => !c.isReserve && c.status === "Confirmado" && c.assignedRoom && c.assignedRoom.trim() !== "");
     } else if (filterType === "reservas") {
-      result = result.filter(c => c.isReserve && c.status === "Confirmado");
+      // No sistema geral, o colaborador que tem função mas não tem alocação deve ser considerado como um tipo de reserva
+      result = result.filter(c => c.status === "Confirmado" && (c.isReserve || !c.assignedRoom || c.assignedRoom.trim() === ""));
     } else if (filterType === "recusados") {
-      result = result.filter(c => c.status === "Recusado" || c.refusedRole || c.refusalTag || c.attendanceStatus === "Recusado");
+      result = result.filter(c => c.status === "Recusado" || c.status === "Impedido" || c.refusedRole || c.refusalTag || c.attendanceStatus === "Recusado");
+    } else if (filterType === "impedidos") {
+      result = result.filter(c => c.status === "Impedido" || (c.refusalTag && c.refusalTag.toLowerCase().includes("impedido")));
     } else if (filterType === "com_erro") {
       result = result.filter(c => c.orionStatus === "Erro");
     }
@@ -846,7 +892,9 @@ export default function CollaboratorManager({
         const matchesAttendance = c.attendanceStatus ? c.attendanceStatus.toLowerCase().includes(q) : false;
         const matchesCla = (c.claName && c.claName.toLowerCase().includes(q)) || (c.originalClaName && c.originalClaName.toLowerCase().includes(q));
         const matchesPastEditions = c.pastEditions ? c.pastEditions.some(ed => String(ed.year).includes(q) || ed.role.toLowerCase().includes(q)) : false;
-        const matchesRefusal = (c.refusedRole && c.refusedRole.toLowerCase().includes(q)) || (c.refusalTag && c.refusalTag.toLowerCase().includes(q));
+        const matchesRefusal = (c.refusedRole && c.refusedRole.toLowerCase().includes(q)) || 
+          (c.refusalTag && c.refusalTag.toLowerCase().includes(q)) || 
+          (c.refusalReason && c.refusalReason.toLowerCase().includes(q));
 
         if (searchField === "name") return matchesName;
         if (searchField === "cpf") return matchesCpf;
@@ -1558,6 +1606,162 @@ export default function CollaboratorManager({
           </div>
         </div>
       )}
+
+      {/* Refuse Collaborator & Mark as Impedido Modal */}
+      {refuseModalCollab && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in no-print">
+          <div className="bg-white dark:bg-[#0d1526] border-2 border-rose-500/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-600 shrink-0">
+                  <Ban className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-display font-black text-slate-900 dark:text-white">
+                    Recusar Participante & Marcar como Impedido
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    O participante será desalocado da sala e marcado como impedido no sistema.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setRefuseModalCollab(null); setRefuseReasonText(""); setRefuseQuickReason(""); }}
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Collaborator details & current allocation status */}
+            <div className="p-4 bg-slate-50 dark:bg-[#070b13] rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex items-center gap-3">
+                {refuseModalCollab.photoUrl ? (
+                  <img
+                    src={refuseModalCollab.photoUrl}
+                    alt={refuseModalCollab.name}
+                    className="w-12 h-12 rounded-xl object-cover border-2 border-rose-500/30 shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center font-black text-slate-600 dark:text-slate-300 shrink-0">
+                    {refuseModalCollab.name.substring(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="font-display font-black text-sm text-slate-900 dark:text-white truncate">
+                    {refuseModalCollab.name}
+                  </div>
+                  <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                    CPF: {refuseModalCollab.cpf} {refuseModalCollab.whatsapp ? `• ${refuseModalCollab.whatsapp}` : ""}
+                  </div>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                    Função atual: <strong>{refuseModalCollab.assignedRole || "Não associada"}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Room Deallocation Alert if assigned to room */}
+              {refuseModalCollab.assignedRoom ? (
+                <div className="p-3 bg-amber-500/10 border-2 border-amber-500/30 rounded-xl text-xs space-y-1">
+                  <div className="font-black text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>Desalocação Automática de Sala</span>
+                  </div>
+                  <p className="text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed font-medium">
+                    Este colaborador está alocado na <strong>{refuseModalCollab.assignedRoom}</strong>. Ao confirmar a recusa, ele será <strong>imediatamente desalocado e removido desta sala</strong>, liberando a vaga no local de aplicação.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-2.5 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  Colaborador atualmente sem sala vinculada ({refuseModalCollab.isReserve ? "Reserva Técnica" : "Não alocado"}).
+                </div>
+              )}
+            </div>
+
+            {/* Reason Selection & Input */}
+            <div className="space-y-2.5">
+              <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                Motivo da Recusa / Impedimento <span className="text-rose-500">*</span>
+              </label>
+              
+              {/* Quick select presets */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Motivos frequentes (clique para selecionar):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "Incompatibilidade de horário / Não comparecimento",
+                    "Desistência voluntária informada",
+                    "Critérios do edital não atendidos / Perfil incompatível",
+                    "Parentesco com participante inscrito no local",
+                    "Contato telefônico/e-mail inválido ou sem retorno",
+                    "Descumprimento das diretrizes Cebraspe/INEP"
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => {
+                        setRefuseQuickReason(preset);
+                        setRefuseReasonText(preset);
+                      }}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer text-left ${
+                        refuseQuickReason === preset
+                          ? "bg-rose-500 text-white border-rose-500 shadow-xs"
+                          : "bg-slate-100 dark:bg-[#070b13] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom description textarea */}
+              <textarea
+                rows={3}
+                value={refuseReasonText}
+                onChange={(e) => {
+                  setRefuseReasonText(e.target.value);
+                  setRefuseQuickReason("");
+                }}
+                placeholder="Descreva detalhadamente o motivo pelo qual o participante está sendo recusado e impedido..."
+                className="w-full bg-slate-50 dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:border-rose-500 transition shadow-inner"
+              />
+              <p className="text-[10px] text-slate-400 leading-normal">
+                * Este motivo será registrado na ficha cadastral do colaborador e nos relatórios de auditoria e segurança do CLA.
+              </p>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => { setRefuseModalCollab(null); setRefuseReasonText(""); setRefuseQuickReason(""); }}
+                className="py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                disabled={!refuseReasonText.trim()}
+                onClick={() => handleConfirmRefusal(refuseModalCollab, refuseReasonText)}
+                className={`flex-1 py-2.5 px-4 rounded-xl font-extrabold text-xs shadow-md transition flex items-center justify-center gap-2 ${
+                  refuseReasonText.trim()
+                    ? "bg-rose-600 hover:bg-rose-700 text-white cursor-pointer active:scale-95"
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
+                }`}
+              >
+                <Ban className="w-4 h-4 stroke-[2.5]" />
+                <span>Confirmar Recusa & Marcar como Impedido</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1575,6 +1779,7 @@ function activeTabSubList(
     | "efetivos"
     | "reservas"
     | "recusados"
+    | "impedidos"
     | "com_erro",
   setFilterType: (f: any) => void,
   filteredCollaborators: CollaboratorInfo[],
@@ -1611,6 +1816,39 @@ function activeTabSubList(
   // Track pending recruitment requests
   const recruitmentRequestsCount = allCollaborators.filter(c => c.isExternalRecruit && c.status === "Pendente").length;
   const refusedCollabs = allCollaborators.filter(c => c.refusedRole || c.refusalTag || c.status === "Recusado" || c.attendanceStatus === "Recusado");
+
+  const openCollabDetails = (c: CollaboratorInfo) => {
+    const originName = c.originalClaName || c.claName || buildingName || "CLA";
+    onOpenPhotoLightbox?.({
+      imageUrl: c.photoUrl || "",
+      name: c.name,
+      role: c.assignedRole || (c.isReserve ? "Fiscal Reserva" : "Fiscal de Sala"),
+      cpf: c.cpf,
+      claName: c.claName || originName,
+      originalClaName: c.originalClaName || originName,
+      education: c.education,
+      specialRole: c.specialRole,
+      hasWorkedEnem: c.hasWorkedEnem,
+      pastEditions: c.pastEditions,
+      email: c.email,
+      whatsapp: c.whatsapp,
+      birthDate: c.birthDate,
+      disability: c.disability,
+      languages: c.languages,
+      pixKey: c.pixKey,
+      referencePerson: c.referencePerson,
+      assignedRoom: c.assignedRoom,
+      status: c.status,
+      attendanceStatus: c.attendanceStatus,
+      refusedRole: c.refusedRole,
+      refusalTag: c.refusalTag,
+      refusalReason: c.refusalReason,
+      createdAt: c.createdAt,
+      isExternalRecruit: c.isExternalRecruit,
+      materialsAccessed: c.materialsAccessed,
+      transferHistory: c.transferHistory
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -1892,15 +2130,16 @@ function activeTabSubList(
         <div className="flex gap-1.5 flex-wrap pt-3 border-t border-slate-200 dark:border-slate-800">
           {[
             { id: "todos", label: "Todos", count: allCollaborators.length },
-            { id: "presenca_confirmada", label: "✓ Presença Confirmada", count: allCollaborators.filter(c => c.attendanceStatus === "Confirmado").length, badgeColor: "bg-emerald-600 text-white" },
-            { id: "presenca_pendente", label: "⏳ Aguardando Presença", count: allCollaborators.filter(c => c.status === "Confirmado" && c.assignedRole && c.attendanceStatus !== "Confirmado" && c.attendanceStatus !== "Recusado" && !c.refusedRole).length, badgeColor: "bg-amber-500 text-white" },
+            { id: "presenca_confirmada", label: "✓ Presença Confirmada", count: allCollaborators.filter(c => c.status === "Confirmado" && !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && c.attendanceStatus === "Confirmado").length, badgeColor: "bg-emerald-600 text-white" },
+            { id: "presenca_pendente", label: "⏳ Aguardando Presença", count: allCollaborators.filter(c => c.status === "Confirmado" && !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && c.assignedRole && c.assignedRole.trim() !== "" && c.attendanceStatus !== "Confirmado" && c.attendanceStatus !== "Recusado" && !c.refusedRole).length, badgeColor: "bg-amber-500 text-white" },
             { id: "confirmados", label: "Cad. Homologados", count: allCollaborators.filter(c => c.status === "Confirmado").length },
             { id: "efetivos", label: "Efetivos c/ Sala", count: allCollaborators.filter(c => !c.isReserve && c.status === "Confirmado" && c.assignedRoom && c.assignedRoom.trim() !== "").length },
-            { id: "reservas", label: "Reservas", count: allCollaborators.filter(c => c.isReserve && c.status === "Confirmado").length },
-            { id: "com_funcao_sem_sala", label: "Com Função (Não Ensalados)", count: allCollaborators.filter(c => c.status === "Confirmado" && c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === "")).length },
+            { id: "reservas", label: "Reservas (Geral)", count: allCollaborators.filter(c => c.status === "Confirmado" && (c.isReserve || !c.assignedRoom || c.assignedRoom.trim() === "")).length },
+            { id: "com_funcao_sem_sala", label: "Reserva c/ Função (Sem Sala)", count: allCollaborators.filter(c => c.status === "Confirmado" && c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === "")).length },
             { id: "sem_funcao", label: "Sem Função Atribuída", count: allCollaborators.filter(c => c.status === "Confirmado" && (!c.assignedRole || c.assignedRole.trim() === "")).length },
             { id: "pendentes", label: "Pendentes", count: allCollaborators.filter(c => c.status === "Pendente").length },
             { id: "recusados", label: "Recusados", count: refusedCollabs.length },
+            { id: "impedidos", label: "⛔ Impedidos", count: allCollaborators.filter(c => c.status === "Impedido" || (c.refusalTag && c.refusalTag.toLowerCase().includes("impedido"))).length, badgeColor: "bg-rose-600 text-white" },
             { id: "com_erro", label: "⚠ Inconsistência", count: allCollaborators.filter(c => c.orionStatus === "Erro").length }
           ].map(f => {
             const isActive = filterType === f.id;
@@ -1941,7 +2180,7 @@ function activeTabSubList(
           <p>Nenhum colaborador corresponde ao filtro de busca selecionado no CalanguS.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto border-2 border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-[#080b13]/40 shadow-inner max-h-[420px] overflow-y-auto">
+        <div className="overflow-x-auto border-2 border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-[#080b13]/40 shadow-inner max-h-[630px] overflow-y-auto">
           <table className="w-full text-left text-xs border-collapse font-sans">
             <thead>
               <tr className="bg-slate-50 dark:bg-[#101726]/50 uppercase text-[9px] font-black text-slate-550 dark:text-slate-400 tracking-widest border-b-2 border-slate-200 dark:border-slate-800">
@@ -1964,38 +2203,19 @@ function activeTabSubList(
                         photoUrl={c.photoUrl}
                         name={c.name}
                         size="md"
-                        onClick={() => onOpenPhotoLightbox?.({
-                          imageUrl: c.photoUrl || "",
-                          name: c.name,
-                          role: c.assignedRole || (c.isReserve ? "Fiscal Reserva" : "Fiscal de Sala"),
-                          cpf: c.cpf,
-                          claName: c.claName || originName,
-                          originalClaName: c.originalClaName || originName,
-                          education: c.education,
-                          specialRole: c.specialRole,
-                          hasWorkedEnem: c.hasWorkedEnem,
-                          pastEditions: c.pastEditions,
-                          email: c.email,
-                          whatsapp: c.whatsapp,
-                          birthDate: c.birthDate,
-                          disability: c.disability,
-                          languages: c.languages,
-                          pixKey: c.pixKey,
-                          referencePerson: c.referencePerson,
-                          assignedRoom: c.assignedRoom,
-                          status: c.status,
-                          attendanceStatus: c.attendanceStatus,
-                          refusedRole: c.refusedRole,
-                          refusalTag: c.refusalTag,
-                          createdAt: c.createdAt,
-                          isExternalRecruit: c.isExternalRecruit,
-                          materialsAccessed: c.materialsAccessed,
-                          transferHistory: c.transferHistory
-                        })}
+                        onClick={() => openCollabDetails(c)}
                       />
                       <div className="grow min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <div className="font-extrabold text-slate-900 dark:text-white text-sm truncate">{c.name}</div>
+                          <button
+                            type="button"
+                            onClick={() => openCollabDetails(c)}
+                            className="font-extrabold text-slate-900 dark:text-white text-sm truncate hover:text-emerald-600 dark:hover:text-emerald-400 transition cursor-pointer text-left hover:underline flex items-center gap-1 group/collab-name"
+                            title="Clique para ver a ficha completa e detalhamento do colaborador"
+                          >
+                            <span className="truncate">{c.name}</span>
+                            <Eye className="w-3.5 h-3.5 opacity-0 group-hover/collab-name:opacity-100 text-emerald-500 dark:text-emerald-400 transition shrink-0" />
+                          </button>
                           {c.isExternalRecruit && (
                             <span className="text-[8px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-extrabold border border-indigo-500/20 px-1.5 rounded shrink-0">RECRUTA_EXTERNO</span>
                           )}
@@ -2037,6 +2257,18 @@ function activeTabSubList(
                             <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-500/30 flex items-center gap-1">
                               <span>⏳ Aguardando Aprovação</span>
                             </span>
+                          ) : c.status === "Impedido" ? (
+                            <div className="space-y-0.5">
+                              <span className="bg-rose-600 text-white font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1 w-fit shadow-xs" title={c.refusalReason ? `Motivo: ${c.refusalReason}` : "Colaborador Impedido"}>
+                                <Ban className="w-2.5 h-2.5 stroke-[2.5]" />
+                                <span>IMPEDIDO</span>
+                              </span>
+                              {c.refusalReason && (
+                                <span className="text-[9.5px] text-rose-600 dark:text-rose-400 font-bold max-w-[200px] truncate block" title={`Motivo: ${c.refusalReason}`}>
+                                  {c.refusalReason}
+                                </span>
+                              )}
+                            </div>
                           ) : c.status === "Recusado" ? (
                             <span className="bg-rose-500/15 text-rose-700 dark:text-rose-300 font-extrabold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-rose-500/30">
                               Recusado
@@ -2111,23 +2343,47 @@ function activeTabSubList(
 
                   {/* Confirmation status */}
                   <td className="p-4">
-                    {c.attendanceStatus === "Confirmado" ? (
-                      <span className="bg-emerald-600 text-white font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit shadow-xs">
-                        <Check className="w-3 h-3 stroke-[3]" />
-                        <span>Presença Confirmada</span>
-                      </span>
+                    {c.status === "Impedido" ? (
+                      <div className="space-y-0.5">
+                        <span className="bg-rose-600 text-white font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit shadow-xs" title={c.refusalReason ? `Motivo: ${c.refusalReason}` : "Colaborador Impedido"}>
+                          <Ban className="w-2.5 h-2.5 stroke-[2.5]" />
+                          <span>Impedido</span>
+                        </span>
+                        {c.refusalReason && (
+                          <span className="text-[9.5px] text-rose-600 dark:text-rose-400 font-bold max-w-[150px] truncate block" title={`Motivo: ${c.refusalReason}`}>
+                            {c.refusalReason}
+                          </span>
+                        )}
+                      </div>
                     ) : (c.attendanceStatus === "Recusado" || c.refusedRole) ? (
                       <span className="bg-rose-600 text-white font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit shadow-xs" title={c.refusalTag || `Recusou: ${c.refusedRole}`}>
                         <X className="w-3 h-3 stroke-[3]" />
                         <span>Recusou Função</span>
                       </span>
-                    ) : c.assignedRole ? (
-                      <span className="bg-amber-500/20 text-amber-800 dark:text-amber-300 font-extrabold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit border border-amber-500/30">
-                        <span>⏳ Aguardando Fiscal</span>
+                    ) : (c.isReserve || !c.assignedRoom || c.assignedRoom.trim() === "") ? (
+                      <div className="space-y-0.5">
+                        <span className="bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-extrabold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit border border-indigo-500/30">
+                          <Users className="w-2.5 h-2.5 stroke-[2.5]" />
+                          <span>
+                            {c.isReserve 
+                              ? "Reserva Técnica" 
+                              : c.assignedRole 
+                              ? "Reserva (Sem Sala)" 
+                              : "Reserva Disponível"}
+                          </span>
+                        </span>
+                        <span className="text-[9.5px] text-slate-400 font-medium block">
+                          {c.assignedRole ? `Função: ${c.assignedRole}` : "Sem alocação de sala"}
+                        </span>
+                      </div>
+                    ) : c.attendanceStatus === "Confirmado" ? (
+                      <span className="bg-emerald-600 text-white font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit shadow-xs">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        <span>Presença Confirmada</span>
                       </span>
                     ) : (
-                      <span className={`font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full ${c.status === "Confirmado" ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30" : c.status === "Recusado" ? "bg-rose-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"}`}>
-                        {c.status === "Confirmado" ? "Cad. Autorizado" : c.status}
+                      <span className="bg-amber-500/20 text-amber-800 dark:text-amber-300 font-extrabold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit border border-amber-500/30">
+                        <span>⏳ Aguardando Fiscal</span>
                       </span>
                     )}
                   </td>
@@ -2179,7 +2435,7 @@ function activeTabSubList(
                       )}
                       <button
                         onClick={() => refuseStaff(c.id!)}
-                        title="Recusar Participante"
+                        title="Recusar Participante e Marcar como Impedido"
                         className="p-1 px-2.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 hover:scale-105 rounded-lg text-rose-550 font-extrabold cursor-pointer active:scale-90 transition-all text-sm"
                       >
                         ✕

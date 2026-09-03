@@ -905,19 +905,19 @@ export default function CollaboratorSettingsView({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-amber-500/10 border-2 border-amber-500/20 rounded-xl space-y-2">
                 <h4 className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🛡️</span> Colaborador em Reserva
+                  <span>🛡️</span> Colaborador em Reserva (ou sem Sala)
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                  Enquanto o colaborador estiver aprovado mas permanecer como reserva ou sem cargo associado, ele <strong>não visualiza botão de confirmação de presença</strong>. Ele permanece de prontidão na lista do CLA para suprir eventuais faltas ou necessidades adicionais.
+                  Enquanto o colaborador permanecer na reserva ou com função definida mas <strong>sem alocação de sala</strong>, ele <strong>não visualiza o questionário de confirmação e recusa de presença</strong>. No sistema geral, colaboradores com função mas sem alocação em sala são considerados como um tipo de reserva.
                 </p>
               </div>
 
               <div className="p-4 bg-emerald-500/10 border-2 border-emerald-500/20 rounded-xl space-y-2">
                 <h4 className="text-xs font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>📋</span> Colaborador com Cargo Associado
+                  <span>📋</span> Colaborador Alocado em Sala e Função
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                  Assim que o CLA associar a função no <strong>Menu 3 (Associação de Função)</strong>, a div de convocação oficial se torna visível imediatamente no painel do colaborador para que ele possa <strong>Confirmar Presença</strong> ou <strong>Recusar a Função</strong> (retornando à reserva com a TAG de recusa).
+                  A confirmação de presença só é disponibilizada para colaboradores que foram <strong>alocados em sala e função oficial</strong>. A convocação com opção de <strong>Confirmar Presença</strong> ou <strong>Recusar a Função</strong> (retornando à reserva com TAG de recusa) se torna ativa imediatamente.
                 </p>
               </div>
             </div>

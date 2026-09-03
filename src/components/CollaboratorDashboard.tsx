@@ -36,7 +36,8 @@ import {
   CalendarCheck,
   Building2,
   ShieldCheck,
-  Bot
+  Bot,
+  Users
 } from "lucide-react";
 import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage, MessageReadReceipt, MessageCollaboratorResponse, DidacticMaterial, MaterialAccessLog, EventConfigInfo } from "../types";
 import { subscribeToDidacticMaterials, recordCollaboratorMaterialAccess } from "../lib/db-services";
@@ -564,17 +565,20 @@ export default function CollaboratorDashboard({
             {(() => {
               const isAuthorized = collaboratorRecord?.status === "Confirmado";
               const assignedRole = collaboratorRecord?.assignedRole?.trim();
+              const assignedRoom = collaboratorRecord?.assignedRoom?.trim();
               const isReserve = Boolean(collaboratorRecord?.isReserve);
-              const hasAssignedRole = Boolean(assignedRole && assignedRole !== "" && !isReserve);
+              // Only collaborators who are officially allocated in a room/post with a defined role (and not reserve) receive the confirmation questionnaire
+              const isAllocated = Boolean(isAuthorized && !isReserve && assignedRole && assignedRole !== "" && assignedRoom && assignedRoom !== "");
+              const isRoleDefinedWithoutRoom = Boolean(isAuthorized && !isReserve && assignedRole && assignedRole !== "" && (!assignedRoom || assignedRoom === ""));
               const hasRefused = Boolean(collaboratorRecord?.refusedRole || collaboratorRecord?.refusalTag);
               const isConfirmedAttendance = collaboratorRecord?.attendanceStatus === "Confirmado";
 
               // Role resolution for payments and display
-              const displayRoleName = hasAssignedRole 
-                ? (assignedRole || "Aplicador")
+              const displayRoleName = assignedRole && assignedRole !== ""
+                ? assignedRole
                 : (collaboratorRecord?.specialRole && collaboratorRecord.specialRole !== "Nenhuma" 
                     ? collaboratorRecord.specialRole 
-                    : (isReserve ? "Fiscal de Reserva de Corredor" : (collaboratorRecord?.assignedRole || "Fiscal de Sala Regular")));
+                    : (isReserve ? "Fiscal de Reserva de Corredor" : "Fiscal de Sala Regular"));
 
               // Compute custom or standard remuneration
               const getCustomOrStandardPayment = (roleName: string): string => {
@@ -598,8 +602,8 @@ export default function CollaboratorDashboard({
                 (rawDate2 && rawDate2 !== "08/11/2026" && rawDate2 !== "10/11/2024") ? rawDate2 : "15/11/2026"
               ];
 
-              // Only show presence confirmation when collaborator is authorized AND has an assigned active role (not reserve)
-              if (isAuthorized && hasAssignedRole) {
+              // ONLY show presence confirmation questionnaire when collaborator is authorized AND has BOTH assigned role AND room allocation (not in reserve)
+              if (isAuthorized && isAllocated) {
                 return (
                   <div className="p-5 sm:p-6 bg-gradient-to-r from-emerald-500/10 via-slate-50 to-indigo-500/10 dark:from-emerald-500/10 dark:via-[#0c1220] dark:to-indigo-500/10 border-2 border-emerald-500/40 rounded-2xl space-y-5 shadow-lg animate-fade-in">
                     
@@ -608,7 +612,7 @@ export default function CollaboratorDashboard({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-mono font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md border border-emerald-500/30">
-                            CONVOCAÇÃO
+                            CONVOCAÇÃO OFICIAL
                           </span>
                           {isConfirmedAttendance ? (
                             <span className="text-[10px] bg-emerald-600 text-white font-black uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
@@ -626,10 +630,10 @@ export default function CollaboratorDashboard({
                         </h4>
                       </div>
 
-                      {collaboratorRecord?.assignedRoom && (
+                      {assignedRoom && (
                         <div className="bg-white dark:bg-[#101726] border-2 border-emerald-500/30 rounded-xl px-4 py-2 text-center shadow-xs">
                           <span className="text-[9px] uppercase font-black text-slate-400 block tracking-wider">Sala Designada</span>
-                          <span className="text-sm font-mono font-black text-emerald-600 dark:text-emerald-400">{collaboratorRecord.assignedRoom}</span>
+                          <span className="text-sm font-mono font-black text-emerald-600 dark:text-emerald-400">{assignedRoom}</span>
                         </div>
                       )}
                     </div>
@@ -701,16 +705,16 @@ export default function CollaboratorDashboard({
                       </div>
                     </div>
 
-                    {/* Actions and message */}
+                    {/* Actions and message (Questionário de Confirmação e Recusa) */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2 border-t border-slate-200 dark:border-slate-800">
                       <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
                         {isConfirmedAttendance ? (
                           <span>
-                            ✓ Você confirmou sua presença para exercer a função de <strong>{assignedRole}</strong> no ENEM. Compareça pontualmente nos dias <strong>{examDates[0]}</strong> e <strong>{examDates[1]}</strong>!
+                            ✓ Você confirmou sua presença para exercer a função de <strong>{assignedRole}</strong> na sala <strong>{assignedRoom}</strong>. Compareça pontualmente nos dias <strong>{examDates[0]}</strong> e <strong>{examDates[1]}</strong>!
                           </span>
                         ) : (
                           <span>
-                            Você foi alocado na função de <strong>{assignedRole}</strong> ({rolePayment}). Por favor, <strong>confirme sua presença</strong> para garantir sua escala nos dias <strong>{examDates[0]}</strong> e <strong>{examDates[1]}</strong>.
+                            Você foi alocado na função de <strong>{assignedRole}</strong> na sala <strong>{assignedRoom}</strong> ({rolePayment}). Por favor, <strong>confirme sua presença</strong> para garantir sua escala nos dias <strong>{examDates[0]}</strong> e <strong>{examDates[1]}</strong>.
                           </span>
                         )}
                       </p>
@@ -744,7 +748,8 @@ export default function CollaboratorDashboard({
                 );
               }
 
-              if (isAuthorized && !hasAssignedRole && hasRefused) {
+              // Collaborator who previously refused a role convocations
+              if (isAuthorized && !isAllocated && hasRefused) {
                 return (
                   <div className="p-5 bg-rose-500/10 border-2 border-rose-500/30 rounded-2xl space-y-3 animate-fade-in shadow-xs">
                     <div className="flex items-center justify-between gap-2">
@@ -765,23 +770,51 @@ export default function CollaboratorDashboard({
                         <span>TAG: <strong>{collaboratorRecord?.refusalTag || `Recusa de trabalho na função ${collaboratorRecord?.refusedRole}`}</strong></span>
                       </div>
                       <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
-                        Você recusou a convocação para a função de <strong>{collaboratorRecord?.refusedRole || "Função anterior"}</strong>{collaboratorRecord?.refusedRoleDate ? ` (${collaboratorRecord.refusedRoleDate})` : ""}. A coordenação do CLA foi notificada e o cargo associado voltou a ficar vazio. Você continua cadastrado no banco de <strong>Fiscais Reservas</strong>. Caso o CLA atribua uma nova função a você, a opção de confirmação de presença será reaberta automaticamente aqui.
+                        Você recusou a convocação para a função de <strong>{collaboratorRecord?.refusedRole || "Função anterior"}</strong>{collaboratorRecord?.refusedRoleDate ? ` (${collaboratorRecord.refusedRoleDate})` : ""}. A coordenação do CLA foi notificada e o cargo associado voltou a ficar vazio. Você continua cadastrado no banco de <strong>Fiscais Reservas</strong>. Caso o CLA atribua uma nova função e sala oficial a você, a opção de confirmação de presença será disponibilizada automaticamente aqui.
                       </p>
                     </div>
                   </div>
                 );
               }
 
-              // In reserve or awaiting association - still show prominent summary of status, estimated role/value and exam dates
+              // In reserve or awaiting room allocation (without confirmation/refusal questionnaire)
+              // No sistema geral, o colaborador que tem função mas não tem alocação deve ser considerado como um tipo de reserva.
               return (
                 <div className="p-5 bg-slate-100/80 dark:bg-[#101726]/60 border-2 border-slate-200 dark:border-slate-800 rounded-2xl space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] bg-sky-500/20 text-sky-700 dark:text-sky-300 font-mono font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md border border-sky-500/30">
-                      STATUS DO CADASTRO
+                      {isRoleDefinedWithoutRoom ? "RESERVA • FUNÇÃO DESIGNADA" : isReserve ? "RESERVA TÉCNICA" : "STATUS DO CADASTRO"}
                     </span>
                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                      {isReserve ? "Banco de Reserva de Fiscais" : "Aguardando Associação pelo CLA"}
+                      {isRoleDefinedWithoutRoom 
+                        ? "Banco de Reserva — Aguardando Alocação em Sala" 
+                        : isReserve 
+                        ? "Banco de Reserva de Fiscais" 
+                        : "Aguardando Associação pelo CLA"}
                     </span>
+                  </div>
+
+                  {/* Informational Callout regarding Reserve and Absence of Questionnaire */}
+                  <div className="p-3.5 bg-sky-500/10 dark:bg-sky-950/30 border border-sky-500/20 rounded-xl text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                    <div className="font-bold text-sky-800 dark:text-sky-300 flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                      <Users className="w-3.5 h-3.5 shrink-0" />
+                      <span>{isRoleDefinedWithoutRoom ? "Colaborador em Banco de Reserva com Função Definida" : "Cadastro Homologado no Banco de Reserva"}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {isRoleDefinedWithoutRoom ? (
+                        <>
+                          Você possui a função pré-definida de <strong>{assignedRole}</strong> ({rolePayment}), mas <strong>ainda não possui alocação em sala oficial</strong>. Você é considerado(a) integrante da <strong>equipe de reserva</strong> do local de aplicação. O questionário de confirmação de presença e convocação oficial só é disponibilizado após a coordenação do CLA definir a sua sala de atuação.
+                        </>
+                      ) : isReserve ? (
+                        <>
+                          Você está escalado(a) como <strong>Fiscal de Reserva Técnica</strong>. Os fiscais de reserva comparecem ao local de aplicação para atuar prontamente na cobertura de eventuais ausências e no apoio logístico à coordenação.
+                        </>
+                      ) : (
+                        <>
+                          Seu cadastro foi homologado pela coordenação. Aguarde a definição da sua função e sala de atuação para liberação da convocação oficial.
+                        </>
+                      )}
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -789,7 +822,7 @@ export default function CollaboratorDashboard({
                     <div className="p-4 bg-white dark:bg-[#0c1220] rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">
-                          Função Cadastrada
+                          {isRoleDefinedWithoutRoom ? "Função Designada" : "Função Cadastrada"}
                         </span>
                         <Award className="w-4 h-4 text-slate-400" />
                       </div>
@@ -798,7 +831,11 @@ export default function CollaboratorDashboard({
                           {displayRoleName}
                         </div>
                         <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
-                          {isReserve ? "Disponível para substituições" : "Aguardando alocação em sala"}
+                          {isRoleDefinedWithoutRoom 
+                            ? "Aguardando alocação em sala" 
+                            : isReserve 
+                            ? "Disponível para substituições" 
+                            : "Aguardando definição pelo CLA"}
                         </span>
                       </div>
                     </div>
