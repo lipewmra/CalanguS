@@ -28,6 +28,7 @@ import {
   DidacticMaterial,
   MaterialAccessLog
 } from "../types";
+import { isDevAdminEmail } from "./dev-auth";
 
 // ==========================================
 // 0. Offline-First & Quota-Safe Local Cache
@@ -522,6 +523,9 @@ export async function checkEmailRegistered(email: string): Promise<{
   if (!targetEmail) return { isRegistered: false };
 
   // 1. Check SuperAdmin
+  if (await isDevAdminEmail(targetEmail)) {
+    return { isRegistered: true, name: "Desenvolvedor", role: "SuperAdmin", source: "superadmin" };
+  }
   if (areEmailsMatching(targetEmail, "lipewmra@gmail.com") || areEmailsMatching(targetEmail, "philippewagnermra@gmail.com")) {
     return { isRegistered: true, name: "Philippe Wagner", role: "SuperAdmin", source: "superadmin" };
   }

@@ -15,13 +15,15 @@ interface PublicRegisterFormProps {
   initialEmail?: string;
   initialName?: string;
   unregisteredNotice?: string;
+  onOpenPrivacy?: () => void;
 }
 
 export default function PublicRegisterForm({ 
   onBackToApp,
   initialEmail,
   initialName,
-  unregisteredNotice
+  unregisteredNotice,
+  onOpenPrivacy
 }: PublicRegisterFormProps) {
   // Fetch lists of buildings
   const [buildings, setBuildings] = useState<BuildingInfo[]>([]);
@@ -786,9 +788,27 @@ export default function PublicRegisterForm({
 
             {/* SUBMIT SECTION */}
             <div className="pt-4 border-t-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
-                <ShieldCheck className="w-5 h-5 text-emerald-500" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Criptografia Privada CalanguS</span>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
+                  <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Criptografia Privada CalanguS</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>Seus dados são protegidos pela LGPD.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onOpenPrivacy) {
+                        onOpenPrivacy();
+                      } else {
+                        window.location.href = "/privacy";
+                      }
+                    }}
+                    className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                  >
+                    Política de Privacidade
+                  </button>
+                </div>
               </div>
               
               <div className="flex gap-3">

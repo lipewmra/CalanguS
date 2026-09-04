@@ -19,6 +19,7 @@ interface SettingsModalProps {
   setThemeMode: (mode: "light" | "dark") => void;
   currentUser?: UserProfile | null;
   onUpdatePhoto?: (newPhotoUrl: string) => Promise<void>;
+  onOpenPrivacy?: () => void;
 }
 
 export const FONT_SIZES: { value: FontSizeOption; label: string; desc: string }[] = [
@@ -113,6 +114,7 @@ export default function SettingsModal({
   setThemeMode,
   currentUser,
   onUpdatePhoto,
+  onOpenPrivacy,
 }: SettingsModalProps) {
   const [photoUrl, setPhotoUrl] = useState(currentUser?.photoUrl || "");
   const [isSavingPhoto, setIsSavingPhoto] = useState(false);
@@ -423,6 +425,64 @@ export default function SettingsModal({
                 <Sparkles className="w-4 h-4" />
                 <span>{activeApiKey ? "Gerenciar Chave / Tutorial" : "Configurar Chave & Tutorial"}</span>
               </button>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 dark:border-slate-800" />
+
+          {/* SECTION 5: PRIVACY POLICY & LGPD */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-slate-800 dark:text-white font-extrabold text-sm uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <span>5. Política de Privacidade & LGPD</span>
+              </div>
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-full">
+                Google Play & LGPD
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              Conheça nossas práticas de transparência, tratamento de dados de colaboradores/fiscais e conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/18).
+            </p>
+
+            <div className="p-4 bg-emerald-500/5 dark:bg-slate-900/60 rounded-2xl border border-emerald-500/20 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-xs">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-black text-slate-900 dark:text-white">
+                      Política de Privacidade – CalanguS
+                    </p>
+                    <span className="text-[9px] font-mono font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded">
+                      /privacy
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Última atualização: Setembro de 2026 (v2.8) • Desenvolvedor: Philippe Wagner M R Araujo
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    if (onOpenPrivacy) {
+                      onOpenPrivacy();
+                    } else {
+                      window.location.href = "/privacy";
+                    }
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Visualizar Política</span>
+                </button>
+              </div>
             </div>
           </div>
 

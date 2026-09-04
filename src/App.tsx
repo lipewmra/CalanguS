@@ -68,6 +68,15 @@ import AttendanceListView from "./components/AttendanceListView";
 import SimulateCollaboratorModal from "./components/SimulateCollaboratorModal";
 import CalangusIaView from "./components/CalangusIaView";
 import ClaDashboardOverview from "./components/ClaDashboardOverview";
+import PrivacyPolicyView from "./components/PrivacyPolicyView";
+import { 
+  isDevAdminEmail, 
+  verifyDevAdminCredentials, 
+  buildDevAdminProfile, 
+  getSavedDevAdminSession, 
+  saveDevAdminSession, 
+  clearDevAdminSession 
+} from "./lib/dev-auth";
 
 import { 
   ShieldAlert, Landmark, Users, Coffee, Camera, Layers, 
@@ -76,7 +85,8 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, MessageSquare,
   Activity, Calendar, PlusCircle, Trash2, Settings, ClipboardCheck, Clock,
   SlidersHorizontal, Eye, EyeOff, ArrowRightLeft, BookOpen, Bot, ExternalLink,
-  Lock, Mail, ArrowRight, RefreshCw, AlertCircle, KeyRound, Check, LayoutDashboard
+  Lock, Mail, ArrowRight, RefreshCw, AlertCircle, KeyRound, Check, LayoutDashboard,
+  ShieldCheck
 } from "lucide-react";
 import { 
   GoogleAuthProvider, 
@@ -219,6 +229,61 @@ export default function App() {
       path.includes("/recrutamento")
     );
   });
+
+  // Privacy Policy dedicated environment route state (supports /privacy, *\privacy, #/privacy, etc.)
+  const checkIsPrivacyRoute = () => {
+    if (typeof window === "undefined") return false;
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    return (
+      path === "/privacy" ||
+      path.endsWith("/privacy") ||
+      path.includes("/privacy") ||
+      path.includes("\\privacy") ||
+      hash.startsWith("#/privacy") ||
+      hash.includes("privacy") ||
+      search.includes("view=privacy") ||
+      search.includes("privacy=true")
+    );
+  };
+
+  const [isPrivacyRoute, setIsPrivacyRoute] = useState<boolean>(checkIsPrivacyRoute);
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setIsPrivacyRoute(checkIsPrivacyRoute());
+    };
+    window.addEventListener("popstate", handleLocationChange);
+    window.addEventListener("hashchange", handleLocationChange);
+    return () => {
+      window.removeEventListener("popstate", handleLocationChange);
+      window.removeEventListener("hashchange", handleLocationChange);
+    };
+  }, []);
+
+  const handleOpenPrivacy = () => {
+    try {
+      window.history.pushState(null, "", "/privacy");
+    } catch (e) {
+      window.location.hash = "/privacy";
+    }
+    setIsPrivacyRoute(true);
+  };
+
+  const handleClosePrivacy = () => {
+    try {
+      if (window.location.pathname.toLowerCase().includes("privacy")) {
+        window.history.pushState(null, "", "/");
+      }
+      if (window.location.hash.toLowerCase().includes("privacy")) {
+        window.location.hash = "";
+      }
+    } catch (e) {
+      // ignore
+    }
+    setIsPrivacyRoute(false);
+  };
 
   // Memoized human-readable CLA name for reports and views
   const resolvedClaName = useMemo(() => {
@@ -373,6 +438,13 @@ export default function App() {
   const validateAndResolveUser = async (user: any): Promise<UserProfile | null> => {
     if (!user || !user.email) return null;
     const email = (user.email || "").toLowerCase().trim();
+
+    // 0. Reviewer / Debugger SuperAdmin Account
+    if (await isDevAdminEmail(email)) {
+      const devProfile = buildDevAdminProfile(email);
+      saveDevAdminSession(devProfile);
+      return devProfile;
+    }
 
     // 1. SuperAdmin hardcoded authorized emails
     const isSuperAdminEmail = areEmailsMatching(email, "lipewmra@gmail.com") || areEmailsMatching(email, "philippewagnermra@gmail.com");
@@ -607,6 +679,25 @@ export default function App() {
     }
 
     setEmailFlowLoading(true);
+
+    // Check reviewer SuperAdmin credentials via cryptographic hash
+    try {
+      const isDev = await verifyDevAdminCredentials(cleanEmail, authPassword);
+      if (isDev) {
+        const devProfile = buildDevAdminProfile(cleanEmail);
+        saveDevAdminSession(devProfile);
+        try {
+          await saveUserProfile(devProfile);
+        } catch (e) {}
+        setCurrentUser(devProfile);
+        setSelectedRole("SuperAdmin");
+        setEmailFlowLoading(false);
+        return;
+      }
+    } catch (devCheckErr) {
+      console.warn("Dev admin check notice:", devCheckErr);
+    }
+
     try {
       const result = await signInWithEmailAndPassword(auth, cleanEmail, authPassword);
       const profile = await validateAndResolveUser(result.user);
@@ -653,6 +744,25 @@ export default function App() {
     }
 
     setEmailFlowLoading(true);
+
+    // Check reviewer SuperAdmin credentials via cryptographic hash
+    try {
+      const isDev = await verifyDevAdminCredentials(cleanEmail, authPassword);
+      if (isDev) {
+        const devProfile = buildDevAdminProfile(cleanEmail);
+        saveDevAdminSession(devProfile);
+        try {
+          await saveUserProfile(devProfile);
+        } catch (e) {}
+        setCurrentUser(devProfile);
+        setSelectedRole("SuperAdmin");
+        setEmailFlowLoading(false);
+        return;
+      }
+    } catch (devCheckErr) {
+      console.warn("Dev admin check notice:", devCheckErr);
+    }
+
     try {
       const result = await createUserWithEmailAndPassword(auth, cleanEmail, authPassword);
       const profile = await validateAndResolveUser(result.user);
@@ -717,6 +827,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
+      clearDevAdminSession();
       await signOut(auth);
       setCurrentUser(null);
       setSelectedRole(null);
@@ -732,6 +843,15 @@ export default function App() {
 
     const syncUser = async (user: any) => {
       if (!user) {
+        // Check if there is an active reviewer SuperAdmin session preserved in storage
+        const savedDev = getSavedDevAdminSession();
+        if (savedDev && active) {
+          setCurrentUser(savedDev);
+          setSelectedRole("SuperAdmin");
+          setAuthInitialized(true);
+          return;
+        }
+
         if (active) {
           setCurrentUser(null);
           setSelectedRole(null);
@@ -1113,6 +1233,19 @@ export default function App() {
     );
   }
 
+  if (isPrivacyRoute) {
+    const isDarkModeActive = theme === "dark";
+    return (
+      <div className={isDarkModeActive ? "dark" : ""}>
+        <PrivacyPolicyView
+          onBack={handleClosePrivacy}
+          theme={theme}
+          onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+        />
+      </div>
+    );
+  }
+
   if (isPublicForm) {
     const isDarkModeActive = theme === "dark";
     return (
@@ -1138,6 +1271,14 @@ export default function App() {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={handleOpenPrivacy}
+              className={`p-2 px-3 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] flex items-center gap-1.5 ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"}`}
+              title="Política de Privacidade (LGPD)"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span className="text-xs font-bold uppercase tracking-wider hidden sm:inline">Privacidade</span>
+            </button>
+            <button
               onClick={() => setIsSettingsOpen(true)}
               className={`p-2 rounded-xl transition cursor-pointer border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] flex items-center gap-1.5 ${isDarkModeActive ? "bg-slate-900 border-slate-700 text-emerald-400 hover:bg-slate-800" : "bg-slate-100 border-slate-300 text-emerald-700 hover:bg-slate-200"}`}
               title="Configurações do Sistema"
@@ -1160,6 +1301,7 @@ export default function App() {
             initialEmail={publicFormPrefill.email}
             initialName={publicFormPrefill.name}
             unregisteredNotice={unregisteredNotice}
+            onOpenPrivacy={handleOpenPrivacy}
           />
         </div>
       </div>
@@ -1517,7 +1659,35 @@ export default function App() {
               </button>
             </div>
 
+            {/* Privacy Policy direct link in Login Card */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+              <span className="font-medium">CalanguS v2.8 • © 2026</span>
+              <button
+                type="button"
+                onClick={handleOpenPrivacy}
+                className="inline-flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Política de Privacidade</span>
+              </button>
+            </div>
+
           </div>
+
+          {/* External links and disclaimer */}
+          <div className="mt-4 flex items-center justify-center gap-4 text-xs font-semibold text-slate-400 dark:text-slate-500">
+            <button
+              type="button"
+              onClick={handleOpenPrivacy}
+              className="hover:text-emerald-500 transition cursor-pointer flex items-center gap-1"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Política de Privacidade (LGPD)</span>
+            </button>
+            <span>•</span>
+            <span className="font-mono">/privacy</span>
+          </div>
+
         </div>
       ) : (
         /* CASE C: REAL LOGGED-IN WORKSPACE */
@@ -2386,6 +2556,35 @@ export default function App() {
         )}
 
       </main>
+
+      {/* SYSTEM FOOTER */}
+      {currentUser && (
+        <footer className="no-print max-w-7xl mx-auto px-4 py-6 border-t border-slate-200/80 dark:border-slate-800/80 mt-12 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400 dark:text-slate-500">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-600 dark:text-slate-400">CalanguS v2.8</span>
+            <span>•</span>
+            <span>Coordenação & Aplicação de Exames</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={handleOpenPrivacy}
+              className="inline-flex items-center gap-1.5 hover:text-emerald-500 transition cursor-pointer font-semibold"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Política de Privacidade (LGPD)</span>
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => setIsSettingsOpen(true)}
+              className="hover:text-emerald-500 transition cursor-pointer font-semibold"
+            >
+              Configurações
+            </button>
+          </div>
+        </footer>
+      )}
     </>
    )}
 
@@ -2413,6 +2612,7 @@ export default function App() {
         setThemeMode={setTheme}
         currentUser={effectiveUser || currentUser}
         onUpdatePhoto={handleUpdateUserProfilePhoto}
+        onOpenPrivacy={handleOpenPrivacy}
       />
   </div>
   );

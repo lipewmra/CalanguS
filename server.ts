@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
@@ -79,6 +80,49 @@ async function startServer() {
   // Healthcheck endpoint
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", app: "CalanguS" });
+  });
+
+  // Reviewer / Debugger SuperAdmin Authentication endpoint
+  app.post("/api/auth/dev-admin", (req, res) => {
+    try {
+      const { email, password } = req.body || {};
+      const targetEmail = (email || "").toLowerCase().trim();
+      const targetPass = password || "";
+
+      // Env vars (optional override)
+      const envEmail = (process.env.DEV_SUPERADMIN_EMAIL || "").toLowerCase().trim();
+      const envPass = process.env.DEV_SUPERADMIN_PASSWORD || "";
+
+      // SHA-256 digests
+      const emailDigest = crypto.createHash("sha256").update(targetEmail).digest("hex");
+      const passDigest = crypto.createHash("sha256").update(targetPass).digest("hex");
+
+      const DEV_EMAIL_HASH = "ffe2b285a15285e6de1fa60c7de5843425d7b9d161d08fd44bfbe57fc3fe4a91";
+      const DEV_PASS_HASH = "ba7a260e3f320830843c2249a47add096532b83e31611cccc07d9e3787cc5172";
+
+      const isEmailValid = (envEmail && targetEmail === envEmail) || (emailDigest === DEV_EMAIL_HASH);
+      const isPassValid = (envPass && targetPass === envPass) || (passDigest === DEV_PASS_HASH);
+
+      if (isEmailValid && isPassValid) {
+        res.json({
+          success: true,
+          user: {
+            uid: "dev_superadmin_calangus",
+            email: targetEmail,
+            emails: [targetEmail],
+            name: process.env.DEV_SUPERADMIN_NAME || "Desenvolvedor",
+            role: "SuperAdmin",
+            roles: ["SuperAdmin", "CLA"],
+            coordinationCode: "8520",
+            hasAccessed: true,
+          }
+        });
+      } else {
+        res.status(401).json({ success: false, error: "Credenciais inválidas" });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || "Erro no servidor de autenticação" });
+    }
   });
 
   // API route to test a provided Google Gemini API key
