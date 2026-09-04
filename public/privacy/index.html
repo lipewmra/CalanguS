@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Política de Privacidade – CalanguS (LGPD & Google Play)</title>
+    <meta name="description" content="Política de Privacidade oficial do CalanguS v2.8 para conformidade com a LGPD e as diretrizes do Google Play. Desenvolvido por Philippe Wagner M R Araujo." />
+    <link rel="canonical" href="https://calangus.vercel.app/privacy" />
+    <meta property="og:title" content="Política de Privacidade – CalanguS" />
+    <meta property="og:description" content="Diretrizes de proteção e tratamento de dados pessoais do aplicativo CalanguS em conformidade com a LGPD e o Google Play." />
+    <meta property="og:url" content="https://calangus.vercel.app/privacy" />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/png" href="/CalanguS-logo-Noname.png" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              emerald: {
+                50: '#ecfdf5',
+                100: '#d1fae5',
+                500: '#10b981',
+                600: '#059669',
+                700: '#047857',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      @media print {
+        .no-print { display: none !important; }
+        body { background: white !important; color: black !important; font-size: 11pt; }
+        .print-card { border: none !important; box-shadow: none !important; padding: 0 !important; }
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 dark:bg-[#070b13] text-slate-800 dark:text-slate-100 font-sans transition duration-200 min-h-screen">
+    
+    <!-- Top Navigation Header -->
+    <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 no-print">
+      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        <a href="/" class="inline-flex items-center gap-2 font-black text-sm text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 transition cursor-pointer">
+          <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+          <span>Voltar ao CalanguS</span>
+        </a>
+
+        <div class="flex items-center gap-2 text-xs">
+          <button id="copyBtn" onclick="copyFullPolicy()" class="p-2 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-750 font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs">
+            <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            <span id="copyBtnText">Copiar Texto</span>
+          </button>
+
+          <button onclick="window.print()" class="p-2 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-750 font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs">
+            <svg class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            <span class="hidden sm:inline">Imprimir</span>
+          </button>
+
+          <button id="themeToggle" onclick="toggleTheme()" class="p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-750 transition cursor-pointer shadow-xs" title="Alternar Tema">
+            <svg id="themeIcon" class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-4xl mx-auto px-4 py-8 sm:py-12 space-y-8">
+      
+      <!-- Hero Header Banner -->
+      <div class="print-card rounded-3xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
+        
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 border-2 border-emerald-500/30 flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+            </div>
+            <div>
+              <h1 class="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">Política de Privacidade</h1>
+              <p class="text-xs sm:text-sm font-semibold text-emerald-600 dark:text-emerald-400">CalanguS • Coordenação & Aplicação de Exames</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full font-bold text-slate-600 dark:text-slate-300">v2.8</span>
+            <span class="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-full font-bold">LGPD & Google Play</span>
+          </div>
+        </div>
+
+        <div class="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-500 dark:text-slate-400">
+          <div><span class="font-bold text-slate-700 dark:text-slate-300">Última atualização:</span> Setembro de 2026</div>
+          <div><span class="font-bold text-slate-700 dark:text-slate-300">Desenvolvedor:</span> Philippe Wagner M R Araujo</div>
+          <div><span class="font-bold text-slate-700 dark:text-slate-300">URL Oficial:</span> <a href="https://calangus.vercel.app/privacy" class="text-emerald-600 dark:text-emerald-400 font-mono hover:underline">calangus.vercel.app/privacy</a></div>
+        </div>
+      </div>
+
+      <!-- Introduction Section -->
+      <section class="print-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-3">
+        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          Apresentação e Escopo
+        </h2>
+        <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          Esta Política de Privacidade descreve como o aplicativo <strong>CalanguS</strong> (&ldquo;nós&rdquo;, &ldquo;nosso&rdquo; ou &ldquo;aplicativo&rdquo;), desenvolvido por <strong>Philippe Wagner M R Araujo</strong>, coleta, utiliza, armazena e compartilha dados dos usuários (&ldquo;você&rdquo;), em rigorosa conformidade com as diretrizes de desenvolvedor do <strong>Google Play</strong> e com a legislação aplicável, em especial a <strong>Lei Geral de Proteção de Dados Pessoais (LGPD - Lei nº 13.709/2018)</strong>.
+        </p>
+      </section>
+
+      <!-- Section 1 -->
+      <section class="print-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
+        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">1</span>
+          Informações que Coletamos
+        </h2>
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          O CalanguS coleta apenas as informações estritamente necessárias para o funcionamento, coordenação logística de exames oficiais (como o ENEM e concursos educacionais) e aprimoramento contínuo de suas funcionalidades operacionais:
+        </p>
+        
+        <div class="space-y-3 pl-2 border-l-2 border-slate-200 dark:border-slate-800 text-sm">
+          <div>
+            <h3 class="font-bold text-slate-800 dark:text-slate-200">a) Informações fornecidas diretamente pelo usuário:</h3>
+            <ul class="list-disc list-inside mt-1.5 space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-sm">
+              <li><strong>Dados de Cadastro e Identificação Funcional:</strong> Nome completo, endereço de e-mail, número de telefone celular/WhatsApp, data de nascimento e ocupação/formação fornecidos durante o credenciamento de fiscais, colaboradores e coordenadores de local de aplicação (CLA).</li>
+              <li><strong>Identificação Visual para Exame:</strong> Fotografia de perfil ou documento funcional enviada voluntariamente para confecção de crachás digitais, identificação presencial no dia do exame e auditoria de presença.</li>
+              <li><strong>Dados de Repasse Financeiro / Pagamento:</strong> Chave Pix e dados bancários informados voluntariamente para viabilizar o repasse de diárias de atuação como colaborador ou fiscal.</li>
+              <li><strong>Credenciais de Acesso:</strong> Endereço de e-mail e senhas criptografadas administradas via Google Firebase Authentication ou provedores seguros OAuth (Google / Apple).</li>
+              <li><strong>Conteúdo Operacional e Registros no Exame:</strong> Confirmação de presença em sala (Dia 1 e Dia 2), respostas a comunicados e convocações oficiais, conferência de alimentação/lanches, recusa justificada de atribuição e registros de auditoria interna da coordenação.</li>
+            </ul>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-bold text-slate-800 dark:text-slate-200">b) Informações coletadas automaticamente e permissões do dispositivo:</h3>
+            <ul class="list-disc list-inside mt-1.5 space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-sm">
+              <li><strong>Identificadores e Dados do Dispositivo:</strong> Modelo do aparelho, versão do sistema operacional Android ou navegador web, dados de conectividade e registros de sincronização segura em tempo real.</li>
+              <li><strong>Diagnóstico e Desempenho:</strong> Relatórios técnicos anônimos de falhas (crash logs), latência de rede e cache operacional local para permitir o funcionamento resiliente do aplicativo em locais com instabilidade de conexão.</li>
+              <li><strong>Permissões de Hardware e Sistema:</strong> Solicitadas exclusivamente quando indispensáveis para o recurso em execução, mediante consentimento prévio:
+                <ul class="list-circle list-inside pl-4 mt-1 space-y-0.5 text-xs">
+                  <li><strong>Câmera:</strong> Utilizada exclusivamente para a captura voluntária de foto para o crachá/perfil do colaborador ou leitura óptica (OCR) de escalas de salas. O aplicativo não aciona a câmera em segundo plano.</li>
+                  <li><strong>Armazenamento / Galeria:</strong> Utilizado exclusivamente para upload de fotos e exportação/impressão de documentos oficiais (relatórios de ensalamento, atas e listas de frequência).</li>
+                  <li><strong>Notificações:</strong> Utilizadas para entrega de comunicados operacionais urgentes e avisos de escala emitidos pela coordenação.</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 font-medium">
+          <strong>Garantia de Transparência Google Play:</strong> O CalanguS <u>NÃO</u> coleta localização precisa por GPS em segundo plano, <u>NÃO</u> acessa microfone e <u>NÃO</u> acessa contatos do aparelho.
+        </div>
+      </section>
+
+      <!-- Section 2 -->
+      <section class="print-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-3">
+        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">2</span>
+          Como Utilizamos as Informações
+        </h2>
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          Os dados coletados pelo CalanguS possuem finalidades legítimas, institucionais e operacionais:
+        </p>
+        <ul class="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-sm pl-2">
+          <li>Executar e manter as ferramentas de ensalamento, distribuição de salas, substituição de reservas e conferência de presença em dias de prova.</li>
+          <li>Gerar atas, crachás digitais e relatórios gerenciais para a Coordenação de Local de Aplicação (CLA) e supervisão geral.</li>
+          <li>Viabilizar a comunicação ágil entre coordenação e colaboradores (avisos de escala, chamadas de reserva e comunicados de segurança).</li>
+          <li>Garantir a integridade, rastreabilidade e segurança dos processos do exame por meio de logs de auditoria detalhados.</li>
+          <li>Diagnosticar falhas técnicas e aprimorar a estabilidade do sistema.</li>
+          <li>Cumprir obrigações legais, regulatórias e fiscais inerentes à realização de concursos e exames oficiais.</li>
+        </ul>
+        <div class="p-3 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 font-semibold">
+          Importante: Não vendemos, não alugamos e não comercializamos dados pessoais de nossos usuários para terceiros, anunciantes ou corretores de dados (data brokers).
+        </div>
+      </section>
+
+      <!-- Section 3 -->
+      <section class="print-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-3">
+        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">3</span>
+          Compartilhamento de Dados com Terceiros
+        </h2>
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          Os dados podem ser compartilhados unicamente com prestadores de serviços de infraestrutura certificados e necessários para o funcionamento seguro do aplicativo:
+        </p>
+        <ul class="list-disc list-inside space-y-1.5 text-slate-600 dark:text-slate-300 text-xs sm:text-sm pl-2">
+          <li><strong>Provedores de Banco de Dados e Nuvem:</strong> Google Cloud Platform e Firebase (Firestore Database, Firebase Authentication e Cloud Storage), que utilizam criptografia de ponta a ponta e controle estrito de regras de acesso (Row-Level Security).</li>
+          <li><strong>Serviços de Inteligência Artificial e OCR (Opcional):</strong> Google Gemini API, acionado exclusivamente quando o usuário solicita a leitura óptica de documentos de ensalamento através de chave configurada. Nenhum dado pessoal é utilizado para treinamento de modelos públicos de IA.</li>
+          <li><strong>Ausência Total de Publicidade:</strong> O CalanguS não contém anúncios e não compartilha dados com redes de publicidade (como Google AdMob ou similares).</li>
+          <li><strong>Obrigações Legais:</strong> Em caso de ordens judiciais ou exigências formais emanadas por autoridades públicas competentes.</li>
+        </ul>
+      </section>
+
+      <!-- Section 4 -->
+      <section class="print-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-3">
+        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">4</span>
+          Retenção e Exclusão de Dados (Direitos do Titular - LGPD)
+        </h2>
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          Os dados são retidos durante o período necessário para as finalidades descritas nesta política e para atendimento a exigências legais de guarda documental de concursos e exames oficiais.
+        </p>
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          Nos termos dos artigos 18 e seguintes da LGPD, o titular dos dados possui o direito de:
+        </p>
+        <ul class="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-sm pl-2">
+          <li>Confirmar a existência de tratamento e acessar os dados existentes;</li>
+          <li>Corrigir dados incompletos, inexatos ou desatualizados;</li>
+          <li>Solicitar a anonimização, bloqueio ou eliminação de dados desnecessários ou excessivos;</li>
+          <li>Revogar o consentimento e requerer a exclusão completa de sua conta e informações pessoais.</li>
+        </ul>
+        <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-900 dark:text-amber-200">
+          <strong>Como solicitar a exclusão de sua conta e dados:</strong> Envie um e-mail com o assunto &ldquo;Exclusão de Dados – CalanguS&rdquo; para <strong>philippewagnermra@gmail.com</strong> informando seu nome completo e e-mail cadastrado. A solicitação será processada e confirmada em até 15 (quinze) dias úteis.
+        </div>
+      </section>
+
+      <!-- Section 5 -->
+      <section class="print-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-3">
+        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">5</span>
+          Segurança das Informações
+        </h2>
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          Adotamos medidas técnicas e organizacionais adequadas para proteger os dados pessoais contra acessos não autorizados, perda acidental, destruição ou alteração:
+        </p>
+        <ul class="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-sm pl-2">
+          <li>Criptografia de ponta a ponta em trânsito (HTTPS / TLS 1.3) e em repouso nos servidores Google Cloud Platform.</li>
+          <li>Políticas granulares de segurança (Firestore Security Rules) que restringem o acesso aos registros estritamente aos coordenadores e titulares autorizados.</li>
+          <li>Armazenamento de senhas realizado através de algoritmos de hash criptográfico seguro (não recuperáveis em texto plano).</li>
+        </ul>
+      </section>
+
+      <!-- Section 6, 7, 8 -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <section class="print-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-2">
+          <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">6</span>
+            Público-Alvo e Menores
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            O CalanguS é uma ferramenta profissional destinada exclusivamente à coordenação de colaboradores e fiscais de exames oficiais, sendo direcionada a maiores de 18 anos. Não coletamos intencionalmente dados de crianças ou adolescentes.
+          </p>
+        </section>
+
+        <section class="print-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-2">
+          <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">7</span>
+            Alterações nesta Política
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            Esta Política de Privacidade pode ser atualizada periodicamente para refletir melhorias no sistema, mudanças regulatórias ou novas diretrizes do Google Play. A versão atualizada entrará em vigor imediatamente após publicação nesta página.
+          </p>
+        </section>
+      </div>
+
+      <!-- Section 8 Contact and DPO -->
+      <section class="print-card rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 p-6 space-y-3">
+        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-emerald-500 text-white font-bold text-xs flex items-center justify-center">8</span>
+          Contato e Encarregado de Dados (DPO)
+        </h2>
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          Para esclarecer dúvidas, exercer direitos previstos na LGPD ou enviar comunicações sobre privacidade, entre em contato direto com o desenvolvedor responsável:
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
+          <div class="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+            <span class="text-slate-400 block font-medium">Desenvolvedor:</span>
+            <strong class="text-slate-800 dark:text-slate-200">Philippe Wagner M R Araujo</strong>
+          </div>
+          <div class="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+            <span class="text-slate-400 block font-medium">E-mail de Contato:</span>
+            <a href="mailto:philippewagnermra@gmail.com" class="text-emerald-600 dark:text-emerald-400 font-bold hover:underline">philippewagnermra@gmail.com</a>
+          </div>
+          <div class="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+            <span class="text-slate-400 block font-medium">Site Oficial:</span>
+            <a href="https://calangus.vercel.app" class="text-emerald-600 dark:text-emerald-400 font-bold hover:underline">calangus.vercel.app</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer CTA and Back to App -->
+      <div class="pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400 no-print">
+        <div>
+          <span>CalanguS v2.8 • Todos os direitos reservados © 2026</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <a href="/" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition shadow-xs">
+            Acessar o CalanguS
+          </a>
+        </div>
+      </div>
+
+    </main>
+
+    <script>
+      // Full text constant for instant copy to Google Play Console
+      const POLICY_RAW_TEXT = `Política de Privacidade – CalanguS
+Última atualização: Setembro de 2026 (Versão 2.8)
+
+Esta Política de Privacidade descreve como o aplicativo CalanguS ("nós", "nosso" ou "aplicativo"), desenvolvido por Philippe Wagner M R Araujo, coleta, utiliza, armazena e compartilha dados dos usuários ("você"), em conformidade com as diretrizes do Google Play e com a legislação aplicável (como a Lei Geral de Proteção de Dados Pessoais - LGPD, Lei nº 13.709/2018).
+
+1. Informações que Coletamos
+O CalanguS coleta apenas as informações estritamente necessárias para o funcionamento, coordenação logística de exames oficiais (como o ENEM e exames educacionais) e aprimoramento contínuo de suas funcionalidades:
+
+a) Informações fornecidas diretamente pelo usuário:
+- Dados de Cadastro e Identificação Funcional: Nome completo, endereço de e-mail, número de telefone celular/WhatsApp, data de nascimento e ocupação/formação fornecidos durante o credenciamento de fiscais, colaboradores e coordenadores de local de aplicação (CLA).
+- Identificação Visual para Exame: Fotografia de perfil ou documento funcional enviada voluntariamente para confecção de crachás digitais, identificação presencial no dia do exame e auditoria de presença.
+- Dados de Repasse Financeiro / Pagamento: Chave Pix e dados bancários informados voluntariamente para viabilizar o pagamento e repasse de diárias de atuação como colaborador ou fiscal.
+- Credenciais de Acesso: Endereço de e-mail e senhas criptografadas administradas via Google Firebase Authentication ou provedores seguros OAuth (Google / Apple).
+- Conteúdo Operacional e Registros no Exame: Confirmação de presença em sala (Dia 1 e Dia 2), respostas a comunicados e convocações oficiais, conferência de alimentação/lanches, recusa justificada de atribuição e registros de auditoria interna da coordenação.
+
+b) Informações coletadas automaticamente e permissões do dispositivo:
+- Identificadores e Dados do Dispositivo: Modelo do aparelho, versão do sistema operacional Android ou navegador web, dados de conectividade e registros de sincronização segura em tempo real.
+- Diagnóstico e Desempenho: Relatórios técnicos anônimos de falhas (crash logs), latência de rede e cache operacional local para permitir o funcionamento resiliente do aplicativo em locais com instabilidade de conexão.
+- Permissões de Hardware e Sistema: O aplicativo solicita permissões estritamente quando indispensáveis para o recurso em execução, mediante consentimento explícito do usuário:
+  * Câmera: Utilizada exclusivamente para a captura voluntária de foto para o crachá/perfil do colaborador ou leitura óptica (OCR) de escalas de salas. O aplicativo não aciona a câmera em segundo plano.
+  * Armazenamento / Galeria: Utilizado exclusivamente para upload de fotos e exportação/impressão de documentos oficiais (relatórios de ensalamento, atas e listas de frequência).
+  * Notificações: Utilizadas para entrega de comunicados operacionais urgentes e avisos de escala emitidos pela coordenação.
+  * Nota de Transparência: O CalanguS NÃO coleta localização precisa por GPS em segundo plano, NÃO acessa microfone e NÃO acessa contatos do aparelho.
+
+2. Como Utilizamos as Informações
+Os dados coletados pelo CalanguS possuem finalidades legítimas, institucionais e operacionais:
+- Executar e manter as ferramentas de ensalamento, distribuição de salas, substituição de reservas e conferência de presença em dias de prova.
+- Gerar atas, crachás digitais e relatórios gerenciais para a Coordenação de Local de Aplicação (CLA) e supervisão geral.
+- Viabilizar a comunicação ágil entre coordenação e colaboradores (avisos de escala, chamadas de reserva e comunicados de segurança).
+- Garantir a integridade, rastreabilidade e segurança dos processos do exame por meio de logs de auditoria detalhados.
+- Diagnosticar falhas técnicas e aprimorar a estabilidade do sistema.
+- Cumprir obrigações legais, regulatórias e fiscais inerentes à realização de concursos e exames oficiais.
+Importante: Não vendemos, não alugamos e não comercializamos dados pessoais de nossos usuários para terceiros, anunciantes ou corretores de dados (data brokers).
+
+3. Compartilhamento de Dados com Terceiros
+Os dados podem ser compartilhados unicamente com prestadores de serviços de infraestrutura certificados e necessários para o funcionamento seguro do aplicativo:
+- Provedores de Banco de Dados e Nuvem: Google Cloud Platform e Firebase (Firestore Database, Firebase Authentication e Cloud Storage), que utilizam criptografia de ponta a ponta e controle estrito de regras de acesso (Row-Level Security).
+- Serviços de Inteligência Artificial e OCR (Opcional): Google Gemini API, acionado exclusivamente quando o usuário solicita a leitura óptica de documentos de ensalamento através de chave configurada. Nenhum dado pessoal é utilizado para treinamento de modelos públicos de IA.
+- Ausência Total de Publicidade: O CalanguS não contém anúncios e não compartilha dados com redes de publicidade (como Google AdMob ou similares).
+- Obrigações Legais: Em caso de ordens judiciais ou exigências formais emanadas por autoridades públicas competentes.
+
+4. Retenção e Exclusão de Dados
+Os dados coletados são retidos pelo tempo estritamente necessário para cumprir as finalidades descritas nesta política e atender a prazos regulatórios e legais de fiscalização de exames públicos.
+Como solicitar a exclusão: O usuário pode solicitar a exclusão de seus dados pessoais a qualquer momento enviando um e-mail para philippewagnermra@gmail.com com o assunto "Exclusão de Dados – CalanguS". A exclusão será realizada em até 15 dias úteis.
+
+5. Segurança das Informações
+Adotamos medidas rígidas de segurança técnica e organizacional para proteger os dados pessoais: criptografia HTTPS/TLS em trânsito, criptografia em repouso no Firebase, regras de segurança do Firestore (Row-Level Security) e autenticação segura com senhas criptografadas.
+
+6. Menores de Idade
+O CalanguS é voltado exclusivamente para a gestão de colaboradores e fiscais adultos que atuam em exames oficiais, sendo destinado a maiores de 18 anos. Não coletamos dados de menores.
+
+7. Alterações nesta Política de Privacidade
+Podemos atualizar esta Política de Privacidade periodicamente. As atualizações serão publicadas neste endereço (https://calangus.vercel.app/privacy).
+
+8. Contato e Encarregado de Dados (DPO)
+- Desenvolvedor: Philippe Wagner M R Araujo
+- E-mail de Contato/Privacidade: philippewagnermra@gmail.com
+- Site Oficial: https://calangus.vercel.app
+- Versão: v2.8 (Setembro de 2026)`;
+
+      function copyFullPolicy() {
+        navigator.clipboard.writeText(POLICY_RAW_TEXT).then(() => {
+          const btnText = document.getElementById('copyBtnText');
+          btnText.innerText = 'Copiado!';
+          setTimeout(() => {
+            btnText.innerText = 'Copiar Texto';
+          }, 2500);
+        }).catch(err => {
+          console.error('Erro ao copiar', err);
+        });
+      }
+
+      function toggleTheme() {
+        if (document.documentElement.classList.contains('dark')) {
+          document.documentElement.classList.remove('dark');
+          localStorage.setItem('calangus_theme', 'light');
+        } else {
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('calangus_theme', 'dark');
+        }
+      }
+
+      // Initialize theme based on preference or system
+      if (localStorage.getItem('calangus_theme') === 'dark' || (!('calangus_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    </script>
+  </body>
+</html>

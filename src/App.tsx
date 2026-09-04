@@ -230,21 +230,26 @@ export default function App() {
     );
   });
 
-  // Privacy Policy dedicated environment route state (supports /privacy, *\privacy, #/privacy, etc.)
+  // Privacy Policy dedicated environment route state (supports calangus.vercel.app/privacy, /privacy, *\privacy, #/privacy, etc.)
   const checkIsPrivacyRoute = () => {
     if (typeof window === "undefined") return false;
-    const path = window.location.pathname.toLowerCase();
+    const rawPath = window.location.pathname.toLowerCase();
+    const path = rawPath.replace(/\/+$/, "");
     const hash = window.location.hash.toLowerCase();
     const search = window.location.search.toLowerCase();
+    const href = window.location.href.toLowerCase();
     return (
       path === "/privacy" ||
       path.endsWith("/privacy") ||
       path.includes("/privacy") ||
       path.includes("\\privacy") ||
+      path === "/privacy.html" ||
       hash.startsWith("#/privacy") ||
       hash.includes("privacy") ||
       search.includes("view=privacy") ||
-      search.includes("privacy=true")
+      search.includes("privacy=true") ||
+      href.includes("calangus.vercel.app/privacy") ||
+      rawPath.includes("/privacy")
     );
   };
 
