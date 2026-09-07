@@ -15,6 +15,7 @@ import AssociationView, { getRolePayment } from "./AssociationView";
 import { appendCollaboratorLog } from "../lib/collaborator-logger";
 import { checkMultipleRegistrations } from "../lib/collaborator-utils";
 import ClaEvaluationModal from "./ClaEvaluationModal";
+import ManageImpedimentModal from "./ManageImpedimentModal";
 import { 
   Users, UserPlus, Upload, ShieldAlert, BadgeInfo, Trash, Mail, 
   MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
@@ -179,6 +180,7 @@ export default function CollaboratorManager({
   const [refuseModalCollab, setRefuseModalCollab] = useState<CollaboratorInfo | null>(null);
   const [refuseReasonText, setRefuseReasonText] = useState<string>("");
   const [refuseQuickReason, setRefuseQuickReason] = useState<string>("");
+  const [managingImpedimentCollab, setManagingImpedimentCollab] = useState<CollaboratorInfo | null>(null);
   const [filterType, setFilterType] = useState<
     | "todos"
     | "presenca_confirmada"
@@ -654,6 +656,14 @@ export default function CollaboratorManager({
       refusalTag: `Impedido: ${reason.trim()}`,
       refusedRoleDate: new Date().toLocaleDateString("pt-BR") + " às " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       attendanceStatus: "Recusado",
+      previousStateBeforeImpediment: {
+        status: (collab.status === "Impedido" ? "Confirmado" : collab.status) as "Pendente" | "Confirmado",
+        assignedRole: previousRole || undefined,
+        assignedRoom: previousRoom || undefined,
+        isReserve: collab.isReserve ?? true,
+        attendanceStatus: collab.attendanceStatus || "Pendente",
+        date: new Date().toISOString()
+      },
       activityLogs: updatedLogs
     };
 
@@ -662,6 +672,89 @@ export default function CollaboratorManager({
     setRefuseReasonText("");
     setRefuseQuickReason("");
     setLocalSuccessMsg(`"${collab.name}" foi recusado, removido da sala e marcado como Impedido.`);
+    setTimeout(() => setLocalSuccessMsg(null), 3500);
+  };
+
+  // Revert Impediment: Restore previous state (role, room, status) and log CLA action
+  const handleConfirmRevertImpediment = async (
+    collab: CollaboratorInfo,
+    options: {
+      targetStatus: "Confirmado" | "Pendente";
+      restoreRole: boolean;
+      restoreRoom: boolean;
+      justification: string;
+    }
+  ) => {
+    const prevState = collab.previousStateBeforeImpediment;
+    const restoredRole = options.restoreRole ? (prevState?.assignedRole || collab.refusedRole || "") : "";
+    const restoredRoom = options.restoreRoom ? (prevState?.assignedRoom || "") : "";
+    const restoredIsReserve = restoredRoom ? false : (prevState?.isReserve ?? (restoredRole ? false : true));
+
+    const updatedLogs = appendCollaboratorLog(
+      collab,
+      "reversao_impedimento",
+      "Impedimento Revertido pelo CLA",
+      `Impedimento cancelado pela coordenação ${currentUserName || buildingName || "CLA"}. Status restaurado para "${options.targetStatus}". ${restoredRole ? `Função restaurada: ${restoredRole}.` : "Sem função."} ${restoredRoom ? `Sala restaurada: ${restoredRoom}.` : "Sem sala."} Justificativa do CLA: "${options.justification}".`,
+      {
+        performedBy: currentUserName || "Coordenação CLA",
+        performedByRole: "CLA",
+        details: {
+          justificativa: options.justification,
+          statusAnterior: collab.status,
+          statusRestaurado: options.targetStatus,
+          funcaoRestaurada: restoredRole || null,
+          salaRestaurada: restoredRoom || null,
+          dataReversao: new Date().toISOString()
+        }
+      }
+    );
+
+    const updates: Partial<CollaboratorInfo> = {
+      status: options.targetStatus,
+      assignedRole: restoredRole,
+      assignedRoom: restoredRoom,
+      isReserve: restoredIsReserve,
+      refusedRole: "",
+      refusalReason: "",
+      refusalTag: "",
+      refusedRoleDate: "",
+      attendanceStatus: options.targetStatus === "Confirmado" ? (prevState?.attendanceStatus === "Confirmado" ? "Confirmado" : "Pendente") : "Pendente",
+      previousStateBeforeImpediment: undefined,
+      activityLogs: updatedLogs
+    };
+
+    await onUpdate(collab.id!, updates);
+    setManagingImpedimentCollab(null);
+    setLocalSuccessMsg(`O impedimento de "${collab.name}" foi revertido com sucesso e seu estado anterior foi restaurado!`);
+    setTimeout(() => setLocalSuccessMsg(null), 4000);
+  };
+
+  // Update Impediment Reason without lifting impediment
+  const handleUpdateImpedimentReason = async (collab: CollaboratorInfo, newReason: string) => {
+    const updatedLogs = appendCollaboratorLog(
+      collab,
+      "recusa_funcao",
+      "Motivo de Impedimento Atualizado",
+      `Motivo de impedimento alterado pela coordenação ${currentUserName || buildingName || "CLA"}. Novo motivo: "${newReason.trim()}".`,
+      {
+        performedBy: currentUserName || "Coordenação CLA",
+        performedByRole: "CLA",
+        details: {
+          motivoAnterior: collab.refusalReason || "",
+          novoMotivo: newReason.trim()
+        }
+      }
+    );
+
+    const updates: Partial<CollaboratorInfo> = {
+      refusalReason: newReason.trim(),
+      refusalTag: `Impedido: ${newReason.trim()}`,
+      activityLogs: updatedLogs
+    };
+
+    await onUpdate(collab.id!, updates);
+    setManagingImpedimentCollab(null);
+    setLocalSuccessMsg(`Motivo do impedimento de "${collab.name}" atualizado com sucesso.`);
     setTimeout(() => setLocalSuccessMsg(null), 3500);
   };
 
@@ -1151,7 +1244,8 @@ export default function CollaboratorManager({
         (c) => setSelectedAuditCollab(c),
         (c) => setEvaluatingCollab(c),
         allBuildings,
-        allCollaborators
+        allCollaborators,
+        (c) => setManagingImpedimentCollab(c)
       )}
 
       {/* SUBTAB: ROLES & FUNCTION ASSOCIATION (MENU 3 INTEGRATED) */}
@@ -1858,6 +1952,17 @@ export default function CollaboratorManager({
           </div>
         </div>
       )}
+
+      {/* Modal de Gestão & Reversão de Impedimento (Voltar ao Estado Anterior) */}
+      <ManageImpedimentModal
+        isOpen={!!managingImpedimentCollab}
+        collaborator={managingImpedimentCollab}
+        onClose={() => setManagingImpedimentCollab(null)}
+        onConfirmRevert={handleConfirmRevertImpediment}
+        onUpdateReason={handleUpdateImpedimentReason}
+        currentUserName={currentUserName}
+        buildingName={buildingName}
+      />
     </div>
   );
 }
@@ -1908,7 +2013,8 @@ function activeTabSubList(
   onOpenAuditLog?: (c: CollaboratorInfo) => void,
   onEvaluateCollab?: (c: CollaboratorInfo) => void,
   allBuildings: BuildingInfo[] = [],
-  allCollaboratorsGlobal: CollaboratorInfo[] = []
+  allCollaboratorsGlobal: CollaboratorInfo[] = [],
+  onManageImpediment?: (c: CollaboratorInfo) => void
 ) {
   if (activeSubTab !== "list") return null;
 
@@ -2457,11 +2563,17 @@ function activeTabSubList(
                               <span>⏳ Aguardando Aprovação</span>
                             </span>
                           ) : c.status === "Impedido" ? (
-                            <div className="space-y-0.5">
-                              <span className="bg-rose-600 text-white font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1 w-fit shadow-xs" title={c.refusalReason ? `Motivo: ${c.refusalReason}` : "Colaborador Impedido"}>
+                            <div className="space-y-1">
+                              <button
+                                type="button"
+                                onClick={() => onManageImpediment?.(c)}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1.5 w-fit shadow-xs cursor-pointer active:scale-95 transition"
+                                title={c.refusalReason ? `Motivo: ${c.refusalReason}. Clique para alterar ou reverter!` : "Colaborador Impedido. Clique para alterar ou reverter!"}
+                              >
                                 <Ban className="w-2.5 h-2.5 stroke-[2.5]" />
                                 <span>IMPEDIDO</span>
-                              </span>
+                                <RotateCcw className="w-2.5 h-2.5 ml-0.5 opacity-90" />
+                              </button>
                               {c.refusalReason && (
                                 <span className="text-[9.5px] text-rose-600 dark:text-rose-400 font-bold max-w-[200px] truncate block" title={`Motivo: ${c.refusalReason}`}>
                                   {c.refusalReason}
@@ -2543,11 +2655,17 @@ function activeTabSubList(
                   {/* Confirmation status */}
                   <td className="p-4">
                     {c.status === "Impedido" ? (
-                      <div className="space-y-0.5">
-                        <span className="bg-rose-600 text-white font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1 w-fit shadow-xs" title={c.refusalReason ? `Motivo: ${c.refusalReason}` : "Colaborador Impedido"}>
+                      <div className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => onManageImpediment?.(c)}
+                          className="bg-rose-600 hover:bg-rose-700 text-white font-black text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1.5 w-fit shadow-xs cursor-pointer active:scale-95 transition"
+                          title={c.refusalReason ? `Motivo: ${c.refusalReason}. Clique para alterar ou reverter!` : "Colaborador Impedido. Clique para alterar ou reverter!"}
+                        >
                           <Ban className="w-2.5 h-2.5 stroke-[2.5]" />
                           <span>Impedido</span>
-                        </span>
+                          <RotateCcw className="w-2.5 h-2.5 ml-0.5 opacity-90" />
+                        </button>
                         {c.refusalReason && (
                           <span className="text-[9.5px] text-rose-600 dark:text-rose-400 font-bold max-w-[150px] truncate block" title={`Motivo: ${c.refusalReason}`}>
                             {c.refusalReason}
@@ -2652,13 +2770,25 @@ function activeTabSubList(
                           ✓
                         </button>
                       )}
-                      <button
-                        onClick={() => refuseStaff(c.id!)}
-                        title="Recusar Participante e Marcar como Impedido"
-                        className="p-1 px-2.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 hover:scale-105 rounded-lg text-rose-550 font-extrabold cursor-pointer active:scale-90 transition-all text-sm"
-                      >
-                        ✕
-                      </button>
+                      {c.status === "Impedido" && onManageImpediment ? (
+                        <button
+                          type="button"
+                          onClick={() => onManageImpediment(c)}
+                          title="Alterar ou Reverter Impedimento (Restaurar Estado Anterior)"
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] rounded-lg shadow-xs cursor-pointer active:scale-90 transition-all flex items-center gap-1"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span className="hidden xl:inline">Desimpedir</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => refuseStaff(c.id!)}
+                          title="Recusar Participante e Marcar como Impedido"
+                          className="p-1 px-2.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 hover:scale-105 rounded-lg text-rose-550 font-extrabold cursor-pointer active:scale-90 transition-all text-sm"
+                        >
+                          ✕
+                        </button>
+                      )}
                       <button
                         onClick={() => onDelete(c.id!)}
                         title="Excluir Colaborador"

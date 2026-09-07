@@ -417,6 +417,22 @@ export function getLogActionStyle(action: CollaboratorLogActionType): {
         dotBg: "bg-red-500",
         label: "Recusa de Função"
       };
+    case "impedimento":
+      return {
+        badgeBg: "bg-rose-500/10 dark:bg-rose-500/20",
+        badgeText: "text-rose-700 dark:text-rose-300",
+        badgeBorder: "border-rose-500/30",
+        dotBg: "bg-rose-600",
+        label: "Impedimento Registrado"
+      };
+    case "reversao_impedimento":
+      return {
+        badgeBg: "bg-emerald-500/10 dark:bg-emerald-500/20",
+        badgeText: "text-emerald-700 dark:text-emerald-300",
+        badgeBorder: "border-emerald-500/30",
+        dotBg: "bg-emerald-500",
+        label: "Reversão de Impedimento"
+      };
     case "substituicao":
       return {
         badgeBg: "bg-orange-500/10 dark:bg-orange-500/20",

@@ -404,6 +404,8 @@ export default function DragAndDropReserves({
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>("all");
   const [searchFilter, setSearchFilter] = useState<string>("");
   const [onlyUnallocatedToggle, setOnlyUnallocatedToggle] = useState<boolean>(false);
+  const [sortOrder, setSortOrder] = useState<"default" | "alpha-asc" | "alpha-desc">("alpha-asc");
+  const [extendToPageBottom, setExtendToPageBottom] = useState<boolean>(true);
 
   // Export Templates State
   const [selectedExportTemplate, setSelectedExportTemplate] = useState<ExportTemplateType>("ensalamento");
@@ -762,8 +764,15 @@ export default function DragAndDropReserves({
       });
     }
 
+    // Apply alphabetical or default sorting
+    if (sortOrder === "alpha-asc") {
+      list = [...list].sort((a, b) => (a.name || "").localeCompare(b.name || "", "pt-BR", { sensitivity: "base" }));
+    } else if (sortOrder === "alpha-desc") {
+      list = [...list].sort((a, b) => (b.name || "").localeCompare(a.name || "", "pt-BR", { sensitivity: "base" }));
+    }
+
     return list;
-  }, [selectedRoleFilter, approvedCollaborators, unallocated, unallocatedReservas, searchFilter, onlyUnallocatedToggle]);
+  }, [selectedRoleFilter, approvedCollaborators, unallocated, unallocatedReservas, searchFilter, onlyUnallocatedToggle, sortOrder]);
 
   // Map of room number -> { total, chefes, aplicadores } count of allocated collaborators
   const roomOccupancyMap = useMemo(() => {
@@ -1663,6 +1672,67 @@ export default function DragAndDropReserves({
               />
             </div>
 
+            {/* Quick Controls: Alphabetical Sorting & Extend View */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+              {/* Alphabetical Sorting Options */}
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 px-1 flex items-center gap-1">
+                  <ArrowUpDown className="w-3 h-3 text-indigo-500" />
+                  <span>Ordem:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSortOrder("alpha-asc")}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+                    sortOrder === "alpha-asc"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+                  }`}
+                  title="Classificar por Ordem Alfabética (A até Z)"
+                >
+                  <span>A → Z</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSortOrder("alpha-desc")}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+                    sortOrder === "alpha-desc"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+                  }`}
+                  title="Classificar por Ordem Alfabética Reversa (Z até A)"
+                >
+                  <span>Z → A</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSortOrder("default")}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                    sortOrder === "default"
+                      ? "bg-slate-800 text-white dark:bg-white dark:text-slate-900 shadow-xs"
+                      : "text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
+                  }`}
+                  title="Ordem Padrão de Inscrição"
+                >
+                  <span>Padrão</span>
+                </button>
+              </div>
+
+              {/* Toggle Extend to End of Page */}
+              <button
+                type="button"
+                onClick={() => setExtendToPageBottom(prev => !prev)}
+                className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold transition cursor-pointer flex items-center gap-1.5 border ${
+                  extendToPageBottom
+                    ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/20"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200"
+                }`}
+                title="Alternar entre estender a lista até o final da página ou usar caixa com rolagem interna"
+              >
+                <span>{extendToPageBottom ? "↕ Estendido (Final da Página)" : "⬍ Modo Compacto (Scroll)"}</span>
+              </button>
+            </div>
+
             {/* TOGGLE: Apenas Colaboradores Não Associados (que têm função mas não estão em sala/posto) */}
             <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer select-none bg-emerald-500/10 dark:bg-emerald-500/5 p-2 rounded-xl border border-emerald-500/20 hover:bg-emerald-500/15 transition">
               <input
@@ -1907,8 +1977,11 @@ export default function DragAndDropReserves({
 
           {/* List of collaborators matching the active filter */}
           <div 
-            className="grid grid-cols-1 gap-3 max-h-[750px] overflow-y-auto pr-1"
-            style={{ minHeight: "420px" }}
+            className={`grid grid-cols-1 gap-3 pr-1 transition-all ${
+              extendToPageBottom
+                ? "min-h-[500px]"
+                : "max-h-[750px] overflow-y-auto min-h-[420px]"
+            }`}
           >
             {displayedCollaborators.length === 0 ? (
               <div className="text-center py-12 px-4 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">

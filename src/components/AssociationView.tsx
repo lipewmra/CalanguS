@@ -8,7 +8,7 @@ import {
   HelpCircle, ShieldAlert, ArrowRight, RotateCcw, AlertCircle,
   Save, ChevronDown, ChevronUp, Plus, Minus, Banknote, DollarSign,
   Award, Shield, Bath, Footprints, FileText, Building2, Calculator,
-  SlidersHorizontal, History
+  SlidersHorizontal, History, ArrowUpDown
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
 import FiscalAvatar from "./FiscalAvatar";
@@ -100,6 +100,7 @@ export default function AssociationView({
 }: AssociationViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState<string>("all"); // "all" | "associated" | "unassociated" | specific role
+  const [sortOrder, setSortOrder] = useState<"alpha-asc" | "alpha-desc" | "default">("alpha-asc");
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [lightboxData, setLightboxData] = useState<LightboxData | null>(null);
@@ -351,6 +352,17 @@ export default function AssociationView({
     return true;
   });
 
+  // Sort filtered collaborators alphabetically or in default order
+  const sortedFiltered = useMemo(() => {
+    let list = [...filtered];
+    if (sortOrder === "alpha-asc") {
+      list.sort((a, b) => (a.name || "").localeCompare(b.name || "", "pt-BR", { sensitivity: "base" }));
+    } else if (sortOrder === "alpha-desc") {
+      list.sort((a, b) => (b.name || "").localeCompare(a.name || "", "pt-BR", { sensitivity: "base" }));
+    }
+    return list;
+  }, [filtered, sortOrder]);
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -494,34 +506,80 @@ export default function AssociationView({
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-indigo-400 shrink-0" />
-            <select
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
-              className="bg-slate-50 dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-805 dark:text-white font-bold cursor-pointer focus:outline-hidden"
-            >
-              <option value="all">Todas as Funções</option>
-              <option value="associated">Apenas Associados</option>
-              <option value="unassociated">Apenas Reservas (Não Associados)</option>
-              {ENEM_ROLES.map(role => (
-                <option key={role.name} value={role.name}>
-                  {role.name} — ({getRolePayment(role.name)})
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-indigo-400 shrink-0" />
+              <select
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                className="bg-slate-50 dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-805 dark:text-white font-bold cursor-pointer focus:outline-hidden"
+              >
+                <option value="all">Todas as Funções</option>
+                <option value="associated">Apenas Associados</option>
+                <option value="unassociated">Apenas Reservas (Não Associados)</option>
+                {ENEM_ROLES.map(role => (
+                  <option key={role.name} value={role.name}>
+                    {role.name} — ({getRolePayment(role.name)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Quick Controls: Alphabetical Sorting */}
+            <div className="flex items-center gap-1 bg-slate-50 dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-xl p-1">
+              <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 px-1.5 flex items-center gap-1">
+                <ArrowUpDown className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Ordem:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setSortOrder("alpha-asc")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 ${
+                  sortOrder === "alpha-asc"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+                }`}
+                title="Classificar por Ordem Alfabética (A até Z)"
+              >
+                <span>A → Z</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortOrder("alpha-desc")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 ${
+                  sortOrder === "alpha-desc"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+                }`}
+                title="Classificar por Ordem Alfabética Reversa (Z até A)"
+              >
+                <span>Z → A</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortOrder("default")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                  sortOrder === "default"
+                    ? "bg-slate-800 text-white dark:bg-white dark:text-slate-900 shadow-xs"
+                    : "text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
+                }`}
+                title="Ordem Original de Inscrição"
+              >
+                <span>Padrão</span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Matrix - Grid Cards */}
-        {filtered.length === 0 ? (
+        {sortedFiltered.length === 0 ? (
           <div className="p-12 text-center border-2 border-dashed border-slate-200 dark:border-slate-850 rounded-2xl text-slate-400 font-bold space-y-2">
             <AlertCircle className="w-8 h-8 text-slate-300 mx-auto animate-bounce" />
             <p className="text-xs">Nenhum colaborador encontrado com as definições de busca.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filtered.map((collab) => {
+            {sortedFiltered.map((collab) => {
               const isAssigned = Boolean(collab.assignedRole && collab.assignedRole.trim() !== "");
               const currentPayment = isAssigned ? getRolePayment(collab.assignedRole!) : null;
 

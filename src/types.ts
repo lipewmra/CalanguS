@@ -184,6 +184,8 @@ export type CollaboratorLogActionType =
   | "designacao_reserva"    // Definido como Reserva Técnica
   | "confirmacao_presenca"   // Presença confirmada no dia da prova
   | "recusa_funcao"         // Fiscal recusou a função atribuída
+  | "impedimento"           // Fiscal marcado como impedido pelo CLA
+  | "reversao_impedimento"  // Reversão de impedimento pelo CLA (retorno ao estado anterior)
   | "substituicao"          // Substituído por outro fiscal
   | "transferencia"         // Transferência entre CLAs
   | "acesso_material"       // Acessou material didático
@@ -258,6 +260,14 @@ export interface CollaboratorInfo {
   refusedRoleDate?: string;
   refusalTag?: string;
   refusalReason?: string;
+  previousStateBeforeImpediment?: {
+    status: "Pendente" | "Confirmado";
+    assignedRole?: string;
+    assignedRoom?: string;
+    isReserve?: boolean;
+    attendanceStatus?: "Pendente" | "Confirmado" | "Recusado";
+    date: string;
+  };
   attendanceConfirmedAt?: string;
   isPresent?: boolean;
   presenceCheckedAt?: string;
