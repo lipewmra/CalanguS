@@ -235,6 +235,7 @@ export interface CollaboratorInfo {
   assignedRoom?: string; // e.g. "Sala 01", "Coordenação", or null
   status: "Pendente" | "Confirmado" | "Recusado" | "Cancelado" | "Impedido";
   assignedRole?: string;
+  isOrionAssociated?: boolean; // Indicador de associação oficial no Sistema Orion (Cebraspe)
   orionStatus: "Ok" | "Erro";
   orionErrors: string[]; // lists data inconsistencies like CPFs, lower/uppercase structures
   orionSynced: boolean;
@@ -272,7 +273,36 @@ export interface CollaboratorInfo {
   isSubstituted?: boolean; // Flag indicating collaborator was substituted and returned to reserve
   materialsAccessed?: MaterialAccessLog[];
   activityLogs?: CollaboratorLogEntry[];
+  claEvaluation?: ClaEvaluation; // Avaliação de desempenho realizada pelo CLA (selo de recomendação ou avaliação negativa)
   createdAt?: string; // Form submission/registration ISO date
+}
+
+export interface ClaEvaluation {
+  rating: "positive" | "neutral" | "negative"; // Positivo (Recomendado) | Neutro/Regular | Negativo (Problema/Alerta)
+  score?: number; // 1 a 5 estrelas
+  badge?: "recommended" | "satisfactory" | "warning" | "problem";
+  tags?: string[]; // Marcadores de conduta (ex: "Pontual", "Liderança exemplar" ou "Atraso grave", "Uso de celular")
+  feedback?: string; // Relato/justificativa detalhada do CLA
+  evaluatedBy?: string; // Nome ou e-mail do coordenador CLA
+  evaluatedAt?: string; // Data ISO da avaliação
+  claId?: string;
+  claName?: string;
+}
+
+export interface MultiRegistrationLocation {
+  claId: string;
+  claName: string;
+  buildingName?: string;
+  status?: string;
+  assignedRole?: string;
+  assignedRoom?: string;
+  isReserve?: boolean;
+}
+
+export interface MultiRegistrationInfo {
+  isMultiRegistered: boolean;
+  count: number;
+  locations: MultiRegistrationLocation[];
 }
 
 export interface DidacticMaterial {

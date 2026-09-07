@@ -135,7 +135,7 @@ export const DEFAULT_COLLABORATOR_METRICS: CollaboratorMetricsConfig = {
   ledorTranscritorPerSpecialRoom: 2,   // legacy alias (default 2 ledores)
   interpreteLibrasPerSpecialRoom: 2,   // legacy alias (default 2 libras)
 
-  // Salas Extras / Contingência (Apenas 01 Chefe de Sala e SEM aplicadores)
+  // Salas Extras / Contingência (Apenas 01 Chefe de Sala e SEM aplicadores em nenhum caso)
   chefesPerExtraRoom: 1,
   aplicadoresPerExtraRoom: 0,
 
@@ -145,7 +145,7 @@ export const DEFAULT_COLLABORATOR_METRICS: CollaboratorMetricsConfig = {
   fiscaisBanheiroPerBuilding: 2,       // fallback se desativado tier
   porteirosPerBuilding: 2,             // 2 porteiros por local
   auxiliaresLimpezaPerBuilding: 2,     // 2 auxiliares de limpeza por local
-  tecnicosInformaticaPerBuilding: 1,   // 1 técnico de TI por prédio (suporte geral)
+  tecnicosInformaticaPerBuilding: 0,   // Técnico de Informática só existe em caso que o local tenha Técnico em Libras
   representanteLocalPerBuilding: 1,     // 1 representante da escola/local
 
   // Reserva Técnica (%)
@@ -238,16 +238,19 @@ export function getRoomTargetRequirements(
     };
   }
 
-  if (isExtra || room.type === "extra") {
+  const roomNumberLower = (room.number || "").toLowerCase();
+  const isExtraRoom = isExtra || room.type === "extra" || roomNumberLower.includes("extra") || roomNumberLower.includes("contingência");
+
+  if (isExtraRoom) {
     return {
       targetChefes: hasCustomChefes ? room.targetChefes! : (metricsConfig.chefesPerExtraRoom || 1),
-      targetAplicadores: hasCustomAplicadores ? room.targetAplicadores! : (metricsConfig.aplicadoresPerExtraRoom || 0),
-      targetLedores: hasCustomLedores ? room.targetLedores! : 0,
+      targetAplicadores: 0, // Regra Estrita: A sala extra só tem Chefe de Sala, NÃO possui em nenhum caso aplicador
+      targetLedores: 0,
       targetTranscritores: 0,
-      targetLibras: hasCustomLibras ? room.targetLibras! : 0,
+      targetLibras: 0,
       targetGuiaInterprete: 0,
       targetTecnicoInfo: 0,
-      targetAcessibilidade: hasCustomAcess ? room.targetAcessibilidade! : 0,
+      targetAcessibilidade: 0,
     };
   }
 
@@ -290,10 +293,13 @@ export function calculateBuildingTargetQuantities(
   const totalChefes = regularChefes + specialChefes + extraChefes;
 
   // 2. Aplicador: 1 a 60 participantes (1 por sala); 61 a 100 (2 por sala)
-  // Verifica capacidade das salas se disponíveis
+  // A sala extra NÃO possui em nenhum caso aplicador
   let calculatedRegularAplicadores = 0;
   if (building.rooms && building.rooms.length > 0) {
     building.rooms.forEach(r => {
+      // Ignora salas extras que estejam na lista geral
+      const isExtra = r.type === "extra" || (r.number && r.number.toLowerCase().includes("extra")) || (r.number && r.number.toLowerCase().includes("contingência"));
+      if (isExtra) return; // Sala extra NÃO possui aplicador
       const cap = Number(r.capacity) || building.virtualCapacity || 30;
       calculatedRegularAplicadores += (cap > 60 ? 2 : (metricsConfig.aplicadoresPerRegularRoom || 1));
     });
@@ -302,7 +308,7 @@ export function calculateBuildingTargetQuantities(
   }
 
   const specialAplicadores = specialRoomsCount * (metricsConfig.aplicadoresPerSpecialRoom || 0);
-  const extraAplicadores = extraRoomsCount * (metricsConfig.aplicadoresPerExtraRoom || 0);
+  const extraAplicadores = 0; // Regra Estrita: A sala extra só tem Chefe de Sala, NÃO possui em nenhum caso aplicador
   const totalAplicadores = calculatedRegularAplicadores + specialAplicadores + extraAplicadores;
 
   // 3. Tradutor-Intérprete de Libras: 2 por sala especializada com demanda
@@ -338,8 +344,14 @@ export function calculateBuildingTargetQuantities(
     totalVolantes = totalRoomsCount > 0 ? Math.max(1, Math.ceil(totalRoomsCount / ratio)) : 0;
   }
 
-  // 9. Técnico de Informática: 1 por sala tecnológica (ou suporte geral do prédio)
-  const totalInformatica = totalRoomsCount > 0 
+  // 9. Técnico de Informática: SÓ EXISTE EM CASO QUE O LOCAL TENHA TÉCNICO EM LIBRAS
+  const hasLibrasInLocation = 
+    totalLibras > 0 ||
+    Boolean((building as any).hasLibras) ||
+    Boolean(building.specialDetails && /libras/i.test(building.specialDetails)) ||
+    Boolean(building.specialRooms && building.specialRooms.some(r => (r.targetLibras && r.targetLibras > 0) || /libras/i.test(r.details || (r as any).specialties || "")));
+
+  const totalInformatica = (hasLibrasInLocation && totalRoomsCount > 0)
     ? Math.max(1, (specialRoomsCount * (metricsConfig.tecnicosInformaticaPerTechRoom || 1)) + (metricsConfig.tecnicosInformaticaPerBuilding || 0))
     : 0;
 

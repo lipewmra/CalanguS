@@ -29,7 +29,7 @@ export default function PrivacyPolicyView({ onBack, theme = "dark", onToggleThem
   const [copied, setCopied] = useState(false);
 
   const fullPolicyText = `Política de Privacidade – CalanguS
-Última atualização: Setembro de 2026 (Versão 2.8)
+Última atualização: Setembro de 2026 (Versão 3.0)
 
 Esta Política de Privacidade descreve como o aplicativo CalanguS ("nós", "nosso" ou "aplicativo"), desenvolvido por Philippe Wagner M R Araujo, coleta, utiliza, armazena e compartilha dados dos usuários ("você"), em conformidade com as diretrizes do Google Play e com a legislação aplicável (como a Lei Geral de Proteção de Dados Pessoais - LGPD, Lei nº 13.709/2018).
 
@@ -92,7 +92,7 @@ Em caso de dúvidas, solicitações ou considerações sobre esta Política de P
 - Desenvolvedor: Philippe Wagner M R Araujo
 - E-mail de Contato/Privacidade: philippewagnermra@gmail.com
 - Site Oficial: https://calangus.vercel.app
-- Versão: v2.8 (Setembro de 2026)`;
+- Versão: v3.0 (Setembro de 2026)`;
 
   const handleCopyText = async () => {
     try {
@@ -194,7 +194,7 @@ Em caso de dúvidas, solicitações ou considerações sobre esta Política de P
                     Política de Privacidade
                   </h1>
                   <span className="text-xs bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono font-black px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                    CalanguS v2.8
+                    CalanguS v3.0
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400 mt-1">
@@ -729,7 +729,7 @@ Em caso de dúvidas, solicitações ou considerações sobre esta Política de P
                 <ExternalLink className="w-3 h-3 shrink-0" />
               </a>
               <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
-                Versão v2.8 (Build 2026)
+                Versão v3.0 (Build 2026)
               </span>
             </div>
           </div>

@@ -24,6 +24,8 @@ export type ExportTemplateType =
   | "porteiro" 
   | "ensalamento" 
   | "predio" 
+  | "orion_associados"
+  | "orion_pendentes"
   | "personalizado";
 
 export type ExportSortType = "function_alphabetical" | "alphabetical" | "room_alphabetical";
@@ -71,7 +73,7 @@ export function getRoleRank(role?: string): number {
 
 export interface CustomExportConfig {
   selectedRoles: string[];
-  selectedColumns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "assinatura")[];
+  selectedColumns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "orion" | "assinatura")[];
   allocationStatusFilter: "all" | "allocated" | "unallocated";
   groupBy: "room" | "role" | "none";
 }
@@ -158,7 +160,7 @@ export interface TemplateMeta {
   iconName: "award" | "user-check" | "footprints" | "bath" | "sparkles" | "door" | "layers" | "building" | "sliders";
   fieldsDescription: string;
   description: string;
-  defaultColumns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "assinatura")[];
+  defaultColumns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "orion" | "assinatura")[];
   colorScheme: "amber" | "indigo" | "sky" | "cyan" | "emerald" | "slate" | "teal" | "purple" | "rose";
 }
 
@@ -252,6 +254,28 @@ export const EXPORT_TEMPLATES: TemplateMeta[] = [
     colorScheme: "purple"
   },
   {
+    id: "orion_associados",
+    title: "Associados ao Orion (Cebraspe)",
+    shortTitle: "Orion: Associados",
+    badge: "Homologados no Orion",
+    iconName: "award",
+    fieldsDescription: "Colaboradores com confirmação de vinculação no Orion (Nome, CPF, Telefone, Função, Sala, Orion)",
+    description: "Lista completa de todos os colaboradores devidamente vinculados e homologados no Orion Cebraspe.",
+    defaultColumns: ["nome", "cpf", "telefone", "funcao", "sala", "orion", "assinatura"],
+    colorScheme: "purple"
+  },
+  {
+    id: "orion_pendentes",
+    title: "Não Associados ao Orion (Pendentes)",
+    shortTitle: "Orion: Pendentes",
+    badge: "Pendente de Associação",
+    iconName: "user-check",
+    fieldsDescription: "Colaboradores que ainda NÃO foram vinculados no Orion Cebraspe",
+    description: "Lista de colaboradores que necessitam de providências para associação ao sistema oficial Orion.",
+    defaultColumns: ["nome", "cpf", "telefone", "funcao", "sala", "orion", "assinatura"],
+    colorScheme: "rose"
+  },
+  {
     id: "personalizado",
     title: "Personalizado",
     shortTitle: "Customizado",
@@ -307,6 +331,14 @@ function isCollabInTemplate(
     // Unir todas as funções operacionais alocadas no prédio
     return isAllocated;
   }
+  if (template === "orion_associados") {
+    // Todos os colaboradores já vinculados ao sistema Orion
+    return Boolean(c.isOrionAssociated);
+  }
+  if (template === "orion_pendentes") {
+    // Todos os colaboradores que ainda não estão vinculados ao sistema Orion
+    return Boolean(!c.isOrionAssociated);
+  }
   if (template === "personalizado") {
     let roleMatches = false;
     if (customCfg.selectedRoles.includes("Chefe de Sala") && isChefeDeSalaRole(c.assignedRole)) roleMatches = true;
@@ -335,6 +367,9 @@ function isCollabInTemplate(
 
 interface DragAndDropProps {
   collaborators: CollaboratorInfo[];
+  allCollaborators?: CollaboratorInfo[];
+  allBuildings?: BuildingInfo[];
+  currentUserName?: string;
   rooms: RoomDetails[];
   building?: BuildingInfo | null;
   claName?: string;
@@ -347,6 +382,9 @@ interface DragAndDropProps {
 
 export default function DragAndDropReserves({ 
   collaborators, 
+  allCollaborators = [],
+  allBuildings = [],
+  currentUserName,
   rooms, 
   building, 
   claName, 
@@ -371,6 +409,41 @@ export default function DragAndDropReserves({
   const [selectedExportTemplate, setSelectedExportTemplate] = useState<ExportTemplateType>("ensalamento");
   const [exportSortBy, setExportSortBy] = useState<ExportSortType>("function_alphabetical");
   const [exportSearchQuery, setExportSearchQuery] = useState<string>("");
+  const [exportOrionFilter, setExportOrionFilter] = useState<"todos" | "associados" | "pendentes">("todos");
+
+  // Open Full Collaborator Lightbox Modal with Complete Details and Association Status
+  const openCollabLightbox = (c: CollaboratorInfo, fallbackRole?: string) => {
+    setLightboxData({
+      id: c.id,
+      imageUrl: c.photoUrl || '',
+      name: c.name,
+      role: c.assignedRole || fallbackRole || (c.isReserve ? 'Reserva Geral' : 'Fiscal de Sala'),
+      cpf: c.cpf,
+      claName: c.originalClaName || c.claName || claName || 'CLA',
+      education: c.education,
+      specialRole: c.specialRole,
+      hasWorkedEnem: c.hasWorkedEnem,
+      pastEditions: c.pastEditions,
+      email: c.email,
+      whatsapp: c.whatsapp,
+      birthDate: c.birthDate,
+      disability: c.disability,
+      languages: c.languages,
+      pixKey: c.pixKey,
+      referencePerson: c.referencePerson,
+      assignedRoom: c.assignedRoom,
+      isReserve: c.isReserve,
+      isOrionAssociated: c.isOrionAssociated,
+      status: c.status,
+      attendanceStatus: c.attendanceStatus,
+      refusedRole: c.refusedRole,
+      refusalTag: c.refusalTag,
+      refusalReason: c.refusalReason,
+      createdAt: c.createdAt,
+      materialsAccessed: c.materialsAccessed,
+      transferHistory: c.transferHistory,
+    });
+  };
   const [customExportConfig, setCustomExportConfig] = useState<CustomExportConfig>({
     selectedRoles: ["Chefe de Sala", "Aplicador", "Volante", "Banheiro", "Limpeza", "Porteiro"],
     selectedColumns: ["nome", "cpf", "telefone", "funcao", "sala", "assinatura"],
@@ -529,7 +602,7 @@ export default function DragAndDropReserves({
     const tiAssigned = ti.length;
     const tiAllocated = approvedCollaborators.filter(c => isCollabInSector(c, OPERATIONAL_SECTORS[5])).length;
     const tiAvailable = ti.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
-    const targetTI = buildingTargetQuantities["Técnico de Informática"] ?? 1;
+    const targetTI = buildingTargetQuantities["Técnico de Informática"] ?? 0;
 
     // Demais Fiscais (especializados ou outros)
     const demaisFiscais = approvedCollaborators.filter(c => 
@@ -1011,9 +1084,15 @@ export default function DragAndDropReserves({
 
   // Computed collaborators for current template
   const filteredTemplateCollaborators = useMemo(() => {
-    const list = approvedCollaborators.filter(c => 
+    let list = approvedCollaborators.filter(c => 
       isCollabInTemplate(c, selectedExportTemplate, customExportConfig, rooms, isChefeDeSalaRole, isAplicadorRole, isRoleMatchingSector, isCollabInSector)
     );
+
+    if (exportOrionFilter === "associados") {
+      list = list.filter(c => c.isOrionAssociated);
+    } else if (exportOrionFilter === "pendentes") {
+      list = list.filter(c => !c.isOrionAssociated);
+    }
 
     if (!exportSearchQuery.trim()) return list;
     const q = exportSearchQuery.toLowerCase().trim();
@@ -1025,7 +1104,7 @@ export default function DragAndDropReserves({
       const matchRoom = (c.assignedRoom || "").toLowerCase().includes(q);
       return matchName || matchCpf || matchPhone || matchRole || matchRoom;
     });
-  }, [approvedCollaborators, selectedExportTemplate, customExportConfig, rooms, exportSearchQuery]);
+  }, [approvedCollaborators, selectedExportTemplate, customExportConfig, rooms, exportSearchQuery, exportOrionFilter]);
 
   // Sort list logically by function and alphabetical order (or user-selected sort criteria)
   const sortedTemplateCollaborators = useMemo(() => {
@@ -1146,6 +1225,7 @@ export default function DragAndDropReserves({
     if (activeTemplateColumns.includes("sala")) headers.push("Sala / Posto Alocado");
     if (activeTemplateColumns.includes("andar")) headers.push("Pavimento / Andar");
     if (activeTemplateColumns.includes("status")) headers.push("Status / Observação");
+    if (activeTemplateColumns.includes("orion")) headers.push("Orion Cebraspe");
 
     const rows = sortedTemplateCollaborators.map((c, idx) => {
       const row: string[] = [(idx + 1).toString()];
@@ -1163,6 +1243,9 @@ export default function DragAndDropReserves({
       }
       if (activeTemplateColumns.includes("status")) {
         row.push(`"${c.substitutionTag || c.status || "Efetivo"}"`);
+      }
+      if (activeTemplateColumns.includes("orion")) {
+        row.push(`"${c.isOrionAssociated ? "Associado" : "Pendente"}"`);
       }
       return row.join(";");
     });
@@ -1870,16 +1953,7 @@ export default function DragAndDropReserves({
                           size="sm"
                           onClick={(e) => {
                             e?.stopPropagation();
-                            setLightboxData({
-                              imageUrl: collab.photoUrl || '',
-                              name: collab.name,
-                              role: collab.assignedRole || (collab.isReserve ? 'Reserva Geral' : 'Disponível'),
-                              cpf: collab.cpf,
-                              claName: collab.originalClaName || collab.claName,
-                              specialRole: collab.specialRole,
-                              hasWorkedEnem: collab.hasWorkedEnem,
-                              pastEditions: collab.pastEditions
-                            });
+                            openCollabLightbox(collab, collab.assignedRole || (collab.isReserve ? 'Reserva Geral' : 'Disponível'));
                           }}
                         />
                         <div className="truncate min-w-0 flex-1">
@@ -2138,16 +2212,7 @@ export default function DragAndDropReserves({
                                   size="xs"
                                   onClick={(e) => {
                                     e?.stopPropagation();
-                                    setLightboxData({
-                                      imageUrl: collab.photoUrl || '',
-                                      name: collab.name,
-                                      role: collab.assignedRole || 'Fiscal de Sala',
-                                      cpf: collab.cpf,
-                                      claName: collab.originalClaName || collab.claName,
-                                      specialRole: collab.specialRole,
-                                      hasWorkedEnem: collab.hasWorkedEnem,
-                                      pastEditions: collab.pastEditions
-                                    });
+                                    openCollabLightbox(collab, collab.assignedRole || 'Fiscal de Sala');
                                   }}
                                 />
                                 <div className="truncate min-w-0 flex-1">
@@ -2349,16 +2414,7 @@ export default function DragAndDropReserves({
                                   size="xs"
                                   onClick={(e) => {
                                     e?.stopPropagation();
-                                    setLightboxData({
-                                      imageUrl: collab.photoUrl || '',
-                                      name: collab.name,
-                                      role: collab.assignedRole || sector.defaultRole,
-                                      cpf: collab.cpf,
-                                      claName: collab.originalClaName || collab.claName,
-                                      specialRole: collab.specialRole,
-                                      hasWorkedEnem: collab.hasWorkedEnem,
-                                      pastEditions: collab.pastEditions
-                                    });
+                                    openCollabLightbox(collab, collab.assignedRole || sector.defaultRole);
                                   }}
                                 />
                                 <div className="min-w-0 flex-1">
@@ -2518,16 +2574,7 @@ export default function DragAndDropReserves({
                                   photoUrl={collab.photoUrl}
                                   name={collab.name}
                                   size="sm"
-                                  onClick={() => setLightboxData({
-                                    imageUrl: collab.photoUrl || '',
-                                    name: collab.name,
-                                    role: collab.assignedRole || 'Fiscal',
-                                    cpf: collab.cpf,
-                                    claName: collab.originalClaName || collab.claName,
-                                    specialRole: collab.specialRole,
-                                    hasWorkedEnem: collab.hasWorkedEnem,
-                                    pastEditions: collab.pastEditions
-                                  })}
+                                  onClick={() => openCollabLightbox(collab, collab.assignedRole || 'Fiscal')}
                                 />
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5">
@@ -2796,16 +2843,7 @@ export default function DragAndDropReserves({
                               photoUrl={collab.photoUrl}
                               name={collab.name}
                               size="md"
-                              onClick={() => setLightboxData({
-                                imageUrl: collab.photoUrl || '',
-                                name: collab.name,
-                                role: collab.assignedRole || 'Fiscal de Sala',
-                                cpf: collab.cpf,
-                                claName: collab.originalClaName || collab.claName,
-                                specialRole: collab.specialRole,
-                                hasWorkedEnem: collab.hasWorkedEnem,
-                                pastEditions: collab.pastEditions
-                              })}
+                              onClick={() => openCollabLightbox(collab, collab.assignedRole || 'Fiscal de Sala')}
                             />
                             <div className="min-w-0 flex-1">
                               <h5 className="font-black text-xs text-slate-900 dark:text-white truncate" title={collab.name}>
@@ -3021,16 +3059,7 @@ export default function DragAndDropReserves({
                                 photoUrl={collab.photoUrl}
                                 name={collab.name}
                                 size="sm"
-                                onClick={() => setLightboxData({
-                                  imageUrl: collab.photoUrl || '',
-                                  name: collab.name,
-                                  role: collab.assignedRole || managingSector.defaultRole,
-                                  cpf: collab.cpf,
-                                  claName: collab.originalClaName || collab.claName,
-                                  specialRole: collab.specialRole,
-                                  hasWorkedEnem: collab.hasWorkedEnem,
-                                  pastEditions: collab.pastEditions
-                                })}
+                                onClick={() => openCollabLightbox(collab, collab.assignedRole || managingSector.defaultRole)}
                               />
                               <div className="min-w-0">
                                 <span className="font-black text-xs text-slate-900 dark:text-white truncate block">
@@ -3228,16 +3257,7 @@ export default function DragAndDropReserves({
                               photoUrl={collab.photoUrl}
                               name={collab.name}
                               size="md"
-                              onClick={() => setLightboxData({
-                                imageUrl: collab.photoUrl || '',
-                                name: collab.name,
-                                role: collab.assignedRole || managingSector.defaultRole,
-                                cpf: collab.cpf,
-                                claName: collab.originalClaName || collab.claName,
-                                specialRole: collab.specialRole,
-                                hasWorkedEnem: collab.hasWorkedEnem,
-                                pastEditions: collab.pastEditions
-                              })}
+                              onClick={() => openCollabLightbox(collab, collab.assignedRole || managingSector.defaultRole)}
                             />
                             <div className="min-w-0 flex-1">
                               <h5 className="font-black text-xs text-slate-900 dark:text-white truncate" title={collab.name}>
@@ -3827,6 +3847,8 @@ export default function DragAndDropReserves({
                               {tmpl.id === "porteiro" && "🚪"}
                               {tmpl.id === "ensalamento" && "📚"}
                               {tmpl.id === "predio" && "🏛️"}
+                              {tmpl.id === "orion_associados" && "⭐"}
+                              {tmpl.id === "orion_pendentes" && "⏳"}
                               {tmpl.id === "personalizado" && "⚙️"}
                             </span>
                             <div className="min-w-0">
@@ -3927,6 +3949,7 @@ export default function DragAndDropReserves({
                           { key: "sala", label: "Sala Alocada" },
                           { key: "andar", label: "Pavimento/Andar" },
                           { key: "status", label: "Status/Histórico" },
+                          { key: "orion", label: "Orion (Cebraspe)" },
                           { key: "assinatura", label: "Campo Assinatura" }
                         ].map((col) => {
                           const isChecked = customExportConfig.selectedColumns.includes(col.key as any);
@@ -4045,6 +4068,48 @@ export default function DragAndDropReserves({
                       </button>
                     </div>
 
+                    {/* Orion Filter toggle */}
+                    <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-lg border border-slate-250 dark:border-slate-700 text-xs shadow-xs">
+                      <span className="text-[10px] uppercase font-extrabold text-slate-400 dark:text-slate-500 px-1.5 flex items-center gap-1">
+                        <Award className="w-3 h-3 text-purple-500" /> Orion:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setExportOrionFilter("todos")}
+                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition ${
+                          exportOrionFilter === "todos"
+                            ? "bg-purple-600 text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        Todos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExportOrionFilter("associados")}
+                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+                          exportOrionFilter === "associados"
+                            ? "bg-purple-600 text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                        title="Apenas colaboradores associados ao sistema Orion"
+                      >
+                        ⭐ Associados
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExportOrionFilter("pendentes")}
+                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+                          exportOrionFilter === "pendentes"
+                            ? "bg-rose-600 text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                        title="Apenas colaboradores pendentes de associação ao Orion"
+                      >
+                        ⏳ Pendentes
+                      </button>
+                    </div>
+
                     {/* Search Bar */}
                     <div className="relative flex-1 sm:w-60">
                       <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -4081,6 +4146,7 @@ export default function DragAndDropReserves({
                         {activeTemplateColumns.includes("sala") && <th className="py-2.5 px-3 w-36">Sala Alocada</th>}
                         {activeTemplateColumns.includes("andar") && <th className="py-2.5 px-3 w-28">Pavimento</th>}
                         {activeTemplateColumns.includes("status") && <th className="py-2.5 px-3 w-28">Histórico</th>}
+                        {activeTemplateColumns.includes("orion") && <th className="py-2.5 px-3 w-32 text-center">Orion Cebraspe</th>}
                         {activeTemplateColumns.includes("assinatura") && <th className="py-2.5 px-3 w-40">Assinatura</th>}
                       </tr>
                     </thead>
@@ -4146,6 +4212,17 @@ export default function DragAndDropReserves({
                                   {fiscal.substitutionTag || fiscal.status || "Efetivo"}
                                 </td>
                               )}
+                              {activeTemplateColumns.includes("orion") && (
+                                <td className="py-2 px-3 text-center">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                                    fiscal.isOrionAssociated
+                                      ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-800"
+                                      : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                                  }`}>
+                                    {fiscal.isOrionAssociated ? "⭐ Associado" : "⏳ Pendente"}
+                                  </span>
+                                </td>
+                              )}
                               {activeTemplateColumns.includes("assinatura") && (
                                 <td className="py-2 px-3">
                                   <div className="h-4 border-b border-slate-300 dark:border-slate-700"></div>
@@ -4202,7 +4279,29 @@ export default function DragAndDropReserves({
       {/* IMAGE LIGHTBOX MODAL */}
       <ImageLightboxModal
         data={lightboxData}
+        collaborator={collaborators.find(c => c.id === lightboxData?.id) || allCollaborators?.find(c => c.id === lightboxData?.id) || null}
+        allCollaborators={allCollaborators}
+        allBuildings={allBuildings}
+        currentUserName={currentUserName}
+        claName={claName || building?.name}
         onClose={() => setLightboxData(null)}
+        onUpdateCollaborator={onUpdateCollaborator}
+        onApproveCollaborator={async (id) => {
+          if (onUpdateCollaborator) {
+            await onUpdateCollaborator(id, {
+              status: "Confirmado",
+              attendanceStatus: "Confirmado"
+            });
+            setLightboxData(prev => prev && prev.id === id ? { ...prev, status: "Confirmado", attendanceStatus: "Confirmado" } : null);
+          }
+        }}
+        onSaveEvaluation={async (id, evalData) => {
+          if (onUpdateCollaborator) {
+            await onUpdateCollaborator(id, { claEvaluation: evalData || undefined });
+          }
+        }}
+        availableRooms={rooms || []}
+        availableRoles={ENEM_ROLES.map(r => r.name)}
       />
     </div>
   );
@@ -4244,7 +4343,7 @@ function generateTemplatePrintableHtml(
   rooms: RoomDetails[],
   collaborators: CollaboratorInfo[],
   templateMeta: TemplateMeta,
-  columns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "assinatura")[],
+  columns: ("nome" | "cpf" | "telefone" | "funcao" | "sala" | "andar" | "status" | "orion" | "assinatura")[],
   customCfg: CustomExportConfig,
   exportSortBy: ExportSortType = "function_alphabetical"
 ): string {
@@ -4268,6 +4367,7 @@ function generateTemplatePrintableHtml(
   if (columns.includes("sala")) headerCols.push({ key: "sala", label: "Sala / Posto Alocado", width: "130px" });
   if (columns.includes("andar")) headerCols.push({ key: "andar", label: "Pavimento / Andar", width: "110px" });
   if (columns.includes("status")) headerCols.push({ key: "status", label: "Status / Obs", width: "110px" });
+  if (columns.includes("orion")) headerCols.push({ key: "orion", label: "Orion (Cebraspe)", width: "115px", align: "center" });
   if (columns.includes("assinatura")) headerCols.push({ key: "assinatura", label: "Assinatura do Fiscal", width: "150px" });
 
   return `<!DOCTYPE html>
@@ -4358,6 +4458,7 @@ function generateTemplatePrintableHtml(
           ${columns.includes("sala") ? `<td style="font-weight: 700; color: ${c.assignedRoom ? '#047857' : '#94a3b8'};">${roomStr}</td>` : ''}
           ${columns.includes("andar") ? `<td style="font-size: 9px; color: #475569;">${floorStr}</td>` : ''}
           ${columns.includes("status") ? `<td style="font-size: 9px; color: #64748b;">${c.substitutionTag || c.status || "Efetivo"}</td>` : ''}
+          ${columns.includes("orion") ? `<td style="text-align: center;"><span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 8.5px; font-weight: 800; ${c.isOrionAssociated ? 'background: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe;' : 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a;'}">${c.isOrionAssociated ? '⭐ Associado' : '⏳ Pendente'}</span></td>` : ''}
           ${columns.includes("assinatura") ? `<td><div class="sig-line"></div></td>` : ''}
         </tr>
         `;

@@ -1218,7 +1218,7 @@ export default function App() {
               CalanguS
             </h2>
             <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-              v2.8
+              v3.0
             </span>
           </div>
           <span className="text-[10px] uppercase font-extrabold text-slate-450 tracking-widest font-mono">
@@ -1344,7 +1344,7 @@ export default function App() {
                 <div className="flex items-center justify-center gap-2">
                   <h1 className="font-display font-black text-3xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</h1>
                   <span className="text-[11px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                    v2.8
+                    v3.0
                   </span>
                 </div>
                 <span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block mt-0.5">TACTILE TEAM DISPATCHER</span>
@@ -1666,7 +1666,7 @@ export default function App() {
 
             {/* Privacy Policy direct link in Login Card */}
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-              <span className="font-medium">CalanguS v2.8 • © 2026</span>
+              <span className="font-medium">CalanguS v3.0 • © 2026</span>
               <button
                 type="button"
                 onClick={handleOpenPrivacy}
@@ -1725,7 +1725,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</span>
                     <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                      v2.8
+                      v3.0
                     </span>
                   </div>
                   <span className="text-[8px] sm:text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block">TACTILE TEAM DISPATCHER</span>
@@ -2223,6 +2223,9 @@ export default function App() {
                           ]} 
                           building={building}
                           claName={resolvedClaName}
+                          allCollaborators={allCollaborators}
+                          allBuildings={allBuildings}
+                          currentUserName={currentUser?.name}
                           onMove={handleDragAllocationMove} 
                           onUpdateCollaborator={updateCollaborator}
                           onSubstitute={handleSubstituteCollaborator}
@@ -2566,7 +2569,7 @@ export default function App() {
       {currentUser && (
         <footer className="no-print max-w-7xl mx-auto px-4 py-6 border-t border-slate-200/80 dark:border-slate-800/80 mt-12 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400 dark:text-slate-500">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-600 dark:text-slate-400">CalanguS v2.8</span>
+            <span className="font-bold text-slate-600 dark:text-slate-400">CalanguS v3.0</span>
             <span>•</span>
             <span>Coordenação & Aplicação de Exames</span>
           </div>

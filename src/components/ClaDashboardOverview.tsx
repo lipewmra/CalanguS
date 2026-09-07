@@ -87,17 +87,26 @@ export default function ClaDashboardOverview({
     return collaborators.filter(c => c.status !== "Recusado" && c.status !== "Cancelado" && c.status !== "Impedido");
   }, [collaborators]);
 
-  // Collaborators with assigned official roles (excluding pure unassigned reserves)
+  // Actually allocated collaborators: strictly those who have confirmed status, assigned role, assigned room, and are NOT marked as reserve
+  // (desconsidera reservas ou pessoas com função mas sem sala alocada)
+  const actuallyAllocatedCollabs = useMemo(() => {
+    return activeCollabs.filter(c => 
+      c.status === "Confirmado" &&
+      !c.isReserve && 
+      Boolean(c.assignedRoom && c.assignedRoom.trim() !== "") &&
+      Boolean(c.assignedRole && c.assignedRole.trim() !== "")
+    );
+  }, [activeCollabs]);
+
+  // Collaborators with assigned official roles (regardless of room allocation)
   const associatedCollaborators = useMemo(() => {
     return activeCollabs.filter(c => c.assignedRole && c.assignedRole.trim() !== "");
   }, [activeCollabs]);
 
-  // Allocated into a specific room
-  const allocatedInRooms = useMemo(() => {
-    return activeCollabs.filter(c => c.assignedRoom && c.assignedRoom.trim() !== "" && !c.isReserve);
-  }, [activeCollabs]);
+  // Allocated into a specific room (synonymous with actuallyAllocatedCollabs)
+  const allocatedInRooms = actuallyAllocatedCollabs;
 
-  // Reserves available: includes both isReserve and those with defined role but no room allocation
+  // Reserves available: includes both marked as isReserve and those with or without role but no room allocation
   const availableReserves = useMemo(() => {
     return activeCollabs.filter(c => c.isReserve || !c.assignedRoom || c.assignedRoom.trim() === "");
   }, [activeCollabs]);
@@ -133,14 +142,14 @@ export default function ClaDashboardOverview({
     return duplicateGroups.reduce((acc, g) => acc + g.collaborators.length, 0);
   }, [duplicateGroups]);
 
-  // 5. Allocation Percentage Calculation
+  // 5. Allocation Percentage Calculation: strictly based on actually allocated persons vs total required slots
   const allocationPercentage = useMemo(() => {
     if (totalTargetSlots <= 0) return 0;
-    const pct = Math.min(100, Math.round((associatedCollaborators.length / totalTargetSlots) * 100));
+    const pct = Math.min(100, Math.round((actuallyAllocatedCollabs.length / totalTargetSlots) * 100));
     return isNaN(pct) ? 0 : pct;
-  }, [associatedCollaborators.length, totalTargetSlots]);
+  }, [actuallyAllocatedCollabs.length, totalTargetSlots]);
 
-  // 6. Role-by-Role Allocation breakdown and Incomplete Roles
+  // 6. Role-by-Role Allocation breakdown and Incomplete Roles (strictly counting people allocated in rooms)
   const roleBreakdown = useMemo(() => {
     const rolesList = building?.customRoles && building.customRoles.length > 0 
       ? building.customRoles.map(r => r.name)
@@ -151,10 +160,11 @@ export default function ClaDashboardOverview({
 
     return allUniqueRoles.map(roleName => {
       const target = Number(targetQuantities[roleName]) || 0;
-      const filled = activeCollabs.filter(c => c.assignedRole === roleName).length;
+      // Filled strictly means allocated in room with this role and not reserve
+      const filled = actuallyAllocatedCollabs.filter(c => c.assignedRole === roleName).length;
       const deficit = Math.max(0, target - filled);
       const surplus = Math.max(0, filled - target);
-      const percent = target > 0 ? Math.min(100, Math.round((filled / target) * 100)) : (filled > 0 ? 100 : 0);
+      const percent = target > 0 ? Math.min(100, Math.round((filled / target) * 100)) : 0;
       const payment = getRolePayment(roleName);
 
       return {
@@ -168,7 +178,7 @@ export default function ClaDashboardOverview({
         isComplete: target > 0 ? filled >= target : true
       };
     }).filter(item => item.target > 0 || item.filled > 0);
-  }, [building, targetQuantities, activeCollabs]);
+  }, [building, targetQuantities, actuallyAllocatedCollabs]);
 
   // Incomplete roles with deficit > 0
   const incompleteRoles = useMemo(() => {
@@ -434,10 +444,10 @@ export default function ClaDashboardOverview({
                     {allocationPercentage}%
                   </span>
                   <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider mt-0.5">
-                    Meta do Prédio
+                    Alocados em Sala
                   </span>
                   <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
-                    {associatedCollaborators.length} de {totalTargetSlots} vagas
+                    {actuallyAllocatedCollabs.length} de {totalTargetSlots} alocados
                   </span>
                 </div>
               </div>
@@ -446,14 +456,17 @@ export default function ClaDashboardOverview({
               <div className="mt-3 text-center px-4">
                 {totalDeficitCount > 0 ? (
                   <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                    Faltam <span className="font-black underline">{totalDeficitCount} colaboradores</span> para atingir 100% das vagas oficiais.
+                    Faltam <span className="font-black underline">{totalDeficitCount} colaboradores</span> para alocar em postos e salas.
                   </p>
                 ) : (
                   <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Todas as {totalTargetSlots} vagas oficiais foram preenchidas!</span>
+                    <span>Todas as {totalTargetSlots} vagas oficiais foram preenchidas e alocadas!</span>
                   </p>
                 )}
+                <p className="text-[10px] text-slate-400 dark:text-slate-450 mt-1 font-medium">
+                  Cálculo preciso: desconsidera reservas e colaboradores sem sala designada.
+                </p>
               </div>
             </div>
           </div>
@@ -461,13 +474,13 @@ export default function ClaDashboardOverview({
           {/* Bottom Breakdown stats */}
           <div className="grid grid-cols-3 gap-2 pt-4 border-t border-slate-100 dark:border-slate-850 text-center">
             <div className="p-2.5 bg-slate-50 dark:bg-[#070b13] rounded-xl border border-slate-200/60 dark:border-slate-800">
-              <span className="block text-[9px] font-extrabold uppercase text-slate-400">Associados</span>
-              <span className="text-base font-black text-slate-850 dark:text-white font-mono">
-                {associatedCollaborators.length}
+              <span className="block text-[9px] font-extrabold uppercase text-slate-400">Alocados (Sala)</span>
+              <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                {actuallyAllocatedCollabs.length}
               </span>
             </div>
             <div className="p-2.5 bg-slate-50 dark:bg-[#070b13] rounded-xl border border-slate-200/60 dark:border-slate-800">
-              <span className="block text-[9px] font-extrabold uppercase text-slate-400">Reservas</span>
+              <span className="block text-[9px] font-extrabold uppercase text-slate-400">Reservas / S/ Sala</span>
               <span className="text-base font-black text-indigo-500 font-mono">
                 {availableReserves.length}
               </span>

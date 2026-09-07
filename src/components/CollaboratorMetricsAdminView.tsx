@@ -174,7 +174,9 @@ export default function CollaboratorMetricsAdminView({
       { 
         role: "Técnico de Informática", 
         count: calculated["Técnico de Informática"] || calculated["Tecnico Informática"] || 0, 
-        desc: `Videoprova, Leitor de tela e suporte predial`,
+        desc: (calculated["Tradutor-Intérprete de Libras"] || 0) > 0 
+          ? `Videoprova e suporte técnico para Libras (${calculated["Técnico de Informática"] || 1} técnico)` 
+          : `Só existe em locais com Técnico em Libras / Videoprova (0 neste local)`,
         payment: "R$ 240,00",
         rawVal: 240.00
       },

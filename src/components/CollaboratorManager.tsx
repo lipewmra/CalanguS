@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from "react";
-import { CollaboratorInfo, PastEdition, BuildingInfo, UserProfile, EventConfigInfo } from "../types";
+import { CollaboratorInfo, PastEdition, BuildingInfo, UserProfile, EventConfigInfo, ClaEvaluation } from "../types";
 import { downloadCsvTemplate } from "./CsvTemplate";
 import { auditCollaborator } from "../lib/data-validator";
 import CollaboratorFailureModal from "./CollaboratorFailureModal";
@@ -13,12 +13,15 @@ import CollaboratorAuditLogModal from "./CollaboratorAuditLogModal";
 import BuildingAuditTrailView from "./BuildingAuditTrailView";
 import AssociationView, { getRolePayment } from "./AssociationView";
 import { appendCollaboratorLog } from "../lib/collaborator-logger";
+import { checkMultipleRegistrations } from "../lib/collaborator-utils";
+import ClaEvaluationModal from "./ClaEvaluationModal";
 import { 
   Users, UserPlus, Upload, ShieldAlert, BadgeInfo, Trash, Mail, 
   MapPin, Check, X, FileText, Download, HelpCircle, AlertTriangle, Pencil,
   Building2, Globe, Clock, ArrowRightLeft, Sparkles, Search, Filter,
   Calendar, ArrowUpDown, FileSpreadsheet, RotateCcw, Send, MessageSquare, BookOpen,
-  History, UserCheck, CheckCircle2, RefreshCw, Eye, Ban
+  History, UserCheck, CheckCircle2, RefreshCw, Eye, Ban,
+  Star, Award, AlertOctagon, ThumbsUp, ThumbsDown
 } from "lucide-react";
 
 export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "colaboradores_enem_calangus") {
@@ -41,6 +44,7 @@ export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "c
     "Pessoa de Referência",
     "Histórico Edições ENEM",
     "Status Auditoria Orion",
+    "Associado ao Orion (Cebraspe)",
     "Data de Submissão",
     "CLA Origem / Mantenedor"
   ];
@@ -77,6 +81,7 @@ export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "c
       escapeCSV(c.referencePerson || ""),
       escapeCSV(pastExp),
       escapeCSV(c.orionStatus || "Ok"),
+      escapeCSV(c.isOrionAssociated ? "Sim" : "Não"),
       escapeCSV(formattedDate),
       escapeCSV(c.originalClaName || c.claName || "")
     ].join(";");
@@ -219,6 +224,9 @@ export default function CollaboratorManager({
   // Diagnostic / Failure modal state
   const [diagnoseCollab, setDiagnoseCollab] = useState<CollaboratorInfo | null>(null);
 
+  // CLA Performance & Conduct Evaluation Modal state
+  const [evaluatingCollab, setEvaluatingCollab] = useState<CollaboratorInfo | null>(null);
+
   // Identify duplicate groups in current CLA collaborators
   const duplicateGroups = useMemo(() => {
     return findDuplicateCollaborators(collaborators);
@@ -250,6 +258,7 @@ export default function CollaboratorManager({
   const [specialRole, setSpecialRole] = useState<any>("Nenhuma");
   const [languages, setLanguages] = useState<string>("");
   const [isReserve, setIsReserve] = useState(false);
+  const [isOrionAssociated, setIsOrionAssociated] = useState(false);
   
   // Past Editions checklist helper (ENEM 1998 to 2025)
   const [pastEditionsSelected, setPastEditionsSelected] = useState<Record<number, boolean>>({});
@@ -322,6 +331,7 @@ export default function CollaboratorManager({
     setSpecialRole(collab.specialRole || "Nenhuma");
     setLanguages(collab.languages ? collab.languages.join("; ") : "");
     setIsReserve(collab.isReserve ?? false);
+    setIsOrionAssociated(collab.isOrionAssociated ?? false);
     
     // Fill past editions
     const selected: Record<number, boolean> = {};
@@ -394,6 +404,7 @@ export default function CollaboratorManager({
       specialRole,
       languages: languages.split(";").map(l => l.trim()).filter(Boolean),
       isReserve,
+      isOrionAssociated,
       orionStatus: hasAuditError ? "Erro" : "Ok",
       orionErrors: errorsList,
       orionSynced: !hasAuditError,
@@ -417,6 +428,7 @@ export default function CollaboratorManager({
       setHasWorkedEnem(false);
       setLanguages("");
       setIsReserve(false);
+      setIsOrionAssociated(false);
       setSpecialRole("Nenhuma");
       setPastEditionsSelected({});
       setPastEditionsRoles({});
@@ -464,6 +476,7 @@ export default function CollaboratorManager({
       specialRole,
       languages: languages.split(";").map(l => l.trim()).filter(Boolean),
       isReserve: true, // CLA registering a fiscal directly -> automatically reserve
+      isOrionAssociated,
       status: "Confirmado", // CLA registering a fiscal directly -> automatically approved
       originalClaId: claId,
       originalClaName: currentUserName || buildingName || "CLA Cadastrador",
@@ -506,6 +519,7 @@ export default function CollaboratorManager({
       setHasWorkedEnem(false);
       setLanguages("");
       setIsReserve(false);
+      setIsOrionAssociated(false);
       setSpecialRole("Nenhuma");
       setPastEditionsSelected({});
       setPastEditionsRoles({});
@@ -863,6 +877,10 @@ export default function CollaboratorManager({
       result = result.filter(c => c.status === "Impedido" || (c.refusalTag && c.refusalTag.toLowerCase().includes("impedido")));
     } else if (filterType === "com_erro") {
       result = result.filter(c => c.orionStatus === "Erro");
+    } else if (filterType === "orion_associados") {
+      result = result.filter(c => c.isOrionAssociated);
+    } else if (filterType === "orion_pendentes") {
+      result = result.filter(c => !c.isOrionAssociated);
     }
 
     // 2. Text Search Query - Realtime multi-field search across any available field
@@ -1130,7 +1148,10 @@ export default function CollaboratorManager({
         duplicateGroups.length,
         handleAcceptAllPending,
         collaborators.filter(c => c.status === "Pendente").length,
-        (c) => setSelectedAuditCollab(c)
+        (c) => setSelectedAuditCollab(c),
+        (c) => setEvaluatingCollab(c),
+        allBuildings,
+        allCollaborators
       )}
 
       {/* SUBTAB: ROLES & FUNCTION ASSOCIATION (MENU 3 INTEGRATED) */}
@@ -1181,6 +1202,7 @@ export default function CollaboratorManager({
         activeSubTab, name, setName, photoUrl, setPhotoUrl, birthDate, setBirthDate, cpf, setCpf, whatsapp, setWhatsapp, email, setEmail,
         education, setEducation, disability, setDisability, hasWorkedEnem, setHasWorkedEnem, pixKey, setPixKey,
         referencePerson, setReferencePerson, specialRole, setSpecialRole, languages, setLanguages, isReserve, setIsReserve,
+        isOrionAssociated, setIsOrionAssociated,
         showPastYears, setShowPastYears, availableYears, pastEditionsSelected, setPastEditionsSelected, pastEditionsRoles, setPastEditionsRoles,
         handleCreateCollaboratorSubmit, handleCpfChange, handlePhoneChange, handleBirthDateChange
       )}
@@ -1312,6 +1334,46 @@ export default function CollaboratorManager({
                 onChange={(e) => setDisability(e.target.value)}
                 className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
               />
+            </div>
+
+            {/* INDICADOR EM DESTAQUE: ASSOCIAÇÃO AO SISTEMA ORION (CEBRASPE) */}
+            <div className="col-span-full p-4 rounded-2xl border-2 border-purple-500/50 bg-gradient-to-r from-purple-550/10 to-indigo-500/10 dark:from-purple-950/40 dark:to-indigo-950/40 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-purple-600 text-white flex items-center justify-center text-xl font-black shrink-0 shadow-md">
+                    ⭐
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-black uppercase tracking-wider text-purple-800 dark:text-purple-300">
+                        Indicador de Associação ao Sistema Orion (Cebraspe)
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-xs ${
+                        isOrionAssociated
+                          ? "bg-purple-600 text-white"
+                          : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                      }`}>
+                        {isOrionAssociated ? "✓ Associado ao Orion" : "⏳ Pendente / Não Associado"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">
+                      Marque esta caixa para certificar que o colaborador já foi registrado e vinculado formalmente no sistema oficial Orion Cebraspe.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border-2 border-purple-500/60 cursor-pointer shadow-sm hover:border-purple-600 transition shrink-0 select-none">
+                  <input
+                    type="checkbox"
+                    checked={isOrionAssociated}
+                    onChange={(e) => setIsOrionAssociated(e.target.checked)}
+                    className="w-5 h-5 rounded text-purple-600 focus:ring-purple-500 cursor-pointer accent-purple-600"
+                  />
+                  <span className="text-xs font-black text-slate-900 dark:text-white">
+                    Colaborador Associado ao Orion
+                  </span>
+                </label>
+              </div>
             </div>
 
 
@@ -1452,8 +1514,42 @@ export default function CollaboratorManager({
       {/* Expanded Photo Lightbox Modal */}
       <ImageLightboxModal
         data={lightboxData}
+        collaborator={collaborators.find(c => c.id === lightboxData?.id) || allCollaborators.find(c => c.id === lightboxData?.id) || null}
+        allCollaborators={allCollaborators}
+        allBuildings={allBuildings}
+        currentUserName={currentUserName}
+        claName={buildingName}
         onClose={() => setLightboxData(null)}
+        onUpdateCollaborator={onUpdate}
+        onApproveCollaborator={async (id) => {
+          await onUpdate(id, { 
+            status: "Confirmado", 
+            attendanceStatus: "Confirmado" 
+          });
+          setLightboxData(prev => prev && prev.id === id ? { ...prev, status: "Confirmado", attendanceStatus: "Confirmado" } : null);
+        }}
+        onSaveEvaluation={async (id, evalData) => {
+          await onUpdate(id, { claEvaluation: evalData || undefined });
+        }}
+        availableRooms={building?.rooms || []}
+        availableRoles={ENEM_ROLES.map(r => r.name)}
       />
+
+      {/* CLA Performance Evaluation Modal triggered from list */}
+      {evaluatingCollab && (
+        <ClaEvaluationModal
+          collaborator={evaluatingCollab}
+          currentUserName={currentUserName}
+          claName={buildingName}
+          onSaveEvaluation={async (id, evalData) => {
+            await onUpdate(id, { claEvaluation: evalData || undefined });
+            setEvaluatingCollab(null);
+            setLocalSuccessMsg("Avaliação de desempenho salva com sucesso!");
+            setTimeout(() => setLocalSuccessMsg(null), 3000);
+          }}
+          onClose={() => setEvaluatingCollab(null)}
+        />
+      )}
 
       {/* Duplicate Collaborators Finder & Merge Modal */}
       <DuplicateCollaboratorsModal
@@ -1809,7 +1905,10 @@ function activeTabSubList(
   duplicateGroupsCount: number = 0,
   onAcceptAllPending?: () => void,
   pendingCount: number = 0,
-  onOpenAuditLog?: (c: CollaboratorInfo) => void
+  onOpenAuditLog?: (c: CollaboratorInfo) => void,
+  onEvaluateCollab?: (c: CollaboratorInfo) => void,
+  allBuildings: BuildingInfo[] = [],
+  allCollaboratorsGlobal: CollaboratorInfo[] = []
 ) {
   if (activeSubTab !== "list") return null;
 
@@ -1820,6 +1919,7 @@ function activeTabSubList(
   const openCollabDetails = (c: CollaboratorInfo) => {
     const originName = c.originalClaName || c.claName || buildingName || "CLA";
     onOpenPhotoLightbox?.({
+      id: c.id,
       imageUrl: c.photoUrl || "",
       name: c.name,
       role: c.assignedRole || (c.isReserve ? "Fiscal Reserva" : "Fiscal de Sala"),
@@ -1838,6 +1938,8 @@ function activeTabSubList(
       pixKey: c.pixKey,
       referencePerson: c.referencePerson,
       assignedRoom: c.assignedRoom,
+      isReserve: c.isReserve,
+      isOrionAssociated: c.isOrionAssociated,
       status: c.status,
       attendanceStatus: c.attendanceStatus,
       refusedRole: c.refusedRole,
@@ -2052,19 +2154,51 @@ function activeTabSubList(
               </button>
             )}
 
-            {/* Export CSV Button */}
-            <button
-              type="button"
-              onClick={() => exportCollaboratorsToCSV(filteredCollaborators, `fiscais_${buildingName.replace(/\s+/g, "_").toLowerCase()}`)}
-              className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer shadow-md hover:shadow-emerald-500/20 active:scale-95 shrink-0"
-              title="Exportar dados filtrados para planilha Excel/CSV"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Exportar CSV</span>
-              <span className="px-1.5 py-0.5 rounded-md bg-emerald-800/60 text-[10px] font-mono font-bold">
-                {filteredCollaborators.length}
-              </span>
-            </button>
+            {/* Export CSV Buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => exportCollaboratorsToCSV(filteredCollaborators, `fiscais_${buildingName.replace(/\s+/g, "_").toLowerCase()}`)}
+                className="flex-1 sm:flex-none px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md hover:shadow-emerald-500/20 active:scale-95 shrink-0"
+                title="Exportar dados filtrados da lista atual para planilha Excel/CSV"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Exportar CSV</span>
+                <span className="px-1.5 py-0.5 rounded-md bg-emerald-800/60 text-[10px] font-mono font-bold">
+                  {filteredCollaborators.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const orionYes = allCollaborators.filter(c => c.isOrionAssociated);
+                  exportCollaboratorsToCSV(orionYes, `fiscais_associados_orion_${buildingName.replace(/\s+/g, "_").toLowerCase()}`);
+                }}
+                className="px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md active:scale-95 shrink-0"
+                title="Exportar planilha apenas com colaboradores já associados ao Orion"
+              >
+                <span>⭐ Orion: Sim</span>
+                <span className="px-1.5 py-0.5 rounded-md bg-purple-800/60 text-[10px] font-mono font-bold">
+                  {allCollaborators.filter(c => c.isOrionAssociated).length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const orionNo = allCollaborators.filter(c => !c.isOrionAssociated);
+                  exportCollaboratorsToCSV(orionNo, `fiscais_nao_associados_orion_${buildingName.replace(/\s+/g, "_").toLowerCase()}`);
+                }}
+                className="px-3 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md active:scale-95 shrink-0"
+                title="Exportar planilha com colaboradores que NÃO estão associados ao Orion"
+              >
+                <span>⚠ Orion: Não</span>
+                <span className="px-1.5 py-0.5 rounded-md bg-amber-800/60 text-[10px] font-mono font-bold">
+                  {allCollaborators.filter(c => !c.isOrionAssociated).length}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2138,6 +2272,8 @@ function activeTabSubList(
             { id: "com_funcao_sem_sala", label: "Reserva c/ Função (Sem Sala)", count: allCollaborators.filter(c => c.status === "Confirmado" && c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === "")).length },
             { id: "sem_funcao", label: "Sem Função Atribuída", count: allCollaborators.filter(c => c.status === "Confirmado" && (!c.assignedRole || c.assignedRole.trim() === "")).length },
             { id: "pendentes", label: "Pendentes", count: allCollaborators.filter(c => c.status === "Pendente").length },
+            { id: "orion_associados", label: "⭐ Orion: Associados", count: allCollaborators.filter(c => c.isOrionAssociated).length, badgeColor: "bg-purple-600 text-white" },
+            { id: "orion_pendentes", label: "⚠ Orion: Não Associados", count: allCollaborators.filter(c => !c.isOrionAssociated).length, badgeColor: "bg-amber-600 text-white" },
             { id: "recusados", label: "Recusados", count: refusedCollabs.length },
             { id: "impedidos", label: "⛔ Impedidos", count: allCollaborators.filter(c => c.status === "Impedido" || (c.refusalTag && c.refusalTag.toLowerCase().includes("impedido"))).length, badgeColor: "bg-rose-600 text-white" },
             { id: "com_erro", label: "⚠ Inconsistência", count: allCollaborators.filter(c => c.orionStatus === "Erro").length }
@@ -2235,6 +2371,69 @@ function activeTabSubList(
                             <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
                             <span>CLA: {originName}</span>
                           </span>
+
+                          {/* Multiple Registrations Warning Badge */}
+                          {(() => {
+                            const globalList = allCollaboratorsGlobal.length > 0 ? allCollaboratorsGlobal : allCollaborators;
+                            const multiReg = checkMultipleRegistrations(c.cpf, globalList, allBuildings);
+                            if (!multiReg.isMultiRegistered) return null;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => openCollabDetails(c)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-500/20 text-amber-800 dark:text-amber-200 border-2 border-amber-400 dark:border-amber-600 animate-pulse shadow-xs cursor-pointer hover:scale-105 transition"
+                                title={`Atenção: Colaborador com cadastro simultâneo em ${multiReg.count} locais de aplicação!\n${multiReg.locations.map(l => `• ${l.claName || l.buildingName} (${l.assignedRole || "Reserva"})`).join("\n")}`}
+                              >
+                                <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span>⚠️ Múltiplos Locais ({multiReg.count})</span>
+                              </button>
+                            );
+                          })()}
+
+                          {/* CLA Evaluation Badge (Positive Recommendation Seal / Negative Alert) */}
+                          {c.claEvaluation && (
+                            c.claEvaluation.rating === "positive" ? (
+                              <button
+                                type="button"
+                                onClick={() => onEvaluateCollab?.(c)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 border border-emerald-500/40 shadow-xs cursor-pointer hover:scale-105 transition"
+                                title={`Selo de Recomendação do CLA (${c.claEvaluation.score || 5}/5 estrelas)\n${c.claEvaluation.feedback ? `"${c.claEvaluation.feedback}"` : ""}\nAvaliado por: ${c.claEvaluation.evaluatedBy || "CLA"}`}
+                              >
+                                <Award className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <span>⭐ Recomendado ({c.claEvaluation.score || 5}★)</span>
+                              </button>
+                            ) : c.claEvaluation.rating === "negative" ? (
+                              <button
+                                type="button"
+                                onClick={() => onEvaluateCollab?.(c)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-500/20 text-rose-800 dark:text-rose-200 border-2 border-rose-500/40 shadow-xs cursor-pointer hover:scale-105 transition"
+                                title={`Alerta de Desempenho Negativo do CLA (${c.claEvaluation.score || 1}/5)\nOcorrências: ${c.claEvaluation.tags?.join(", ") || "Desempenho insatisfatório"}\n${c.claEvaluation.feedback ? `"${c.claEvaluation.feedback}"` : ""}\nAvaliado por: ${c.claEvaluation.evaluatedBy || "CLA"}`}
+                              >
+                                <AlertOctagon className="w-3 h-3 text-rose-600 dark:text-rose-400 shrink-0" />
+                                <span>⛔ Avaliação Negativa ({c.claEvaluation.score || 1}★)</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => onEvaluateCollab?.(c)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-500/15 text-amber-800 dark:text-amber-200 border border-amber-500/30 cursor-pointer hover:scale-105 transition"
+                                title="Desempenho Regular do CLA"
+                              >
+                                <span>⚖️ Regular ({c.claEvaluation.score || 3}★)</span>
+                              </button>
+                            )
+                          )}
+
+                          {/* Orion Association TAG */}
+                          {c.isOrionAssociated ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 shadow-xs" title="Colaborador associado ao sistema Orion (Cebraspe)">
+                              <span>⭐</span> Orion: Associado
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30" title="Colaborador ainda não associado ao Orion">
+                              <span>⚠</span> Orion: Não Associado
+                            </span>
+                          )}
 
                           {c.materialsAccessed && c.materialsAccessed.length > 0 && (
                             <span 
@@ -2415,10 +2614,30 @@ function activeTabSubList(
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => onEvaluateCollab?.(c)}
+                        title={c.claEvaluation ? `Avaliação do CLA: ${c.claEvaluation.rating === "positive" ? "⭐ Recomendado" : c.claEvaluation.rating === "negative" ? "⛔ Negativa" : "Regular"} (${c.claEvaluation.score || 5}/5). Clique para ver ou editar.` : "Avaliar Desempenho do Colaborador (CLA)"}
+                        className={`p-2 rounded-xl cursor-pointer border active:scale-95 transition-all ${
+                          c.claEvaluation?.rating === "positive"
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25"
+                            : c.claEvaluation?.rating === "negative"
+                            ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/25"
+                            : "hover:bg-amber-500/10 text-slate-400 hover:text-amber-500 border-transparent hover:border-amber-500/20"
+                        }`}
+                      >
+                        {c.claEvaluation?.rating === "positive" ? (
+                          <Award className="w-4 h-4" />
+                        ) : c.claEvaluation?.rating === "negative" ? (
+                          <AlertOctagon className="w-4 h-4" />
+                        ) : (
+                          <Star className="w-4 h-4" />
+                        )}
+                      </button>
                       {c.status === "Pendente" ? (
                         <button
-                          onClick={() => confirmStaff(c.id!)}
-                          title="Aprovar cadastro e integrar à reserva de fiscais"
+                          onClick={() => openCollabDetails(c)}
+                          title="Abrir ficha cadastral completa com associação para aprovação"
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] rounded-lg shadow-sm hover:scale-105 cursor-pointer active:scale-90 transition-all flex items-center gap-1"
                         >
                           <Check className="w-3.5 h-3.5 stroke-[3]" />
@@ -2426,8 +2645,8 @@ function activeTabSubList(
                         </button>
                       ) : (
                         <button
-                          onClick={() => confirmStaff(c.id!)}
-                          title="Confirmar / Revalidar Colaborador"
+                          onClick={() => openCollabDetails(c)}
+                          title="Ver ficha completa e dados de associação"
                           className="p-1 px-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:scale-105 rounded-lg text-emerald-500 font-extrabold cursor-pointer active:scale-90 transition-all text-sm"
                         >
                           ✓
@@ -2489,6 +2708,8 @@ function activeTabSubAddForm(
   setLanguages: any,
   isReserve: boolean,
   setIsReserve: any,
+  isOrionAssociated: boolean,
+  setIsOrionAssociated: any,
   showPastYears: boolean,
   setShowPastYears: any,
   availableYears: number[],
@@ -2653,6 +2874,45 @@ function activeTabSubAddForm(
           </select>
         </div>
 
+        {/* INDICADOR EM DESTAQUE: ASSOCIAÇÃO AO SISTEMA ORION (CEBRASPE) */}
+        <div className="col-span-full p-4 rounded-2xl border-2 border-purple-500/50 bg-gradient-to-r from-purple-550/10 to-indigo-500/10 dark:from-purple-950/40 dark:to-indigo-950/40 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-purple-600 text-white flex items-center justify-center text-xl font-black shrink-0 shadow-md">
+                ⭐
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black uppercase tracking-wider text-purple-800 dark:text-purple-300">
+                    Indicador de Associação ao Sistema Orion (Cebraspe)
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-xs ${
+                    isOrionAssociated
+                      ? "bg-purple-600 text-white"
+                      : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  }`}>
+                    {isOrionAssociated ? "✓ Associado ao Orion" : "⏳ Pendente / Não Associado"}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">
+                  Marque esta caixa para certificar que o colaborador já foi registrado e vinculado formalmente no sistema oficial Orion Cebraspe.
+                </p>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border-2 border-purple-500/60 cursor-pointer shadow-sm hover:border-purple-600 transition shrink-0 select-none">
+              <input
+                type="checkbox"
+                checked={isOrionAssociated}
+                onChange={(e) => setIsOrionAssociated(e.target.checked)}
+                className="w-5 h-5 rounded text-purple-600 focus:ring-purple-500 cursor-pointer accent-purple-600"
+              />
+              <span className="text-xs font-black text-slate-900 dark:text-white">
+                Colaborador Associado ao Orion
+              </span>
+            </label>
+          </div>
+        </div>
 
       </div>
 
