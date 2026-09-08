@@ -612,6 +612,8 @@ export default function AssociationView({
                             email: collab.email,
                             whatsapp: collab.whatsapp,
                             birthDate: collab.birthDate,
+                            birthYear: collab.birthYear,
+                            gender: collab.gender,
                             disability: collab.disability,
                             languages: collab.languages,
                             pixKey: collab.pixKey,

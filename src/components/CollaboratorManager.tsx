@@ -13,7 +13,7 @@ import CollaboratorAuditLogModal from "./CollaboratorAuditLogModal";
 import BuildingAuditTrailView from "./BuildingAuditTrailView";
 import AssociationView, { getRolePayment } from "./AssociationView";
 import { appendCollaboratorLog } from "../lib/collaborator-logger";
-import { checkMultipleRegistrations, canonicalizeRoleName } from "../lib/collaborator-utils";
+import { checkMultipleRegistrations, canonicalizeRoleName, extractBirthYear, formatBirthYearAndAge, canonicalizeGender } from "../lib/collaborator-utils";
 import ClaEvaluationModal from "./ClaEvaluationModal";
 import ManageImpedimentModal from "./ManageImpedimentModal";
 import { 
@@ -22,13 +22,15 @@ import {
   Building2, Globe, Clock, ArrowRightLeft, Sparkles, Search, Filter,
   Calendar, ArrowUpDown, FileSpreadsheet, RotateCcw, Send, MessageSquare, BookOpen,
   History, UserCheck, CheckCircle2, RefreshCw, Eye, Ban,
-  Star, Award, AlertOctagon, ThumbsUp, ThumbsDown
+  Star, Award, AlertOctagon, ThumbsUp, ThumbsDown, User
 } from "lucide-react";
 
 export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "colaboradores_enem_calangus") {
   const headers = [
     "Nome Completo",
     "CPF",
+    "Sexo",
+    "Ano de Nascimento",
     "Data de Nascimento",
     "E-mail",
     "WhatsApp",
@@ -66,6 +68,8 @@ export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "c
     return [
       escapeCSV(c.name),
       escapeCSV(c.cpf),
+      escapeCSV(c.gender || "Não informado"),
+      escapeCSV(extractBirthYear(c.birthDate, c.birthYear) || ""),
       escapeCSV(c.birthDate || ""),
       escapeCSV(c.email || ""),
       escapeCSV(c.whatsapp || ""),
@@ -241,6 +245,8 @@ export default function CollaboratorManager({
   const [lightboxData, setLightboxData] = useState<LightboxData | null>(null);
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [gender, setGender] = useState("");
   const [cpf, setCpf] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
@@ -299,6 +305,11 @@ export default function CollaboratorManager({
     }
   };
 
+  const handleBirthYearChange = (val: string) => {
+    const clean = val.replace(/\D/g, "").slice(0, 4);
+    setBirthYear(clean);
+  };
+
   const handleBirthDateChange = (val: string) => {
     let value = val.replace(/\D/g, "");
     if (value.length <= 8) {
@@ -306,6 +317,12 @@ export default function CollaboratorManager({
         .replace(/(\d{2})(\d)/, "$1/$2")
         .replace(/(\d{2})(\d)/, "$1/$2");
       setBirthDate(value);
+      if (value.length === 10) {
+        const parts = value.split("/");
+        if (parts[2] && parts[2].length === 4) {
+          setBirthYear(parts[2]);
+        }
+      }
     }
   };
 
@@ -314,6 +331,8 @@ export default function CollaboratorManager({
     setPhotoUrl(collab.photoUrl || "");
     setName(collab.name || "");
     setBirthDate(collab.birthDate || "");
+    setBirthYear(extractBirthYear(collab.birthDate, collab.birthYear));
+    setGender(collab.gender || "");
     setCpf(collab.cpf || "");
     setWhatsapp(collab.whatsapp || "");
     setEmail(collab.email || "");
@@ -385,6 +404,8 @@ export default function CollaboratorManager({
     const edits: Partial<CollaboratorInfo> = {
       name,
       birthDate,
+      birthYear: birthYear || extractBirthYear(birthDate),
+      gender: gender || "Não informado",
       cpf,
       whatsapp,
       email,
@@ -414,6 +435,8 @@ export default function CollaboratorManager({
       setPhotoUrl("");
       setName("");
       setBirthDate("");
+      setBirthYear("");
+      setGender("");
       setCpf("");
       setWhatsapp("");
       setEmail("");
@@ -457,6 +480,8 @@ export default function CollaboratorManager({
     const collab: Omit<CollaboratorInfo, "claId"> = {
       name,
       birthDate,
+      birthYear: birthYear || extractBirthYear(birthDate),
+      gender: gender || "Não informado",
       cpf,
       whatsapp,
       email,
@@ -505,6 +530,8 @@ export default function CollaboratorManager({
       setPhotoUrl("");
       setName("");
       setBirthDate("");
+      setBirthYear("");
+      setGender("");
       setCpf("");
       setWhatsapp("");
       setEmail("");
@@ -991,6 +1018,8 @@ export default function CollaboratorManager({
         const matchesAssignedRole = c.assignedRole ? c.assignedRole.toLowerCase().includes(q) : false;
         const matchesAssignedRoom = c.assignedRoom ? c.assignedRoom.toLowerCase().includes(q) : false;
         const matchesBirthDate = c.birthDate ? c.birthDate.toLowerCase().includes(q) : false;
+        const matchesBirthYear = c.birthYear ? String(c.birthYear).includes(q) : (c.birthDate ? c.birthDate.includes(q) : false);
+        const matchesGender = c.gender ? c.gender.toLowerCase().includes(q) : false;
         const matchesStatus = c.status ? c.status.toLowerCase().includes(q) : false;
         const matchesAttendance = c.attendanceStatus ? c.attendanceStatus.toLowerCase().includes(q) : false;
         const matchesCla = (c.claName && c.claName.toLowerCase().includes(q)) || (c.originalClaName && c.originalClaName.toLowerCase().includes(q));
@@ -1010,6 +1039,8 @@ export default function CollaboratorManager({
         if (searchField === "disability") return matchesDisability;
         if (searchField === "assignedRole") return matchesAssignedRole;
         if (searchField === "assignedRoom") return matchesAssignedRoom;
+        if ((searchField as string) === "gender") return matchesGender;
+        if ((searchField as string) === "birthYear") return matchesBirthYear;
 
         // "all" - matches ANY available field
         return (
@@ -1026,6 +1057,8 @@ export default function CollaboratorManager({
           matchesAssignedRole ||
           matchesAssignedRoom ||
           matchesBirthDate ||
+          matchesBirthYear ||
+          matchesGender ||
           matchesStatus ||
           matchesAttendance ||
           matchesCla ||
@@ -1285,7 +1318,10 @@ export default function CollaboratorManager({
 
       {/* SUBTAB 3: ADD FORM */}
       {activeTabSubAddForm(
-        activeSubTab, name, setName, photoUrl, setPhotoUrl, birthDate, setBirthDate, cpf, setCpf, whatsapp, setWhatsapp, email, setEmail,
+        activeSubTab, name, setName, photoUrl, setPhotoUrl, birthDate, setBirthDate,
+        birthYear, setBirthYear, handleBirthYearChange,
+        gender, setGender,
+        cpf, setCpf, whatsapp, setWhatsapp, email, setEmail,
         education, setEducation, disability, setDisability, hasWorkedEnem, setHasWorkedEnem, pixKey, setPixKey,
         referencePerson, setReferencePerson, specialRole, setSpecialRole, languages, setLanguages, isReserve, setIsReserve,
         isOrionAssociated, setIsOrionAssociated,
@@ -1318,6 +1354,33 @@ export default function CollaboratorManager({
                 placeholder="Carlos Costa Neto"
                 className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                 required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Sexo / Gênero</label>
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden cursor-pointer"
+              >
+                <option value="">Selecione...</option>
+                <option value="Feminino">Feminino</option>
+                <option value="Masculino">Masculino</option>
+                <option value="Outro">Outro</option>
+                <option value="Não informado">Prefiro não informar</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Ano de Nascimento</label>
+              <input
+                type="text"
+                value={birthYear}
+                onChange={(e) => handleBirthYearChange(e.target.value)}
+                placeholder="Ex: 1998"
+                maxLength={4}
+                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-mono text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
               />
             </div>
 
@@ -2031,6 +2094,8 @@ function activeTabSubList(
       email: c.email,
       whatsapp: c.whatsapp,
       birthDate: c.birthDate,
+      birthYear: c.birthYear,
+      gender: c.gender,
       disability: c.disability,
       languages: c.languages,
       pixKey: c.pixKey,
@@ -2216,6 +2281,8 @@ function activeTabSubList(
                 <option value="disability">Por PCD / Deficiência</option>
                 <option value="assignedRole">Por Função</option>
                 <option value="assignedRoom">Por Sala Alocada</option>
+                <option value="gender">Por Sexo / Gênero</option>
+                <option value="birthYear">Por Ano de Nascimento</option>
               </select>
             </div>
           </div>
@@ -2455,6 +2522,21 @@ function activeTabSubList(
                           )}
                         </div>
                         <div className="text-[10px] text-slate-400 dark:text-slate-450 font-mono mt-0.5">{c.email} | {c.whatsapp}</div>
+                        {(c.gender || c.birthYear || c.birthDate) && (
+                          <div className="text-[10px] text-slate-600 dark:text-slate-300 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
+                            {c.gender && (
+                              <span className="inline-flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded text-[9.5px]">
+                                <User className="w-2.5 h-2.5 text-slate-400" />
+                                <span>{canonicalizeGender(c.gender)}</span>
+                              </span>
+                            )}
+                            {(c.birthYear || c.birthDate) && (
+                              <span className="text-slate-500 dark:text-slate-400 font-mono text-[9.5px]">
+                                • {formatBirthYearAndAge(c.birthDate, c.birthYear)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {c.referencePerson && (
                           <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5 flex items-center gap-1">
                             <span>👤 Indicação / Ref:</span>
@@ -2808,6 +2890,11 @@ function activeTabSubAddForm(
   setPhotoUrl: any,
   birthDate: string,
   setBirthDate: any,
+  birthYear: string,
+  setBirthYear: any,
+  handleBirthYearChange: any,
+  gender: string,
+  setGender: any,
   cpf: string,
   setCpf: any,
   whatsapp: string,
@@ -2870,6 +2957,33 @@ function activeTabSubAddForm(
             placeholder="Ex: Carlos Costa Neto"
             className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-semibold"
             required
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Sexo / Gênero</label>
+          <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden cursor-pointer"
+          >
+            <option value="">Selecione...</option>
+            <option value="Feminino">Feminino</option>
+            <option value="Masculino">Masculino</option>
+            <option value="Outro">Outro</option>
+            <option value="Não informado">Prefiro não informar</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Ano de Nascimento</label>
+          <input
+            type="text"
+            value={birthYear}
+            onChange={(e) => handleBirthYearChange(e.target.value)}
+            placeholder="Ex: 1998"
+            maxLength={4}
+            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-mono text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
           />
         </div>
 

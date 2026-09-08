@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { CollaboratorInfo, BuildingInfo, PastEdition } from "../types";
 import { auditCollaborator } from "../lib/data-validator";
+import { extractBirthYear } from "../lib/collaborator-utils";
 import { getCurrentUserProfile, addCollaborator, getLocalCache, subscribeToAllBuildings } from "../lib/db-services";
 import { 
   Building2, Users, FileText, CheckCircle, AlertTriangle, 
@@ -34,6 +35,8 @@ export default function PublicRegisterForm({
   const [photoUrl, setPhotoUrl] = useState("");
   const [name, setName] = useState(initialName || "");
   const [birthDate, setBirthDate] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [gender, setGender] = useState("");
   const [cpf, setCpf] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState(initialEmail || "");
@@ -176,6 +179,21 @@ export default function PublicRegisterForm({
         .replace(/(\d{2})(\d)/, "$1/$2")
         .replace(/(\d{2})(\d)/, "$1/$2");
       setBirthDate(value);
+      if (value.length === 10) {
+        const parts = value.split("/");
+        if (parts[2] && parts[2].length === 4) {
+          setBirthYear(parts[2]);
+        }
+      }
+    }
+  };
+
+  const handleBirthYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, "").slice(0, 4);
+    setBirthYear(raw);
+    if (raw.length === 4 && birthDate.length === 10) {
+      const parts = birthDate.split("/");
+      setBirthDate(`${parts[0]}/${parts[1]}/${raw}`);
     }
   };
 
@@ -227,11 +245,15 @@ export default function PublicRegisterForm({
       });
       const hasWorkedEnemComputed = finalPastEditions.length > 0;
 
+      const computedYear = birthYear || extractBirthYear(birthDate);
+
       const collabData = {
         claId,
         buildingId: selectedBuildingId || "",
         name: name.trim(),
         birthDate,
+        birthYear: computedYear,
+        gender: gender || "Não informado",
         cpf,
         whatsapp,
         email: email.trim(),
@@ -548,8 +570,43 @@ export default function PublicRegisterForm({
                   <span className="text-[9px] text-slate-500 dark:text-slate-400 block mt-1 font-medium">⚠️ Não digite o nome completo inteiramente em MAIÚSCULAS para evitar descompasso com o Orion.</span>
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5 flex items-center justify-between">
+                      <span>Sexo</span>
+                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold normal-case">INEP Banheiro</span>
+                    </label>
+                    <select
+                      value={gender}
+                      onChange={(e) => setGender(e.target.value)}
+                      className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden cursor-pointer"
+                      required
+                    >
+                      <option value="">Selecione o sexo...</option>
+                      <option value="Feminino">Feminino</option>
+                      <option value="Masculino">Masculino</option>
+                      <option value="Outro">Outro</option>
+                      <option value="Não informado">Prefiro não informar</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">
+                      Ano de Nascimento
+                    </label>
+                    <input
+                      type="text"
+                      value={birthYear}
+                      onChange={handleBirthYearChange}
+                      placeholder="Ex: 1998"
+                      maxLength={4}
+                      className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-3 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Data Nascimento</label>
+                  <label className="block text-[10px] uppercase text-slate-600 dark:text-slate-400 font-extrabold mb-1.5">Data Nascimento Completa</label>
                   <input
                     type="text"
                     value={birthDate}

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { getInitials } from "../lib/image-utils";
 import { PastEdition, MaterialAccessLog, CollaboratorInfo, RoomDetails, BuildingInfo, ClaEvaluation } from "../types";
-import { checkMultipleRegistrations, canonicalizeRoleName } from "../lib/collaborator-utils";
+import { checkMultipleRegistrations, canonicalizeRoleName, extractBirthYear, formatBirthYearAndAge } from "../lib/collaborator-utils";
 import { ENEM_ROLES } from "./CollaboratorManager";
 import ClaEvaluationModal from "./ClaEvaluationModal";
 
@@ -27,6 +27,8 @@ export interface LightboxData {
   email?: string;
   whatsapp?: string;
   birthDate?: string;
+  birthYear?: number | string;
+  gender?: string;
   disability?: string;
   languages?: string[];
   pixKey?: string;
@@ -362,6 +364,28 @@ export default function ImageLightboxModal({
                 <p className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">
                   CPF: {data.cpf}
                 </p>
+              )}
+
+              {/* Sexo & Ano de Nascimento Badges */}
+              {(data.gender || data.birthDate || data.birthYear) && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  {data.gender && (
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border ${
+                      data.gender === "Feminino"
+                        ? "bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/20"
+                        : data.gender === "Masculino"
+                        ? "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20"
+                        : "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20"
+                    }`}>
+                      {data.gender === "Feminino" ? "♀ Feminino" : data.gender === "Masculino" ? "♂ Masculino" : data.gender}
+                    </span>
+                  )}
+                  {formatBirthYearAndAge(data.birthDate, data.birthYear) && (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
+                      🗓️ Nasc: {formatBirthYearAndAge(data.birthDate, data.birthYear)}
+                    </span>
+                  )}
+                </div>
               )}
 
               {localRoom && (
@@ -729,7 +753,34 @@ export default function ImageLightboxModal({
           </div>
 
           {/* 3. Key Attribute Grid (Dados Pessoais e Cadastrais) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Sexo & Ano de Nascimento */}
+            <div className="p-3.5 bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+              <div className="text-[10px] font-black uppercase text-indigo-500 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5" />
+                <span>Sexo & Nascimento</span>
+              </div>
+              <div className="text-xs font-bold text-slate-900 dark:text-slate-100 space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 font-medium">Sexo:</span>
+                  <span className="font-extrabold text-indigo-700 dark:text-indigo-300">
+                    {data.gender ? (data.gender === "Feminino" ? "♀ Feminino" : data.gender === "Masculino" ? "♂ Masculino" : data.gender) : "Não informado"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 font-medium">Ano de Nasc:</span>
+                  <span className="font-mono font-bold">
+                    {formatBirthYearAndAge(data.birthDate, data.birthYear) || "Não informado"}
+                  </span>
+                </div>
+                {data.birthDate && (
+                  <div className="text-[10px] text-slate-400 font-mono text-right">
+                    Data: {data.birthDate}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Indicação / Referência */}
             <div className="p-3.5 bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
               <div className="text-[10px] font-black uppercase text-indigo-500 flex items-center gap-1.5">

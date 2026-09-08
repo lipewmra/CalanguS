@@ -430,6 +430,8 @@ export default function DragAndDropReserves({
       email: c.email,
       whatsapp: c.whatsapp,
       birthDate: c.birthDate,
+      birthYear: c.birthYear,
+      gender: c.gender,
       disability: c.disability,
       languages: c.languages,
       pixKey: c.pixKey,

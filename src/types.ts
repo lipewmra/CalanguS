@@ -221,6 +221,8 @@ export interface CollaboratorInfo {
   originalClaName?: string; // Name/School of origin CLA
   name: string;
   birthDate: string;
+  birthYear?: number | string;
+  gender?: "Feminino" | "Masculino" | "Outro" | "Não informado" | string;
   cpf: string;
   whatsapp: string;
   email: string;

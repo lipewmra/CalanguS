@@ -40,6 +40,7 @@ import {
   Users
 } from "lucide-react";
 import { UserProfile, BuildingInfo, CateringInfo, CollaboratorInfo, CalangusMessage, MessageReadReceipt, MessageCollaboratorResponse, DidacticMaterial, MaterialAccessLog, EventConfigInfo } from "../types";
+import { extractBirthYear, formatBirthYearAndAge } from "../lib/collaborator-utils";
 import { subscribeToDidacticMaterials, recordCollaboratorMaterialAccess } from "../lib/db-services";
 import PhotoUploader from "./PhotoUploader";
 import { DEFAULT_ENEM_SCHEDULE } from "./CollaboratorSettingsView";
@@ -78,6 +79,8 @@ export default function CollaboratorDashboard({
   const [name, setName] = useState("");
   const [cpf, setCpf] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [gender, setGender] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
   const [education, setEducation] = useState<any>("Ensino Superior Completo");
@@ -108,6 +111,8 @@ export default function CollaboratorDashboard({
       setName(collaboratorRecord.name || "");
       setCpf(collaboratorRecord.cpf || "");
       setBirthDate(collaboratorRecord.birthDate || "");
+      setBirthYear(extractBirthYear(collaboratorRecord.birthDate, collaboratorRecord.birthYear));
+      setGender(collaboratorRecord.gender || "");
       setWhatsapp(collaboratorRecord.whatsapp || "");
       setEmail(collaboratorRecord.email || "");
       setEducation(collaboratorRecord.education || "Ensino Superior Completo");
@@ -171,6 +176,8 @@ export default function CollaboratorDashboard({
         name,
         cpf,
         birthDate,
+        birthYear: birthYear || extractBirthYear(birthDate),
+        gender: gender || "Não informado",
         whatsapp,
         email,
         education,
@@ -541,6 +548,16 @@ export default function CollaboratorDashboard({
                       <span className="text-[9px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">Foto enviada</span>
                     ) : (
                       <span className="text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20">Foto pendente</span>
+                    )}
+                    {gender && (
+                      <span className="text-[9px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                        {gender === "Feminino" ? "♀ Feminino" : gender === "Masculino" ? "♂ Masculino" : gender}
+                      </span>
+                    )}
+                    {formatBirthYearAndAge(birthDate, birthYear) && (
+                      <span className="text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 font-mono">
+                        🗓️ Nasc: {formatBirthYearAndAge(birthDate, birthYear)}
+                      </span>
                     )}
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1068,11 +1085,61 @@ export default function CollaboratorDashboard({
               </div>
 
               <div>
-                <label className="block text-[9px] uppercase font-extrabold tracking-wider text-slate-400 mb-1">Data de Nascimento</label>
+                <label className="block text-[9px] uppercase font-extrabold tracking-wider text-slate-400 mb-1">
+                  Sexo / Gênero
+                </label>
+                <select
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-sans text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden cursor-pointer"
+                >
+                  <option value="">Selecione o sexo...</option>
+                  <option value="Feminino">Feminino</option>
+                  <option value="Masculino">Masculino</option>
+                  <option value="Outro">Outro</option>
+                  <option value="Não informado">Prefiro não informar</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[9px] uppercase font-extrabold tracking-wider text-slate-400 mb-1">Ano de Nascimento</label>
+                <input
+                  type="text"
+                  value={birthYear}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, "").slice(0, 4);
+                    setBirthYear(raw);
+                    if (raw.length === 4 && birthDate.length === 10) {
+                      const parts = birthDate.split("/");
+                      setBirthDate(`${parts[0]}/${parts[1]}/${raw}`);
+                    }
+                  }}
+                  placeholder="Ex: 1998"
+                  maxLength={4}
+                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[9px] uppercase font-extrabold tracking-wider text-slate-400 mb-1">Data de Nascimento Completa</label>
                 <input
                   type="text"
                   value={birthDate}
-                  onChange={(e) => setBirthDate(e.target.value)}
+                  onChange={(e) => {
+                    let val = e.target.value.replace(/\D/g, "");
+                    if (val.length <= 8) {
+                      val = val
+                        .replace(/(\d{2})(\d)/, "$1/$2")
+                        .replace(/(\d{2})(\d)/, "$1/$2");
+                      setBirthDate(val);
+                      if (val.length === 10) {
+                        const parts = val.split("/");
+                        if (parts[2] && parts[2].length === 4) {
+                          setBirthYear(parts[2]);
+                        }
+                      }
+                    }
+                  }}
                   placeholder="DD/MM/AAAA"
                   className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
                   required

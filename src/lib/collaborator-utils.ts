@@ -187,3 +187,59 @@ export function canonicalizeRoleName(role?: string | null): string {
 
   return trimmed;
 }
+
+/**
+ * Extrai o ano de nascimento de 4 dígitos a partir de birthYear ou birthDate.
+ */
+export function extractBirthYear(birthDate?: string | null, birthYear?: number | string | null): string {
+  if (birthYear !== undefined && birthYear !== null && String(birthYear).trim() !== "") {
+    const cleanY = String(birthYear).replace(/\D/g, "");
+    if (cleanY.length === 4) return cleanY;
+    if (cleanY.length > 4) return cleanY.slice(0, 4);
+  }
+
+  if (birthDate && typeof birthDate === "string") {
+    const trimmed = birthDate.trim();
+    // Padrão DD/MM/AAAA
+    const ptMatch = trimmed.match(/\b\d{1,2}\/\d{1,2}\/(\d{4})\b/);
+    if (ptMatch && ptMatch[1]) return ptMatch[1];
+
+    // Padrão AAAA-MM-DD
+    const isoMatch = trimmed.match(/\b(\d{4})-\d{1,2}-\d{1,2}\b/);
+    if (isoMatch && isoMatch[1]) return isoMatch[1];
+
+    // Qualquer número de 4 dígitos entre 1920 e o ano corrente
+    const yearMatch = trimmed.match(/\b(19\d{2}|20[0-2]\d)\b/);
+    if (yearMatch && yearMatch[1]) return yearMatch[1];
+  }
+
+  return "";
+}
+
+/**
+ * Retorna o ano de nascimento formatado com cálculo de idade estimada.
+ * Exemplo: "1995 (31 anos)"
+ */
+export function formatBirthYearAndAge(birthDate?: string | null, birthYear?: number | string | null): string {
+  const yearStr = extractBirthYear(birthDate, birthYear);
+  if (!yearStr) return "";
+  const y = parseInt(yearStr, 10);
+  if (isNaN(y) || y < 1920 || y > 2026) return yearStr;
+  const currentYear = new Date().getFullYear() || 2026;
+  const age = currentYear - y;
+  return age > 0 ? `${yearStr} (~${age} anos)` : yearStr;
+}
+
+/**
+ * Normaliza o sexo para os padrões oficiais reconhecidos ("Feminino", "Masculino", "Outro", "Não informado").
+ */
+export function canonicalizeGender(gender?: string | null): "Feminino" | "Masculino" | "Outro" | "Não informado" | "" {
+  if (!gender) return "";
+  const lower = gender.trim().toLowerCase();
+  if (lower === "f" || lower.startsWith("fem") || lower === "mulher") return "Feminino";
+  if (lower === "m" || lower.startsWith("masc") || lower === "homem") return "Masculino";
+  if (lower === "outro" || lower === "outros" || lower.includes("binario") || lower.includes("binário")) return "Outro";
+  if (lower.includes("não informado") || lower.includes("nao informado") || lower.includes("prefiro")) return "Não informado";
+  return gender.trim() as any;
+}
+

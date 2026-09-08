@@ -298,6 +298,8 @@ export default function DuplicateCollaboratorsModal({
 
       const whatsapp = group.collaborators.find(c => cleanDigits(c.whatsapp).length >= 10)?.whatsapp || primaryCollab.whatsapp || "";
       const birthDate = group.collaborators.find(c => Boolean(c.birthDate))?.birthDate || primaryCollab.birthDate || "";
+      const birthYear = group.collaborators.find(c => Boolean(c.birthYear))?.birthYear || primaryCollab.birthYear || "";
+      const gender = group.collaborators.find(c => Boolean(c.gender) && c.gender !== "Não informado")?.gender || primaryCollab.gender || "";
       const cpf = group.collaborators.find(c => cleanDigits(c.cpf).length === 11)?.cpf || primaryCollab.cpf;
 
       // 7. Update primary record with consolidated fields
@@ -308,6 +310,8 @@ export default function DuplicateCollaboratorsModal({
         emails: allEmails,
         whatsapp,
         birthDate,
+        birthYear,
+        gender,
         pixKey,
         photoUrl: photoWinner,
         assignedRole,
