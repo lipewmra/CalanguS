@@ -13,7 +13,7 @@ import CollaboratorAuditLogModal from "./CollaboratorAuditLogModal";
 import BuildingAuditTrailView from "./BuildingAuditTrailView";
 import AssociationView, { getRolePayment } from "./AssociationView";
 import { appendCollaboratorLog } from "../lib/collaborator-logger";
-import { checkMultipleRegistrations } from "../lib/collaborator-utils";
+import { checkMultipleRegistrations, canonicalizeRoleName } from "../lib/collaborator-utils";
 import ClaEvaluationModal from "./ClaEvaluationModal";
 import ManageImpedimentModal from "./ManageImpedimentModal";
 import { 
@@ -110,17 +110,9 @@ export const ENEM_ROLES = [
   { name: "Fiscal de Banheiro", desc: "Inspeção e vistoria eletrônica com detector de metais nas áreas comuns sanitárias (2 a 12 fiscais por prédio, mín. 1 por sexo)." },
   { name: "Fiscal Volante / Corredor", desc: "Circulação nas áreas comuns, suporte logístico e condução de participantes com detector de metais (2 a 12 fiscais por prédio)." },
   { name: "Técnico de Informática", desc: "Suporte especializado a computadores, videoprova em Libras ou leitor de tela (1 por sala com atendimento específico)." },
-  { name: "Fiscal Volante", desc: "Circulação e áreas comuns, condução de participantes e manuseio de detector de metais." },
-  { name: "Interprete de Libras", desc: "Suporte especializado a candidatos surdos, traduzindo instruções para a Língua de Sinais (em dupla)." },
-  { name: "Ledor/Transcritor", desc: "Auxílio especializado para leitura de provas ou transcrição de respostas para candidatos PCD." },
-  { name: "Apenas Ledor", desc: "Atendimento especializado exclusivamente para leitura de prova e enunciados para candidatos." },
-  { name: "Transcritor", desc: "Atendimento especializado para transcrição de respostas de prova e redação." },
-  { name: "Tecnico Informática", desc: "Suporte aos computadores, videoprovas e conectividade do prédio." },
   { name: "Auxiliar de Limpeza", desc: "Responsável pela higienização periódica dos banheiros, salas e corredores do local." },
   { name: "Porteiro", desc: "Responsável pelo controle de abertura e fechamento de portões e filtragem de acessos." },
-  { name: "Representante do Local", desc: "Responsável oficial de ligação operacional e suporte de infraestrutura predial do local de aplicação." },
-  { name: "Representante da Local", desc: "Responsável oficial de ligação operacional e suporte de infraestrutura predial do local de aplicação." },
-  { name: "OUTROS", desc: "Compreende fiscais reservas ativados de última hora ou outras tarefas gerais não mapeadas." }
+  { name: "Representante do Local", desc: "Responsável oficial de ligação operacional e suporte de infraestrutura predial do local de aplicação." }
 ];
 
 interface CollaboratorManagerProps {

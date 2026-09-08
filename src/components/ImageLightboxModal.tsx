@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { 
   X, ZoomIn, Download, User, Shield, Building2, Award, Sparkles, 
   Clock, CheckCircle2, Phone, Mail, CreditCard, UserCheck, 
@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { getInitials } from "../lib/image-utils";
 import { PastEdition, MaterialAccessLog, CollaboratorInfo, RoomDetails, BuildingInfo, ClaEvaluation } from "../types";
-import { checkMultipleRegistrations } from "../lib/collaborator-utils";
+import { checkMultipleRegistrations, canonicalizeRoleName } from "../lib/collaborator-utils";
+import { ENEM_ROLES } from "./CollaboratorManager";
 import ClaEvaluationModal from "./ClaEvaluationModal";
 
 export interface LightboxData {
@@ -71,20 +72,6 @@ export interface ImageLightboxModalProps {
   onSaveEvaluation?: (collaboratorId: string, evaluation: ClaEvaluation | null) => Promise<void>;
 }
 
-const COMMON_ENEM_ROLES = [
-  "Chefe de Sala",
-  "Aplicador",
-  "Fiscal Volante / Corredor",
-  "Fiscal de Banheiro",
-  "Auxiliar de Limpeza",
-  "Porteiro",
-  "Representante do Local",
-  "Técnico de Informática",
-  "Tradutor-Intérprete de Libras",
-  "Ledor (Aplicador Especializado)",
-  "Transcritor (Aplicador Especializado)"
-];
-
 export default function ImageLightboxModal({ 
   data, 
   onClose,
@@ -102,11 +89,24 @@ export default function ImageLightboxModal({
   onSaveEvaluation
 }: ImageLightboxModalProps) {
   const allRooms = availableRooms || rooms;
-  const rolesList = availableRoles && availableRoles.length > 0 ? availableRoles : COMMON_ENEM_ROLES;
+  const rolesList = useMemo(() => {
+    const raw = availableRoles && availableRoles.length > 0 ? availableRoles : ENEM_ROLES.map(r => r.name);
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const r of raw) {
+      const canonical = canonicalizeRoleName(r);
+      if (canonical && !seen.has(canonical)) {
+        seen.add(canonical);
+        list.push(canonical);
+      }
+    }
+    return list;
+  }, [availableRoles]);
   const collabId = collaborator?.id || data?.id;
   
   // Local state initialized from collaborator or data
-  const [localRole, setLocalRole] = useState<string>(collaborator?.assignedRole || data?.role || "");
+  const initialRole = canonicalizeRoleName(collaborator?.assignedRole || data?.role || "");
+  const [localRole, setLocalRole] = useState<string>(initialRole);
   const [localRoom, setLocalRoom] = useState<string>(collaborator?.assignedRoom || data?.assignedRoom || "");
   const [localStatus, setLocalStatus] = useState<string>(collaborator?.status || data?.status || "Confirmado");
   const [localIsOrion, setLocalIsOrion] = useState<boolean>(
@@ -116,19 +116,20 @@ export default function ImageLightboxModal({
     collaborator?.claEvaluation
   );
   const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
-  const [selectedRoleToApprove, setSelectedRoleToApprove] = useState<string>(localRole || "");
+  const [selectedRoleToApprove, setSelectedRoleToApprove] = useState<string>(initialRole);
   const [selectedRoomToAssign, setSelectedRoomToAssign] = useState<string>(localRoom || "");
   const [isExecutingAction, setIsExecutingAction] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (data || collaborator) {
-      setLocalRole(collaborator?.assignedRole || data?.role || "");
+      const canonical = canonicalizeRoleName(collaborator?.assignedRole || data?.role || "");
+      setLocalRole(canonical);
       setLocalRoom(collaborator?.assignedRoom || data?.assignedRoom || "");
       setLocalStatus(collaborator?.status || data?.status || "Confirmado");
       setLocalIsOrion(collaborator?.isOrionAssociated ?? data?.isOrionAssociated ?? false);
       setLocalEvaluation(collaborator?.claEvaluation);
-      setSelectedRoleToApprove(collaborator?.assignedRole || data?.role || "");
+      setSelectedRoleToApprove(canonical);
       setSelectedRoomToAssign(collaborator?.assignedRoom || data?.assignedRoom || "");
       setActionSuccessMsg(null);
     }

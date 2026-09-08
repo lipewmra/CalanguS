@@ -14,6 +14,7 @@ import {
   DoorClosed, Settings2, Phone, CheckSquare, Square, TableProperties, ArrowUpDown
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
+import { canonicalizeRoleName } from "../lib/collaborator-utils";
 
 export type ExportTemplateType = 
   | "chefe_de_sala" 
@@ -3562,23 +3563,14 @@ export default function DragAndDropReserves({
                     className="w-full text-xs font-semibold p-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-300 focus:outline-hidden focus:border-emerald-500 cursor-pointer"
                   >
                     <option value="Chefe de Sala">Chefe de Sala</option>
-                    <option value="Aplicador (Fiscal de Sala)">Aplicador (Fiscal de Sala)</option>
+                    <option value="Aplicador">Aplicador</option>
                     {rolesWithQuantity
-                      .filter(r => r.name !== "Chefe de Sala" && r.name !== "Aplicador (Fiscal de Sala)" && r.name !== "Aplicador")
+                      .filter(r => r.name !== "Chefe de Sala" && r.name !== "Aplicador" && r.name !== "Aplicador (Fiscal de Sala)")
                       .map(r => (
                         <option key={r.name} value={r.name}>
                           {r.name} ({r.totalAssigned} associados)
                         </option>
                       ))}
-                    <option value="Fiscal Volante">Fiscal Volante (Corredores)</option>
-                    <option value="Fiscal de Banheiro">Fiscal de Banheiro (Sanitários)</option>
-                    <option value="Auxiliar de Acessibilidade">Auxiliar de Acessibilidade</option>
-                    <option value="Interprete de Libras">Tradutor / Intérprete de Libras</option>
-                    <option value="Ledor/Transcritor">Fiscal Especializado (Ledor/Transcritor)</option>
-                    <option value="Porteiro">Porteiro / Controle de Portões</option>
-                    <option value="Auxiliar de Limpeza">Auxiliar de Limpeza</option>
-                    <option value="Tecnico Informática">Técnico em Informática</option>
-                    <option value="Fiscal de Apoio / Recepção">Fiscal de Apoio / Recepção</option>
                   </select>
                 </div>
               </div>
@@ -3748,12 +3740,14 @@ export default function DragAndDropReserves({
                   className="w-full text-xs font-bold p-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-hidden focus:border-amber-500 cursor-pointer"
                 >
                   <option value="Chefe de Sala">Chefe de Sala</option>
-                  <option value="Aplicador (Fiscal de Sala)">Aplicador (Fiscal de Sala)</option>
-                  <option value="Fiscal Volante">Fiscal Volante</option>
+                  <option value="Aplicador">Aplicador</option>
+                  <option value="Fiscal Volante / Corredor">Fiscal Volante / Corredor</option>
                   <option value="Fiscal de Banheiro">Fiscal de Banheiro</option>
-                  <option value="Auxiliar de Acessibilidade">Auxiliar de Acessibilidade</option>
-                  <option value="Interprete de Libras">Tradutor e Intérprete de Libras</option>
-                  <option value="Ledor/Transcritor">Fiscal Especializado (Ledor/Transcritor)</option>
+                  <option value="Tradutor-Intérprete de Libras">Tradutor-Intérprete de Libras</option>
+                  <option value="Guia-Intérprete de Surdocegos">Guia-Intérprete de Surdocegos</option>
+                  <option value="Ledor (Aplicador Especializado)">Ledor (Aplicador Especializado)</option>
+                  <option value="Transcritor (Aplicador Especializado)">Transcritor (Aplicador Especializado)</option>
+                  <option value="Técnico de Informática">Técnico de Informática</option>
                 </select>
               </div>
 

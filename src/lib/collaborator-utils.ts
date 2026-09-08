@@ -52,3 +52,138 @@ export function checkMultipleRegistrations(
     locations
   };
 }
+
+/**
+ * Normaliza e consolida nomes de funções para o padrão único oficial do ENEM (INEP),
+ * eliminando duplicidades, grafias variantes, acentuações ausentes ou termos redundantes.
+ */
+export function canonicalizeRoleName(role?: string | null): string {
+  if (!role) return "";
+  const trimmed = role.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Fiscais Volantes / Corredor
+  if (
+    lower === "fiscal volante" ||
+    lower === "volante" ||
+    lower === "fiscal volante / corredor" ||
+    lower === "fiscal volante (corredores)" ||
+    lower === "fiscal corredor" ||
+    lower === "corredor"
+  ) {
+    return "Fiscal Volante / Corredor";
+  }
+
+  // Libras
+  if (
+    lower === "interprete de libras" ||
+    lower === "intérprete de libras" ||
+    lower === "tradutor e intérprete de libras" ||
+    lower === "tradutor-intérprete de libras" ||
+    lower === "tradutor / intérprete de libras" ||
+    lower === "libras"
+  ) {
+    return "Tradutor-Intérprete de Libras";
+  }
+
+  // Surdocegos
+  if (
+    lower === "guia-interprete" ||
+    lower === "guia-intérprete" ||
+    lower === "guia-intérprete de surdocegos" ||
+    lower === "guia intérprete de surdocegos" ||
+    lower === "guia interprete de surdocegos" ||
+    lower === "surdocegos"
+  ) {
+    return "Guia-Intérprete de Surdocegos";
+  }
+
+  // Ledor
+  if (
+    lower === "apenas ledor" ||
+    lower === "ledor" ||
+    lower === "ledor (aplicador especializado)" ||
+    lower === "leitor"
+  ) {
+    return "Ledor (Aplicador Especializado)";
+  }
+
+  // Transcritor
+  if (
+    lower === "transcritor" ||
+    lower === "transcritor (aplicador especializado)"
+  ) {
+    return "Transcritor (Aplicador Especializado)";
+  }
+
+  // Ledor/Transcritor
+  if (
+    lower === "ledor/transcritor" ||
+    lower === "ledor / transcritor" ||
+    lower === "ledor ou transcritor" ||
+    lower === "fiscal especializado (ledor/transcritor)"
+  ) {
+    return "Ledor (Aplicador Especializado)";
+  }
+
+  // Técnico de Informática
+  if (
+    lower === "tecnico informática" ||
+    lower === "técnico informática" ||
+    lower === "técnico de informática" ||
+    lower === "tecnico de informatica" ||
+    lower === "tecnico em informática" ||
+    lower === "técnico em informática" ||
+    lower === "ti"
+  ) {
+    return "Técnico de Informática";
+  }
+
+  // Representante do Local
+  if (
+    lower === "representante da local" ||
+    lower === "representante do local" ||
+    lower === "representante local"
+  ) {
+    return "Representante do Local";
+  }
+
+  // Aplicador
+  if (
+    lower === "aplicador" ||
+    lower === "aplicador (fiscal de sala)" ||
+    lower === "fiscal de sala"
+  ) {
+    return "Aplicador";
+  }
+
+  // Fiscal de Banheiro
+  if (
+    lower === "fiscal de banheiro" ||
+    lower === "fiscal de banheiro (sanitários)" ||
+    lower === "banheiro"
+  ) {
+    return "Fiscal de Banheiro";
+  }
+
+  // Auxiliar de Limpeza
+  if (lower === "auxiliar de limpeza" || lower === "limpeza") {
+    return "Auxiliar de Limpeza";
+  }
+
+  // Chefe de Sala
+  if (lower === "chefe de sala" || lower === "chefe") {
+    return "Chefe de Sala";
+  }
+
+  // Porteiro
+  if (
+    lower === "porteiro" ||
+    lower === "porteiro / controle de portões" ||
+    lower === "portaria"
+  ) {
+    return "Porteiro";
+  }
+
+  return trimmed;
+}
