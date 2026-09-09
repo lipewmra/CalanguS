@@ -308,6 +308,9 @@ export default function CollaboratorManager({
   const handleBirthYearChange = (val: string) => {
     const clean = val.replace(/\D/g, "").slice(0, 4);
     setBirthYear(clean);
+    if (clean.length === 4) {
+      setBirthDate(`01/01/${clean}`);
+    }
   };
 
   const handleBirthDateChange = (val: string) => {
@@ -403,7 +406,7 @@ export default function CollaboratorManager({
 
     const edits: Partial<CollaboratorInfo> = {
       name,
-      birthDate,
+      birthDate: birthDate || (birthYear ? `01/01/${birthYear}` : ""),
       birthYear: birthYear || extractBirthYear(birthDate),
       gender: gender || "Não informado",
       cpf,
@@ -479,7 +482,7 @@ export default function CollaboratorManager({
 
     const collab: Omit<CollaboratorInfo, "claId"> = {
       name,
-      birthDate,
+      birthDate: birthDate || (birthYear ? `01/01/${birthYear}` : ""),
       birthYear: birthYear || extractBirthYear(birthDate),
       gender: gender || "Não informado",
       cpf,
@@ -1381,18 +1384,6 @@ export default function CollaboratorManager({
                 placeholder="Ex: 1998"
                 maxLength={4}
                 className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-mono text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Data Nascimento</label>
-              <input
-                type="text"
-                value={birthDate}
-                onChange={(e) => handleBirthDateChange(e.target.value)}
-                placeholder="DD/MM/AAAA"
-                className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
-                required
               />
             </div>
 
@@ -2984,18 +2975,6 @@ function activeTabSubAddForm(
             placeholder="Ex: 1998"
             maxLength={4}
             className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white font-mono text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
-          />
-        </div>
-
-        <div>
-          <label className="block text-[10px] uppercase font-extrabold tracking-wider text-slate-550 dark:text-slate-400 mb-1">Data Nascimento</label>
-          <input
-            type="text"
-            value={birthDate}
-            onChange={(e) => handleBirthDateChange(e.target.value)}
-            placeholder="DD/MM/AAAA"
-            className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden text-xs font-semibold"
-            required
           />
         </div>
 

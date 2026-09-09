@@ -1109,40 +1109,13 @@ export default function CollaboratorDashboard({
                   onChange={(e) => {
                     const raw = e.target.value.replace(/\D/g, "").slice(0, 4);
                     setBirthYear(raw);
-                    if (raw.length === 4 && birthDate.length === 10) {
-                      const parts = birthDate.split("/");
-                      setBirthDate(`${parts[0]}/${parts[1]}/${raw}`);
+                    if (raw.length === 4) {
+                      setBirthDate(`01/01/${raw}`);
                     }
                   }}
                   placeholder="Ex: 1998"
                   maxLength={4}
                   className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[9px] uppercase font-extrabold tracking-wider text-slate-400 mb-1">Data de Nascimento Completa</label>
-                <input
-                  type="text"
-                  value={birthDate}
-                  onChange={(e) => {
-                    let val = e.target.value.replace(/\D/g, "");
-                    if (val.length <= 8) {
-                      val = val
-                        .replace(/(\d{2})(\d)/, "$1/$2")
-                        .replace(/(\d{2})(\d)/, "$1/$2");
-                      setBirthDate(val);
-                      if (val.length === 10) {
-                        const parts = val.split("/");
-                        if (parts[2] && parts[2].length === 4) {
-                          setBirthYear(parts[2]);
-                        }
-                      }
-                    }
-                  }}
-                  placeholder="DD/MM/AAAA"
-                  className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl font-bold font-mono text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
-                  required
                 />
               </div>
 
