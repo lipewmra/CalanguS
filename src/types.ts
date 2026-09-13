@@ -34,6 +34,7 @@ export interface RoomDetails {
   floor: string;
   details?: string;
   type?: "regular" | "special" | "extra";
+  specializedRoles?: string[];
   targetChefes?: number;
   targetAplicadores?: number;
   targetLedores?: number;
@@ -131,6 +132,20 @@ export interface CalangusMessage {
   responses?: MessageCollaboratorResponse[]; // Answers submitted by collaborators
 }
 
+export const SPECIALIZED_ROLES = [
+  "Ledor",
+  "Ledor Inglês",
+  "Ledor Espanhol",
+  "Transcritor",
+  "Transcritor Inglês",
+  "Transcritor Espanhol",
+  "Interprete de Libras",
+  "Video Prova",
+  "Técnico de Informática",
+] as const;
+
+export type SpecializedRole = typeof SPECIALIZED_ROLES[number];
+
 export interface BuildingInfo {
   id?: string;
   claId: string;
@@ -143,6 +158,8 @@ export interface BuildingInfo {
   specialRoomsCount: number;
   specialDetails: string;
   extraRoomsCount: number;
+  hasSpecializedAttendance?: boolean;
+  specializedRoles?: string[];
   rooms?: RoomDetails[];
   specialRooms?: RoomDetails[];
   extraRooms?: RoomDetails[];
@@ -232,8 +249,8 @@ export interface CollaboratorInfo {
   hasWorkedEnem: boolean;
   pastEditions: PastEdition[]; // checkbox lists for 1998 up to 2025
   pixKey: string;
-  specialRole: "Nenhuma" | "Libras" | "Tradutor e Intérprete" | "Técnico de Informática" | "Auxiliar de Acessibilidade" | "Ledor/Transcritor" | "Apenas Ledor" | "Apenas leitor" | "Leitor transcritor espanhol" | "Leitor transcritor inglês" | "Apenas leitor espanhol" | "Apenas leitor inglês" | "Ledora de Gestante" | string;
-  languages: string[]; // only relevant if "Tradutor e Intérprete"
+  specialRole: "Nenhuma" | "Ledor" | "Ledor Inglês" | "Ledor Espanhol" | "Transcritor" | "Transcritor Inglês" | "Transcritor Espanhol" | "Interprete de Libras" | "Video Prova" | "Técnico de Informática" | string;
+  languages: string[]; // only relevant if "Tradutor e Intérprete" or languages
   certificateAttachedName?: string;
   isReserve: boolean;
   assignedRoom?: string; // e.g. "Sala 01", "Coordenação", or null

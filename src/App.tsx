@@ -1218,7 +1218,7 @@ export default function App() {
               CalanguS
             </h2>
             <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-              v3.0
+              v3.2
             </span>
           </div>
           <span className="text-[10px] uppercase font-extrabold text-slate-450 tracking-widest font-mono">
@@ -1344,7 +1344,7 @@ export default function App() {
                 <div className="flex items-center justify-center gap-2">
                   <h1 className="font-display font-black text-3xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</h1>
                   <span className="text-[11px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                    v3.0
+                    v3.2
                   </span>
                 </div>
                 <span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block mt-0.5">TACTILE TEAM DISPATCHER</span>
@@ -1666,7 +1666,7 @@ export default function App() {
 
             {/* Privacy Policy direct link in Login Card */}
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-              <span className="font-medium">CalanguS v3.0 • © 2026</span>
+              <span className="font-medium">CalanguS v3.2 • © 2026</span>
               <button
                 type="button"
                 onClick={handleOpenPrivacy}
@@ -1725,7 +1725,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 bg-clip-text text-transparent">CalanguS</span>
                     <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                      v3.0
+                      v3.2
                     </span>
                   </div>
                   <span className="text-[8px] sm:text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-extrabold block">TACTILE TEAM DISPATCHER</span>
@@ -2051,7 +2051,7 @@ export default function App() {
           ) : (
             (() => {
               const currentMenuItems = effectiveRole === "SuperAdmin" ? [
-                { id: "admin-dashboard", label: "0. Painel Operacional", icon: Activity, iconColor: "text-emerald-450" },
+                { id: "admin-dashboard", label: "Dashboard", icon: Activity, iconColor: "text-emerald-400" },
                 { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-emerald-400" },
                 { id: "admin-directives", label: "2. Diretivas Gerais", icon: Calendar, iconColor: "text-sky-400" },
                 { id: "admin-agenda", label: "3. Agenda & Itinerário", icon: Clock, iconColor: "text-amber-400" },
@@ -2060,7 +2060,7 @@ export default function App() {
                 { id: "admin-metrics", label: "6. Métricas de Colaborador", icon: SlidersHorizontal, iconColor: "text-teal-400" },
                 { id: "admin-materials", label: "7. Material Didático & Capacitação", icon: BookOpen, iconColor: "text-indigo-400" }
               ] : [
-                { id: "dashboard", label: "0. Painel & Indicadores", icon: LayoutDashboard, iconColor: "text-emerald-400" },
+                { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, iconColor: "text-emerald-400" },
                 { id: "building", label: "1. Local de Aplicação", icon: Landmark, iconColor: "text-sky-400" },
                 { id: "staff", label: "2. Equipe, Inscrições & Funções", icon: Users, iconColor: "text-emerald-450" },
                 ...((effectiveRole === "CLA" || effectiveRole === "ALA") ? [
@@ -2353,6 +2353,7 @@ export default function App() {
                     {currentMenuItems.map((item) => {
                       const IconComp = item.icon;
                       const isActive = activeTab === item.id;
+                      const isDashboard = item.id === "dashboard" || item.id === "admin-dashboard";
                       const pendingTransfers = item.id === "staff" ? (collaborators || []).filter(c => c.transferRequest && c.transferRequest.status === "Pendente").length : 0;
 
                       return (
@@ -2366,14 +2367,20 @@ export default function App() {
                             }}
                             className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center justify-between px-4 py-3.5 cursor-pointer border-2 transition-all duration-150 ${
                               isActive
-                                ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.01]"
+                                ? isDashboard
+                                  ? "bg-emerald-600/90 text-white border-emerald-500 shadow-[3px_3px_0px_0px_#059669] scale-[1.01]"
+                                  : "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.01]"
+                                : isDashboard
+                                ? isDarkMode
+                                  ? "bg-emerald-950/40 border-emerald-700/50 text-emerald-300 shadow-[2px_2px_0px_0px_rgba(5,150,105,0.25)] hover:bg-emerald-900/50 hover:text-white hover:border-emerald-500"
+                                  : "bg-emerald-50/90 border-emerald-300/90 text-emerald-900 shadow-[2px_2px_0px_0px_rgba(16,185,129,0.25)] hover:bg-emerald-100 hover:border-emerald-400"
                                 : isDarkMode
                                 ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]"
                                 : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"
                             }`}
                           >
                             <div className="flex items-center gap-2.5">
-                              <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
+                              <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : isDashboard ? "text-emerald-500 dark:text-emerald-400" : item.iconColor}`} />
                               <span>{item.label}</span>
                               {(item as any).externalUrl && (
                                 <ExternalLink className="w-3 h-3 text-amber-400 shrink-0" />
@@ -2433,6 +2440,7 @@ export default function App() {
                           {currentMenuItems.map((item) => {
                             const IconComp = item.icon;
                             const isActive = desktopActiveTab === item.id;
+                            const isDashboard = item.id === "dashboard" || item.id === "admin-dashboard";
                             const isStaffMenuWithTransfers = item.id === "staff" && pendingTransfersCount > 0;
                             const hasExternalUrl = Boolean((item as any).externalUrl);
 
@@ -2448,14 +2456,20 @@ export default function App() {
                                 title={item.label}
                                 className={`w-full font-display font-bold transition rounded-xl text-xs flex items-center cursor-pointer border-2 transition-all duration-150 ${isSidebarCollapsed ? "justify-center p-3 relative" : "justify-between px-4 py-3.5"} ${
                                   isActive
-                                    ? "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]"
+                                    ? isDashboard
+                                      ? "bg-emerald-600/90 text-white border-emerald-500 shadow-[3px_3px_0px_0px_#059669] scale-[1.02]"
+                                      : "bg-emerald-600 text-white border-emerald-800 shadow-[3px_3px_0px_0px_#047857] scale-[1.02]"
+                                    : isDashboard
+                                    ? isDarkMode
+                                      ? "bg-emerald-950/40 border-emerald-700/50 text-emerald-300 shadow-[2px_2px_0px_0px_rgba(5,150,105,0.25)] hover:bg-emerald-900/50 hover:text-white hover:border-emerald-500"
+                                      : "bg-emerald-50/90 border-emerald-300/90 text-emerald-900 shadow-[2px_2px_0px_0px_rgba(16,185,129,0.25)] hover:bg-emerald-100 hover:border-emerald-400"
                                     : isDarkMode
                                     ? "bg-[#101726]/90 border-slate-800 text-slate-400 shadow-[2px_2px_0px_0px_#020617] hover:text-white hover:bg-[#161f30]"
                                     : "bg-white text-slate-700 shadow-[2px_2px_0px_0px_#cbd5e1] hover:bg-slate-50"
                                 }`}
                               >
                                 <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-                                  <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : item.iconColor}`} />
+                                  <IconComp className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : isDashboard ? "text-emerald-500 dark:text-emerald-400" : item.iconColor}`} />
                                   {!isSidebarCollapsed && <span>{item.label}</span>}
                                 </div>
                                 {!isSidebarCollapsed && hasExternalUrl && (
@@ -2569,7 +2583,7 @@ export default function App() {
       {currentUser && (
         <footer className="no-print max-w-7xl mx-auto px-4 py-6 border-t border-slate-200/80 dark:border-slate-800/80 mt-12 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400 dark:text-slate-500">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-600 dark:text-slate-400">CalanguS v3.0</span>
+            <span className="font-bold text-slate-600 dark:text-slate-400">CalanguS v3.2</span>
             <span>•</span>
             <span>Coordenação & Aplicação de Exames</span>
           </div>

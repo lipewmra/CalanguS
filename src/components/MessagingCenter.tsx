@@ -8,7 +8,6 @@ import {
   HelpCircle as QuestionIcon, ThumbsUp, PlusCircle
 } from "lucide-react";
 import { BuildingInfo, CollaboratorInfo, CalangusMessage, CalangusTemplate, PingramConfig, MessagePoll } from "../types";
-import PingramConfigModal from "./PingramConfigModal";
 import MessageReceiptsAndPollsView from "./MessageReceiptsAndPollsView";
 import { resetAllClaMessages } from "../lib/db-services";
 import {
@@ -276,7 +275,6 @@ export default function MessagingCenter({
   const [successBanner, setSuccessBanner] = useState<string>("");
 
   // Pingram API & Dispatch States
-  const [isPingramModalOpen, setIsPingramModalOpen] = useState(false);
   const [pingramConfig, setPingramConfig] = useState<PingramConfig | null>(() => getPingramConfig(claId));
   const [isSendingViaPingram, setIsSendingViaPingram] = useState(false);
   const [pingramProgress, setPingramProgress] = useState<{
@@ -706,7 +704,7 @@ export default function MessagingCenter({
   // Direct Pingram Batch Dispatch (Automatic Server & API Delivery)
   const handleDispatchViaPingram = async () => {
     if (!pingramConfig || !pingramConfig.apiKey) {
-      setIsPingramModalOpen(true);
+      alert("Para utilizar o envio automatizado, configure sua chave de API Pingram no menu Configurações (ícone ⚙️ no topo).");
       return;
     }
 
@@ -803,7 +801,7 @@ export default function MessagingCenter({
   // Single Recipient Instant Pingram Trigger from Queue Card
   const handleSinglePingramSend = async (collab: CollaboratorInfo) => {
     if (!pingramConfig || !pingramConfig.apiKey) {
-      setIsPingramModalOpen(true);
+      alert("A chave da API Pingram não está configurada. Acesse o menu Configurações (ícone ⚙️ no topo) para cadastrar sua chave.");
       return;
     }
 
@@ -872,31 +870,18 @@ export default function MessagingCenter({
           </div>
         </div>
 
-        {/* TABS & PINGRAM SELECTOR */}
+        {/* TABS SELECTOR */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* PINGRAM API STATUS BUTTON */}
-          <button
-            type="button"
-            onClick={() => setIsPingramModalOpen(true)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border shadow-xs ${
-              pingramConfig && pingramConfig.apiKey
-                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/20"
-                : "bg-sky-500/10 border-sky-500/30 text-sky-800 dark:text-sky-300 hover:bg-sky-500/20"
-            }`}
-            title="Configurar credenciais da API Pingram para este CLA (E-mail e SMS)"
-          >
-            <Radio className="w-3.5 h-3.5 text-sky-500 animate-pulse" />
-            <span>API Pingram:</span>
-            {pingramConfig && pingramConfig.apiKey ? (
-              <span className="text-[10px] font-black bg-emerald-500 text-white px-1.5 py-0.2 rounded font-mono">
-                {maskPingramKey(pingramConfig.apiKey)}
-              </span>
-            ) : (
-              <span className="text-[10px] font-black bg-sky-600 text-white px-1.5 py-0.2 rounded">
-                Configurar CLA
-              </span>
-            )}
-          </button>
+          {/* Status Passivo do Pingram */}
+          {pingramConfig?.apiKey && (
+            <div
+              className="px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/20 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 shadow-2xs"
+              title="Pingram API conectado via menu Configurações"
+            >
+              <Radio className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Pingram Ativo</span>
+            </div>
+          )}
 
           <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 flex-wrap">
             <button
@@ -1551,9 +1536,7 @@ export default function MessagingCenter({
                     <span>
                       {isSendingViaPingram
                         ? "Enviando via Pingram..."
-                        : pingramConfig?.apiKey
-                        ? `Disparar via Pingram API (${targetedRecipients.length})`
-                        : `Conectar Pingram CLA (${channel.toUpperCase()})`}
+                        : `Disparar via Pingram API (${targetedRecipients.length})`}
                     </span>
                   </button>
                 )}
@@ -1968,14 +1951,16 @@ export default function MessagingCenter({
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsPingramModalOpen(true)}
-              className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-md transition cursor-pointer self-start sm:self-auto"
-            >
-              <Radio className="w-3.5 h-3.5" />
-              <span>Configurar API Pingram</span>
-            </button>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border shadow-2xs ${
+                pingramConfig?.apiKey 
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
+                  : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
+              }`}>
+                <Radio className="w-3.5 h-3.5 text-sky-500" />
+                <span>{pingramConfig?.apiKey ? "Chave Pingram Conectada" : "Chave configurável no menu Configuração (⚙️)"}</span>
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-left">
@@ -2092,18 +2077,6 @@ export default function MessagingCenter({
           </div>
         </div>
       )}
-
-      {/* Modal de Configuração do Pingram do CLA */}
-      <PingramConfigModal
-        isOpen={isPingramModalOpen}
-        onClose={() => setIsPingramModalOpen(false)}
-        claId={claId}
-        onConfigSaved={(cfg) => {
-          setPingramConfig(cfg);
-          setSuccessBanner("Credenciais do Pingram salvas e validadas para este CLA!");
-          setTimeout(() => setSuccessBanner(""), 4000);
-        }}
-      />
 
       {/* ========================================================================= */}
       {/* MODAL: CREATE / EDIT MESSAGE TEMPLATE */}

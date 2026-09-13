@@ -367,11 +367,11 @@ export default function PublicRegisterForm({
                     Pré-Inscrição de Fiscais — ENEM 2026
                   </h1>
                   <span className="text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
-                    v3.0
+                    v3.2
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                  Portal Público CalanguS v3.0. Preencha seus dados abaixo para se credenciar à equipe de fiscais de sala e pessoal de apoio técnico.
+                  Portal Público CalanguS v3.2. Preencha seus dados abaixo para se credenciar à equipe de fiscais de sala e pessoal de apoio técnico.
                 </p>
               </div>
             </div>
@@ -698,16 +698,15 @@ export default function PublicRegisterForm({
                     className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm font-bold shadow-inner"
                   >
                     <option value="Nenhuma">Nenhuma / Fiscal de Sala Padrão</option>
-                    <option value="Libras">Libras (Intérprete)</option>
-                    <option value="Tradutor e Intérprete">Tradutor e Intérprete</option>
+                    <option value="Ledor">Ledor</option>
+                    <option value="Ledor Inglês">Ledor Inglês</option>
+                    <option value="Ledor Espanhol">Ledor Espanhol</option>
+                    <option value="Transcritor">Transcritor</option>
+                    <option value="Transcritor Inglês">Transcritor Inglês</option>
+                    <option value="Transcritor Espanhol">Transcritor Espanhol</option>
+                    <option value="Interprete de Libras">Interprete de Libras</option>
+                    <option value="Video Prova">Video Prova</option>
                     <option value="Técnico de Informática">Técnico de Informática</option>
-                    <option value="Auxiliar de Acessibilidade">Auxiliar de Acessibilidade</option>
-                    <option value="Ledor/Transcritor">Ledor/Transcritor Especializado</option>
-                    <option value="Apenas Ledor">Apenas Ledor</option>
-                    <option value="Leitor transcritor espanhol">Leitor transcritor espanhol</option>
-                    <option value="Leitor transcritor inglês">Leitor transcritor inglês</option>
-                    <option value="Apenas leitor espanhol">Apenas leitor espanhol</option>
-                    <option value="Apenas leitor inglês">Apenas leitor inglês</option>
                   </select>
                 </div>
 

@@ -89,15 +89,25 @@ export const DEFAULT_ENEM_SCHEDULE: CollaboratorScheduleItem[] = [
   }
 ];
 
-export const getDefaultRolesList = (): ClaCustomRole[] => {
-  return ENEM_ROLES.map((r, index) => ({
-    id: `role-default-${index + 1}`,
-    name: r.name,
-    desc: r.desc,
-    hidden: false,
-    targetQuantity: 0,
-    isDefault: true
-  }));
+export const getDefaultRolesList = (building?: any): ClaCustomRole[] => {
+  return ENEM_ROLES.map((r, index) => {
+    const isTI = /inform[áa]tica|ti/i.test(r.name);
+    // Técnico de Informática só fica ativo se informado no Menu 1 ou se já possuir meta configurada
+    const isTIInformed = isTI && building && (
+      building.hasVideoProva ||
+      building.specializedRoles?.some((sr: string) => /inform[áa]tica|ti|video\s*prova/i.test(sr)) ||
+      (building.rolesTargetQuantities?.["Técnico de Informática"] || 0) > 0
+    );
+
+    return {
+      id: `role-default-${index + 1}`,
+      name: r.name,
+      desc: r.desc,
+      hidden: isTI ? !isTIInformed : false,
+      targetQuantity: 0,
+      isDefault: true
+    };
+  });
 };
 
 export default function CollaboratorSettingsView({
@@ -134,11 +144,14 @@ export default function CollaboratorSettingsView({
         setRoles(building.customRoles);
       } else {
         // Initialize with default ENEM roles and match existing target quantities
-        const defaults = getDefaultRolesList();
+        const defaults = getDefaultRolesList(building);
         if (building.rolesTargetQuantities) {
           defaults.forEach(r => {
             if (building.rolesTargetQuantities && building.rolesTargetQuantities[r.name] !== undefined) {
               r.targetQuantity = building.rolesTargetQuantities[r.name];
+              if (r.targetQuantity > 0 && /inform[áa]tica|ti/i.test(r.name)) {
+                r.hidden = false;
+              }
             }
           });
         }
@@ -155,7 +168,7 @@ export default function CollaboratorSettingsView({
       // 3. Instructions
       setInstructions(building.collaboratorInstructions || "");
     } else {
-      setRoles(getDefaultRolesList());
+      setRoles(getDefaultRolesList(building));
       setSchedule(DEFAULT_ENEM_SCHEDULE);
     }
   }, [building]);
@@ -660,6 +673,17 @@ export default function CollaboratorSettingsView({
                           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
                             {role.desc}
                           </p>
+
+                          {/inform[áa]tica|ti/i.test(role.name) && (
+                            <div className="mt-1 text-[10px] text-sky-700 dark:text-sky-300 font-bold bg-sky-50 dark:bg-sky-950/40 px-2.5 py-1 rounded-lg border border-sky-200 dark:border-sky-800/50 flex items-center gap-1.5">
+                              <span>💡</span>
+                              <span>
+                                {role.hidden || ((role.targetQuantity || 0) <= 0 && role.isDefault)
+                                  ? "Não informada para alocação: Para que esta função apareça no Menu 3 (Alocação), desmarque 'Oculta' ou defina uma Meta > 0 aqui no Menu 9, ou habilite no Menu 1."
+                                  : "✓ Informada pelo CLA no Menu 9: Esta função aparecerá normalmente para alocação no Menu 3."}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {!readOnly && (

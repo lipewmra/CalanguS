@@ -31,7 +31,6 @@ export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "c
     "CPF",
     "Sexo",
     "Ano de Nascimento",
-    "Data de Nascimento",
     "E-mail",
     "WhatsApp",
     "Chave PIX",
@@ -70,7 +69,6 @@ export function exportCollaboratorsToCSV(collabs: CollaboratorInfo[], title = "c
       escapeCSV(c.cpf),
       escapeCSV(c.gender || "Não informado"),
       escapeCSV(extractBirthYear(c.birthDate, c.birthYear) || ""),
-      escapeCSV(c.birthDate || ""),
       escapeCSV(c.email || ""),
       escapeCSV(c.whatsapp || ""),
       escapeCSV(c.pixKey || ""),
@@ -3076,16 +3074,15 @@ function activeTabSubAddForm(
             className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-800 dark:text-slate-200 text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
           >
             <option value="Nenhuma">Nenhuma / Fiscal de Sala Padrão</option>
-            <option value="Libras">Libras (Intérprete)</option>
-            <option value="Tradutor e Intérprete">Tradutor e Intérprete</option>
+            <option value="Ledor">Ledor</option>
+            <option value="Ledor Inglês">Ledor Inglês</option>
+            <option value="Ledor Espanhol">Ledor Espanhol</option>
+            <option value="Transcritor">Transcritor</option>
+            <option value="Transcritor Inglês">Transcritor Inglês</option>
+            <option value="Transcritor Espanhol">Transcritor Espanhol</option>
+            <option value="Interprete de Libras">Interprete de Libras</option>
+            <option value="Video Prova">Video Prova</option>
             <option value="Técnico de Informática">Técnico de Informática</option>
-            <option value="Auxiliar de Acessibilidade">Auxiliar de Acessibilidade</option>
-            <option value="Ledor/Transcritor">Ledor/Transcritor Especializado</option>
-            <option value="Apenas Ledor">Apenas Ledor</option>
-            <option value="Leitor transcritor espanhol">Leitor transcritor espanhol</option>
-            <option value="Leitor transcritor inglês">Leitor transcritor inglês</option>
-            <option value="Apenas leitor espanhol">Apenas leitor espanhol</option>
-            <option value="Apenas leitor inglês">Apenas leitor inglês</option>
           </select>
         </div>
 

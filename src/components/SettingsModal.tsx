@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Settings, X, Type, Palette, Sun, Moon, Check, Sparkles, RefreshCw, Camera, User, Key, ShieldCheck, ExternalLink, HelpCircle } from "lucide-react";
-import { UserProfile } from "../types";
+import { Settings, X, Type, Palette, Sun, Moon, Check, Sparkles, RefreshCw, Camera, User, Key, ShieldCheck, ExternalLink, HelpCircle, Radio } from "lucide-react";
+import { UserProfile, BuildingInfo } from "../types";
 import PhotoUploader from "./PhotoUploader";
 import GeminiKeyModal from "./GeminiKeyModal";
+import PingramConfigModal from "./PingramConfigModal";
 import { getGeminiApiKey, maskApiKey } from "../utils/geminiApiKey";
+import { getPingramConfig, maskPingramApiKey as maskPingramKey } from "../utils/pingramConfig";
 
 export type FontSizeOption = "5pt" | "8pt" | "12pt" | "14pt" | "18pt" | "24pt";
 export type ColorThemeOption = "emerald" | "ocean" | "amethyst" | "amber" | "crimson" | "monochrome";
@@ -20,6 +22,9 @@ interface SettingsModalProps {
   currentUser?: UserProfile | null;
   onUpdatePhoto?: (newPhotoUrl: string) => Promise<void>;
   onOpenPrivacy?: () => void;
+  building?: BuildingInfo | null;
+  claId?: string;
+  onSaveBuilding?: (updated: BuildingInfo) => void;
 }
 
 export const FONT_SIZES: { value: FontSizeOption; label: string; desc: string }[] = [
@@ -115,12 +120,19 @@ export default function SettingsModal({
   currentUser,
   onUpdatePhoto,
   onOpenPrivacy,
+  building,
+  claId,
+  onSaveBuilding,
 }: SettingsModalProps) {
   const [photoUrl, setPhotoUrl] = useState(currentUser?.photoUrl || "");
   const [isSavingPhoto, setIsSavingPhoto] = useState(false);
   const [photoSavedMsg, setPhotoSavedMsg] = useState("");
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [isPingramModalOpen, setIsPingramModalOpen] = useState(false);
   const [activeApiKey, setActiveApiKey] = useState<string>(getGeminiApiKey());
+  const [activePingramConfig, setActivePingramConfig] = useState(() => {
+    return building?.pingramConfig || getPingramConfig(claId || currentUser?.uid);
+  });
 
   useEffect(() => {
     const handleKeyChange = (e: any) => {
@@ -131,6 +143,22 @@ export default function SettingsModal({
       window.removeEventListener("calangus_api_key_changed", handleKeyChange);
     };
   }, []);
+
+  useEffect(() => {
+    const handlePingramChange = (e: any) => {
+      setActivePingramConfig(e.detail?.config || building?.pingramConfig || getPingramConfig(claId || currentUser?.uid));
+    };
+    window.addEventListener("calangus_pingram_config_changed", handlePingramChange);
+    return () => {
+      window.removeEventListener("calangus_pingram_config_changed", handlePingramChange);
+    };
+  }, [building?.pingramConfig, claId, currentUser?.uid]);
+
+  useEffect(() => {
+    if (building?.pingramConfig) {
+      setActivePingramConfig(building.pingramConfig);
+    }
+  }, [building?.pingramConfig]);
 
   useEffect(() => {
     if (currentUser?.photoUrl !== undefined) {
@@ -187,7 +215,7 @@ export default function SettingsModal({
                   Configurações do Sistema
                 </h3>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black">
-                  CalanguS v3.0
+                  CalanguS v3.2
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
@@ -386,45 +414,100 @@ export default function SettingsModal({
 
           <div className="border-t border-slate-200 dark:border-slate-800" />
 
-          {/* SECTION 4: GOOGLE GEMINI API KEY & OCR */}
-          <div className="space-y-3">
+          {/* SECTION 4: API KEYS & EXTERNAL INTEGRATIONS (CENTRAL UNIFICADA) */}
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-slate-800 dark:text-white font-extrabold text-sm uppercase tracking-wider">
                 <Key className="w-4 h-4 text-emerald-500" />
-                <span>4. Inteligência Artificial & OCR (Google Gemini)</span>
+                <span>4. Chaves de API & Integrações de Serviços</span>
               </div>
-              <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-full">
-                Sessão do Usuário
+              <span className="text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black px-2 py-0.5 rounded-full border border-emerald-500/30">
+                Central Exclusiva de APIs
               </span>
             </div>
 
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Configure sua chave de API gratuita do Google Gemini para realizar leitura óptica (OCR) de documentos de ensalamento e extração de salas.
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+              Todas as credenciais de serviços externos e inteligência artificial são gerenciadas e armazenadas com segurança neste painel central.
             </p>
 
-            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl text-white ${activeApiKey ? "bg-emerald-500" : "bg-amber-500"}`}>
-                  {activeApiKey ? <ShieldCheck className="w-5 h-5" /> : <Key className="w-5 h-5" />}
+            <div className="space-y-3">
+              {/* CARD 1: GOOGLE GEMINI API */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-xl text-white shadow-xs ${activeApiKey ? "bg-emerald-500" : "bg-amber-500"}`}>
+                    {activeApiKey ? <ShieldCheck className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-black text-slate-900 dark:text-white">
+                        Google Gemini API (IA & OCR)
+                      </p>
+                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
+                        activeApiKey 
+                          ? "bg-emerald-500 text-white" 
+                          : "bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                      }`}>
+                        {activeApiKey ? "Chave Ativa" : "Padrão Sistema"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                      {activeApiKey ? maskApiKey(activeApiKey) : "Nenhuma chave pessoal vinculada (grátis)"}
+                    </p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                      OCR inteligente para leitura e extração de salas de ensalamento.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-900 dark:text-white">
-                    {activeApiKey ? "Chave de API Configurada" : "Nenhuma Chave Pessoal Configurada"}
-                  </p>
-                  <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                    {activeApiKey ? maskApiKey(activeApiKey) : "Usará chave padrão do sistema se disponível"}
-                  </p>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsKeyModalOpen(true)}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition cursor-pointer self-stretch sm:self-auto justify-center shrink-0"
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>{activeApiKey ? "Gerenciar Gemini" : "Configurar Gemini"}</span>
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setIsKeyModalOpen(true)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-xs flex items-center gap-1.5 transition cursor-pointer self-stretch sm:self-auto justify-center"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>{activeApiKey ? "Gerenciar Chave / Tutorial" : "Configurar Chave & Tutorial"}</span>
-              </button>
+              {/* CARD 2: PINGRAM API (E-MAIL & SMS) */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-xl text-white shadow-xs ${activePingramConfig && activePingramConfig.apiKey ? "bg-sky-600" : "bg-slate-500"}`}>
+                    <Radio className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-black text-slate-900 dark:text-white">
+                        Pingram API (E-mail & SMS do CLA)
+                      </p>
+                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
+                        activePingramConfig && activePingramConfig.apiKey
+                          ? "bg-sky-600 text-white"
+                          : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                      }`}>
+                        {activePingramConfig && activePingramConfig.apiKey ? "Conectado" : "Não Configurado"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                      {activePingramConfig && activePingramConfig.apiKey
+                        ? `${maskPingramKey(activePingramConfig.apiKey)} • Remetente: ${activePingramConfig.senderName || activePingramConfig.senderEmail || "Padrão"}`
+                        : "Conecte sua conta Pingram para disparos automáticos em lote"}
+                    </p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                      Envio de convocações oficiais por e-mail e alertas SMS no celular dos colaboradores.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPingramModalOpen(true)}
+                  className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition cursor-pointer self-stretch sm:self-auto justify-center shrink-0"
+                >
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>{activePingramConfig && activePingramConfig.apiKey ? "Gerenciar Pingram" : "Configurar Pingram"}</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -461,7 +544,7 @@ export default function SettingsModal({
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Última atualização: Setembro de 2026 (v3.0) • Desenvolvedor: Philippe Wagner M R Araujo
+                    Última atualização: Setembro de 2026 (v3.2) • Desenvolvedor: Philippe Wagner M R Araujo
                   </p>
                 </div>
               </div>
@@ -499,7 +582,7 @@ export default function SettingsModal({
               <span>Restaurar Padrões</span>
             </button>
             <span className="text-[10px] text-slate-400 dark:text-slate-600 font-mono font-bold hidden sm:inline">
-              CalanguS v3.0 (Build 2026)
+              CalanguS v3.2 (Build 2026)
             </span>
           </div>
 
@@ -517,6 +600,16 @@ export default function SettingsModal({
         isOpen={isKeyModalOpen}
         onClose={() => setIsKeyModalOpen(false)}
         onKeySaved={(k) => setActiveApiKey(k)}
+      />
+
+      {/* Pingram API Configuration Modal */}
+      <PingramConfigModal
+        isOpen={isPingramModalOpen}
+        onClose={() => setIsPingramModalOpen(false)}
+        claId={claId || currentUser?.uid}
+        claName={currentUser?.name}
+        building={building}
+        onSaveBuilding={onSaveBuilding}
       />
     </div>
   );

@@ -220,6 +220,26 @@ export function getRoomTargetRequirements(
   const isDuplaAplicador = roomCapacity > (metricsConfig.aplicadoresDuplaThreshold || 60);
 
   if (isSpecial || room.type === "special") {
+    // If room has explicitly configured specializedRoles (from Menu 1/Room details), calculate directly
+    if (room.specializedRoles && room.specializedRoles.length > 0) {
+      const ledorCount = room.specializedRoles.filter(r => r.toLowerCase().includes("ledor")).length;
+      const transcritorCount = room.specializedRoles.filter(r => r.toLowerCase().includes("transcritor")).length;
+      const librasCount = room.specializedRoles.filter(r => r.toLowerCase().includes("libras")).length;
+      const techCount = room.specializedRoles.filter(r => r.toLowerCase().includes("informática") || r.toLowerCase().includes("informatica") || r.toLowerCase().includes("video prova")).length;
+      const otherSpecialCount = room.specializedRoles.length - (ledorCount + transcritorCount + librasCount + techCount);
+
+      return {
+        targetChefes: hasCustomChefes ? room.targetChefes! : (metricsConfig.chefesPerSpecialRoom ?? 1),
+        targetAplicadores: hasCustomAplicadores ? room.targetAplicadores! : (isDuplaAplicador ? 2 : (metricsConfig.aplicadoresPerSpecialRoom ?? 0)),
+        targetLedores: hasCustomLedores ? room.targetLedores! : ledorCount,
+        targetTranscritores: transcritorCount,
+        targetLibras: hasCustomLibras ? room.targetLibras! : librasCount,
+        targetGuiaInterprete: 0,
+        targetTecnicoInfo: techCount,
+        targetAcessibilidade: hasCustomAcess ? room.targetAcessibilidade! : Math.max(0, otherSpecialCount),
+      };
+    }
+
     const ledorTarget = metricsConfig.ledoresPerSpecialRoom ?? metricsConfig.ledorTranscritorPerSpecialRoom ?? 2;
     const transcritorTarget = metricsConfig.transcritoresPerSpecialRoom ?? 1;
     const librasTarget = metricsConfig.tradutoresLibrasPerSpecialRoom ?? metricsConfig.interpreteLibrasPerSpecialRoom ?? 2;
@@ -311,21 +331,45 @@ export function calculateBuildingTargetQuantities(
   const extraAplicadores = 0; // Regra Estrita: A sala extra só tem Chefe de Sala, NÃO possui em nenhum caso aplicador
   const totalAplicadores = calculatedRegularAplicadores + specialAplicadores + extraAplicadores;
 
-  // 3. Tradutor-Intérprete de Libras: 2 por sala especializada com demanda
-  const librasPerSpecial = metricsConfig.tradutoresLibrasPerSpecialRoom ?? metricsConfig.interpreteLibrasPerSpecialRoom ?? 2;
-  const totalLibras = specialRoomsCount * librasPerSpecial;
+  // Specialized Attendance target calculations
+  const hasSpecialized = Boolean(building.hasSpecializedAttendance);
 
-  // 4. Guia-Intérprete de Surdocegos: 3 por sala especializada com demanda
-  const guiaPerSpecial = metricsConfig.guiaInterpretesPerSpecialRoom ?? 3;
-  const totalGuia = specialRoomsCount > 0 ? specialRoomsCount * guiaPerSpecial : 0;
+  // 3. Tradutor-Intérprete de Libras
+  let totalLibras = 0;
+  let totalGuia = 0;
+  let totalLedores = 0;
+  let totalTranscritores = 0;
+  let totalVideoProva = 0;
+  let totalLedorIngles = 0;
+  let totalLedorEspanhol = 0;
+  let totalTranscritorIngles = 0;
+  let totalTranscritorEspanhol = 0;
 
-  // 5. Ledor (Aplicador Especializado): 2 por sala especializada com demanda
-  const ledoresPerSpecial = metricsConfig.ledoresPerSpecialRoom ?? metricsConfig.ledorTranscritorPerSpecialRoom ?? 2;
-  const totalLedores = specialRoomsCount * ledoresPerSpecial;
-
-  // 6. Transcritor (Aplicador Especializado): 1 por participante/sala especializada com demanda
-  const transcritoresPerSpecial = metricsConfig.transcritoresPerSpecialRoom ?? 1;
-  const totalTranscritores = specialRoomsCount * transcritoresPerSpecial;
+  if (hasSpecialized) {
+    if (building.specialRooms && building.specialRooms.length > 0) {
+      building.specialRooms.forEach(sr => {
+        const roles = sr.specializedRoles || (sr.details ? sr.details.split(",").map(s => s.trim()).filter(Boolean) : []);
+        roles.forEach(roleName => {
+          const rLower = roleName.toLowerCase();
+          if (rLower === "ledor") totalLedores++;
+          else if (rLower.includes("ledor") && rLower.includes("ingl")) totalLedorIngles++;
+          else if (rLower.includes("ledor") && rLower.includes("espan")) totalLedorEspanhol++;
+          else if (rLower === "transcritor") totalTranscritores++;
+          else if (rLower.includes("transcritor") && rLower.includes("ingl")) totalTranscritorIngles++;
+          else if (rLower.includes("transcritor") && rLower.includes("espan")) totalTranscritorEspanhol++;
+          else if (rLower.includes("libras")) totalLibras++;
+          else if (rLower.includes("video prova") || rLower.includes("vídeo prova")) totalVideoProva++;
+        });
+      });
+    } else {
+      const librasPerSpecial = metricsConfig.tradutoresLibrasPerSpecialRoom ?? metricsConfig.interpreteLibrasPerSpecialRoom ?? 2;
+      totalLibras = specialRoomsCount * librasPerSpecial;
+      const ledoresPerSpecial = metricsConfig.ledoresPerSpecialRoom ?? metricsConfig.ledorTranscritorPerSpecialRoom ?? 2;
+      totalLedores = specialRoomsCount * ledoresPerSpecial;
+      const transcritoresPerSpecial = metricsConfig.transcritoresPerSpecialRoom ?? 1;
+      totalTranscritores = specialRoomsCount * transcritoresPerSpecial;
+    }
+  }
 
   // 7. Fiscal de Banheiro: 01-15 (2); 16-30 (4); 31-45 (6); 46-52 (8); 53-59 (10); 60-66 (12)
   let totalBanheiro = 0;
@@ -344,14 +388,21 @@ export function calculateBuildingTargetQuantities(
     totalVolantes = totalRoomsCount > 0 ? Math.max(1, Math.ceil(totalRoomsCount / ratio)) : 0;
   }
 
-  // 9. Técnico de Informática: SÓ EXISTE EM CASO QUE O LOCAL TENHA TÉCNICO EM LIBRAS
-  const hasLibrasInLocation = 
-    totalLibras > 0 ||
-    Boolean((building as any).hasLibras) ||
-    Boolean(building.specialDetails && /libras/i.test(building.specialDetails)) ||
-    Boolean(building.specialRooms && building.specialRooms.some(r => (r.targetLibras && r.targetLibras > 0) || /libras/i.test(r.details || (r as any).specialties || "")));
+  // 9. Técnico de Informática: SÓ EXISTE QUANDO HOUVER INDICADO NO MENU 1 QUE TERÁ VIDEO PROVA
+  const hasVideoProva = Boolean(
+    hasSpecialized && (
+      (building.specializedRoles && building.specializedRoles.includes("Video Prova")) ||
+      totalVideoProva > 0 ||
+      Boolean((building as any).hasVideoProva) ||
+      Boolean(building.specialDetails && /video\s*prova/i.test(building.specialDetails)) ||
+      Boolean(building.specialRooms && building.specialRooms.some(r => 
+        (r.specializedRoles && r.specializedRoles.includes("Video Prova")) ||
+        /video\s*prova/i.test(r.details || "")
+      ))
+    )
+  );
 
-  const totalInformatica = (hasLibrasInLocation && totalRoomsCount > 0)
+  const totalInformatica = (hasVideoProva && totalRoomsCount > 0)
     ? Math.max(1, (specialRoomsCount * (metricsConfig.tecnicosInformaticaPerTechRoom || 1)) + (metricsConfig.tecnicosInformaticaPerBuilding || 0))
     : 0;
 
@@ -372,11 +423,17 @@ export function calculateBuildingTargetQuantities(
     "Interprete de Libras": totalLibras,
     "Guia-Intérprete de Surdocegos": totalGuia,
     "Guia-Intérprete": totalGuia,
+    "Ledor": totalLedores,
     "Ledor (Aplicador Especializado)": totalLedores,
     "Ledor/Transcritor": totalLedores,
     "Apenas Ledor": totalLedores,
-    "Transcritor (Aplicador Especializado)": totalTranscritores,
+    "Ledor Inglês": totalLedorIngles,
+    "Ledor Espanhol": totalLedorEspanhol,
     "Transcritor": totalTranscritores,
+    "Transcritor (Aplicador Especializado)": totalTranscritores,
+    "Transcritor Inglês": totalTranscritorIngles,
+    "Transcritor Espanhol": totalTranscritorEspanhol,
+    "Video Prova": totalVideoProva,
     "Fiscal de Banheiro": totalBanheiro,
     "Fiscal Volante": totalVolantes,
     "Fiscal Volante / Corredor": totalVolantes,
@@ -386,6 +443,6 @@ export function calculateBuildingTargetQuantities(
     "Auxiliar de Limpeza": totalLimpeza,
     "Representante do Local": totalRepresentante,
     "Representante da Local": totalRepresentante,
-    "Auxiliar de Acessibilidade": specialRoomsCount * (metricsConfig.auxiliarAcessibilidadePerSpecialRoom || 0)
+    "Auxiliar de Acessibilidade": hasSpecialized ? specialRoomsCount * (metricsConfig.auxiliarAcessibilidadePerSpecialRoom || 0) : 0
   };
 }

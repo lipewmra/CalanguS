@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { CollaboratorInfo, RoomDetails, BuildingInfo, EventConfigInfo } from "../types";
+import { CollaboratorInfo, RoomDetails, BuildingInfo, EventConfigInfo, SPECIALIZED_ROLES, SpecializedRole } from "../types";
 import { getRoomTargetRequirements, calculateBuildingTargetQuantities, calculateOfficialTier } from "../lib/metrics-calculator";
 import CollaboratorFailureModal from "./CollaboratorFailureModal";
 import FiscalAvatar from "./FiscalAvatar";
@@ -14,7 +14,7 @@ import {
   DoorClosed, Settings2, Phone, CheckSquare, Square, TableProperties, ArrowUpDown
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
-import { canonicalizeRoleName } from "../lib/collaborator-utils";
+import { canonicalizeRoleName, isTecnicoInformaticaInformed } from "../lib/collaborator-utils";
 
 export type ExportTemplateType = 
   | "chefe_de_sala" 
@@ -25,6 +25,7 @@ export type ExportTemplateType =
   | "porteiro" 
   | "ensalamento" 
   | "predio" 
+  | "especializados_por_sala"
   | "orion_associados"
   | "orion_pendentes"
   | "personalizado";
@@ -255,6 +256,17 @@ export const EXPORT_TEMPLATES: TemplateMeta[] = [
     colorScheme: "purple"
   },
   {
+    id: "especializados_por_sala",
+    title: "Colaboradores Especializados por Sala",
+    shortTitle: "Especializados por Sala",
+    badge: "Atendimento Especializado",
+    iconName: "layers",
+    fieldsDescription: "Sala, Pavimento, Nome, CPF, Telefone, Função Especializada, Assinatura",
+    description: "Relação de colaboradores com funções especializadas (Ledor, Transcritor, Libras, Video Prova, etc.) alocados por sala.",
+    defaultColumns: ["sala", "andar", "nome", "cpf", "telefone", "funcao", "assinatura"],
+    colorScheme: "purple"
+  },
+  {
     id: "orion_associados",
     title: "Associados ao Orion (Cebraspe)",
     shortTitle: "Orion: Associados",
@@ -331,6 +343,18 @@ function isCollabInTemplate(
   if (template === "predio") {
     // Unir todas as funções operacionais alocadas no prédio
     return isAllocated;
+  }
+  if (template === "especializados_por_sala") {
+    const isSpecializedRole = SPECIALIZED_ROLES.some(sr => 
+      (c.assignedRole && c.assignedRole.toLowerCase() === sr.toLowerCase()) ||
+      (c.specialRole && c.specialRole.toLowerCase() === sr.toLowerCase())
+    );
+    const isInSpecialRoom = rooms.some(r => r.number === c.assignedRoom && (
+      r.type === "special" ||
+      (r.specializedRoles && r.specializedRoles.length > 0) ||
+      (r.details && r.details.trim().length > 0)
+    ));
+    return isAllocated && (isSpecializedRole || isInSpecialRoom);
   }
   if (template === "orion_associados") {
     // Todos os colaboradores já vinculados ao sistema Orion
@@ -549,6 +573,66 @@ export default function DragAndDropReserves({
     return false;
   };
 
+  // A função de TI só deve aparecer para alocação se o CLA informar no Menu 1 ou no Menu 9
+  const hasInformaticaEnabled = useMemo(() => {
+    return isTecnicoInformaticaInformed(building);
+  }, [building]);
+
+  const hasVideoProva = hasInformaticaEnabled;
+
+  const visibleOperationalSectors = useMemo(() => {
+    return OPERATIONAL_SECTORS.filter(s => {
+      if (s.id === "informatica") {
+        return hasInformaticaEnabled;
+      }
+      return true;
+    });
+  }, [hasInformaticaEnabled]);
+
+  const specializedRolesStats = useMemo(() => {
+    if (!building?.hasSpecializedAttendance) return [];
+    let roles = (building.specializedRoles && building.specializedRoles.length > 0)
+      ? building.specializedRoles
+      : SPECIALIZED_ROLES;
+
+    // Técnico de Informática só aparece se informado pelo CLA no Menu 1 ou 9
+    if (!hasInformaticaEnabled) {
+      roles = roles.filter(r => !/inform[áa]tica|ti/i.test(r));
+    }
+
+    return roles.map(roleName => {
+      const target = rooms.reduce((acc, r) => {
+        const roomRoles = r.specializedRoles || (r.details ? r.details.split(",").map(s => s.trim()) : []);
+        return acc + roomRoles.filter(role => role.toLowerCase() === roleName.toLowerCase()).length;
+      }, 0);
+
+      const collabsWithRole = approvedCollaborators.filter(c => 
+        (c.specialRole && c.specialRole.toLowerCase() === roleName.toLowerCase()) ||
+        (c.assignedRole && c.assignedRole.toLowerCase() === roleName.toLowerCase())
+      );
+
+      const totalAssigned = collabsWithRole.length;
+      const allocated = collabsWithRole.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
+      const available = totalAssigned - allocated;
+
+      return {
+        name: roleName,
+        target,
+        totalAssigned,
+        allocated,
+        available
+      };
+    });
+  }, [building, rooms, approvedCollaborators]);
+
+  const specializedSummary = useMemo(() => {
+    const totalTarget = specializedRolesStats.reduce((acc, r) => acc + r.target, 0);
+    const totalAllocated = specializedRolesStats.reduce((acc, r) => acc + r.allocated, 0);
+    const totalAssigned = specializedRolesStats.reduce((acc, r) => acc + r.totalAssigned, 0);
+    const totalAvailable = specializedRolesStats.reduce((acc, r) => acc + r.available, 0);
+    return { totalTarget, totalAllocated, totalAssigned, totalAvailable };
+  }, [specializedRolesStats]);
+
   // Quantitative Stats: Fiscais, Chefes de Sala, Aplicadores, Volantes, Banheiro, Alocados e Reservas
   const stats = useMemo(() => {
     const totalApproved = approvedCollaborators.length;
@@ -602,12 +686,12 @@ export default function DragAndDropReserves({
     const representanteAvailable = representante.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
     const targetRepresentante = buildingTargetQuantities["Representante do Local"] ?? 1;
 
-    // 8. TI
-    const ti = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "informatica"));
+    // 8. TI (Gated by hasVideoProva)
+    const ti = hasVideoProva ? approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "informatica")) : [];
     const tiAssigned = ti.length;
-    const tiAllocated = approvedCollaborators.filter(c => isCollabInSector(c, OPERATIONAL_SECTORS[5])).length;
-    const tiAvailable = ti.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
-    const targetTI = buildingTargetQuantities["Técnico de Informática"] ?? 0;
+    const tiAllocated = hasVideoProva ? approvedCollaborators.filter(c => isCollabInSector(c, OPERATIONAL_SECTORS[5])).length : 0;
+    const tiAvailable = hasVideoProva ? ti.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length : 0;
+    const targetTI = hasVideoProva ? (buildingTargetQuantities["Técnico de Informática"] ?? 0) : 0;
 
     // Demais Fiscais (especializados ou outros)
     const demaisFiscais = approvedCollaborators.filter(c => 
@@ -620,8 +704,8 @@ export default function DragAndDropReserves({
     const demaisFiscaisAllocated = demaisFiscais.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
     const demaisFiscaisAvailable = demaisFiscais.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
 
-    const totalAllocatedRooms = approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && !OPERATIONAL_SECTORS.some(s => isCollabInSector(c, s))).length;
-    const totalAllocatedSectors = approvedCollaborators.filter(c => !c.isReserve && OPERATIONAL_SECTORS.some(s => isCollabInSector(c, s))).length;
+    const totalAllocatedRooms = approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && !visibleOperationalSectors.some(s => isCollabInSector(c, s))).length;
+    const totalAllocatedSectors = approvedCollaborators.filter(c => !c.isReserve && visibleOperationalSectors.some(s => isCollabInSector(c, s))).length;
     const totalReserves = approvedCollaborators.filter(c => c.isReserve || !c.assignedRole || c.assignedRole.trim() === "").length;
     
     // Collaborators with assigned role but no room / unallocated
@@ -629,8 +713,8 @@ export default function DragAndDropReserves({
     const unallocatedNoRole = approvedCollaborators.filter(c => !c.assignedRole || c.assignedRole.trim() === "").length;
 
     // Rooms with at least 1 allocated collaborator
-    const roomsOccupied = new Set(approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && !OPERATIONAL_SECTORS.some(s => isCollabInSector(c, s))).map(c => c.assignedRoom)).size;
-    const sectorsOccupied = OPERATIONAL_SECTORS.filter(s => approvedCollaborators.some(c => isCollabInSector(c, s))).length;
+    const roomsOccupied = new Set(approvedCollaborators.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "" && !visibleOperationalSectors.some(s => isCollabInSector(c, s))).map(c => c.assignedRoom)).size;
+    const sectorsOccupied = visibleOperationalSectors.filter(s => approvedCollaborators.some(c => isCollabInSector(c, s))).length;
 
     return {
       totalApproved,
@@ -677,13 +761,18 @@ export default function DragAndDropReserves({
       roomsOccupied,
       sectorsOccupied
     };
-  }, [approvedCollaborators, buildingTargetQuantities, rooms.length]);
+  }, [approvedCollaborators, buildingTargetQuantities, rooms.length, hasVideoProva, visibleOperationalSectors]);
 
   // Dynamic active roles list mapped with Menu 3 Quantitativo & Collaborators Count
   const activeRolesList = useMemo(() => {
-    const baseRoles = (building?.customRoles && building.customRoles.length > 0)
+    let baseRoles = (building?.customRoles && building.customRoles.length > 0)
       ? building.customRoles.filter(r => !r.hidden)
       : ENEM_ROLES.map(r => ({ name: r.name, desc: r.desc }));
+
+    // Técnico de Informática só aparece para alocação se o CLA informar no Menu 1 ou Menu 9
+    if (!hasInformaticaEnabled) {
+      baseRoles = baseRoles.filter(r => !/inform[áa]tica|técnico\s*de\s*informática|^ti$/i.test(r.name));
+    }
 
     return baseRoles.map(r => {
       const targetQty = buildingTargetQuantities[r.name] ?? building?.rolesTargetQuantities?.[r.name] ?? 0;
@@ -703,7 +792,7 @@ export default function DragAndDropReserves({
         allocatedMembers
       };
     });
-  }, [building, approvedCollaborators, buildingTargetQuantities]);
+  }, [building, approvedCollaborators, buildingTargetQuantities, hasInformaticaEnabled]);
 
   // Functions that have > 0 assigned in Menu 3 OR target quantity > 0 in Menu 3
   const rolesWithQuantity = useMemo(() => {
@@ -744,10 +833,17 @@ export default function DragAndDropReserves({
       list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "informatica"));
     } else if (selectedRoleFilter === "demais_fiscais") {
       list = approvedCollaborators.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && !isChefeDeSalaRole(c.assignedRole) && !isAplicadorRole(c.assignedRole));
+    } else if (selectedRoleFilter === "especializados") {
+      list = approvedCollaborators.filter(c => 
+        SPECIALIZED_ROLES.some(sr => sr === c.assignedRole || sr === c.specialRole)
+      );
     } else if (selectedRoleFilter === "reserva") {
       list = unallocatedReservas;
     } else {
-      list = approvedCollaborators.filter(c => c.assignedRole === selectedRoleFilter);
+      list = approvedCollaborators.filter(c => 
+        c.assignedRole === selectedRoleFilter ||
+        c.specialRole === selectedRoleFilter
+      );
     }
 
     // Apply quick toggle: only unallocated / unassigned
@@ -762,8 +858,9 @@ export default function DragAndDropReserves({
         const matchName = (c.name || "").toLowerCase().includes(q);
         const matchCpf = (c.cpf || "").toLowerCase().includes(q);
         const matchRole = (c.assignedRole || "").toLowerCase().includes(q);
+        const matchSpecialRole = (c.specialRole || "").toLowerCase().includes(q);
         const matchRoom = (c.assignedRoom || "").toLowerCase().includes(q);
-        return matchName || matchCpf || matchRole || matchRoom;
+        return matchName || matchCpf || matchRole || matchSpecialRole || matchRoom;
       });
     }
 
@@ -776,6 +873,25 @@ export default function DragAndDropReserves({
 
     return list;
   }, [selectedRoleFilter, approvedCollaborators, unallocated, unallocatedReservas, searchFilter, onlyUnallocatedToggle, sortOrder]);
+
+  // Specialized roles demanded by the currently managed room
+  const managingRoomSpecialRoles = useMemo(() => {
+    if (!managingRoom) return [];
+    if (managingRoom.specializedRoles && managingRoom.specializedRoles.length > 0) {
+      return managingRoom.specializedRoles;
+    }
+    const matchingSpecialRoom = building?.specialRooms?.find(sr => sr.number === managingRoom.number);
+    if (matchingSpecialRoom?.specializedRoles && matchingSpecialRoom.specializedRoles.length > 0) {
+      return matchingSpecialRoom.specializedRoles;
+    }
+    if (matchingSpecialRoom?.details) {
+      return matchingSpecialRoom.details.split(",").map(s => s.trim()).filter(Boolean);
+    }
+    if (managingRoom.details) {
+      return managingRoom.details.split(",").map(s => s.trim()).filter(Boolean);
+    }
+    return [];
+  }, [managingRoom, building]);
 
   // Map of room number -> { total, chefes, aplicadores } count of allocated collaborators
   const roomOccupancyMap = useMemo(() => {
@@ -803,12 +919,36 @@ export default function DragAndDropReserves({
   const roomModalFilteredCollabs = useMemo(() => {
     if (!managingRoom) return [];
 
+    const isSpecialRoom = managingRoom.type === "special" || managingRoomSpecialRoles.length > 0;
+
     let list: CollaboratorInfo[] = [];
 
     if (roomModalRoleFilter === "all") {
-      list = approvedCollaborators;
+      if (isSpecialRoom && managingRoomSpecialRoles.length > 0) {
+        // Exclusivo para sala especializada: exibir colaboradores que tenham a função especial definida ou já estejam na sala
+        list = approvedCollaborators.filter(c => 
+          c.assignedRoom === managingRoom.number ||
+          managingRoomSpecialRoles.some(sr => sr === c.specialRole || sr === c.assignedRole) ||
+          SPECIALIZED_ROLES.some(sr => sr === c.specialRole || sr === c.assignedRole)
+        );
+      } else {
+        list = approvedCollaborators;
+      }
+    } else if (roomModalRoleFilter === "all_specialized") {
+      list = approvedCollaborators.filter(c => 
+        c.assignedRoom === managingRoom.number ||
+        managingRoomSpecialRoles.some(sr => sr === c.specialRole || sr === c.assignedRole)
+      );
+    } else if (managingRoomSpecialRoles.includes(roomModalRoleFilter)) {
+      // Filtro da função especializada específica
+      list = approvedCollaborators.filter(c => 
+        c.specialRole === roomModalRoleFilter || c.assignedRole === roomModalRoleFilter
+      );
     } else if (roomModalRoleFilter === "unallocated") {
       list = unallocated;
+      if (isSpecialRoom && managingRoomSpecialRoles.length > 0) {
+        list = list.filter(c => managingRoomSpecialRoles.some(sr => sr === c.specialRole || sr === c.assignedRole));
+      }
     } else if (roomModalRoleFilter === "unallocated_with_role") {
       list = approvedCollaborators.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && (!c.assignedRoom || c.assignedRoom.trim() === ""));
     } else if (roomModalRoleFilter === "sem_funcao") {
@@ -822,7 +962,7 @@ export default function DragAndDropReserves({
     } else if (roomModalRoleFilter === "aplicadores" || roomModalRoleFilter === "Aplicador") {
       list = approvedCollaborators.filter(c => isAplicadorRole(c.assignedRole));
     } else {
-      list = approvedCollaborators.filter(c => c.assignedRole === roomModalRoleFilter);
+      list = approvedCollaborators.filter(c => c.assignedRole === roomModalRoleFilter || c.specialRole === roomModalRoleFilter);
     }
 
     if (roomModalOnlyUnallocated) {
@@ -835,12 +975,13 @@ export default function DragAndDropReserves({
         (c.name || "").toLowerCase().includes(q) ||
         (c.cpf || "").toLowerCase().includes(q) ||
         (c.assignedRole || "").toLowerCase().includes(q) ||
+        (c.specialRole || "").toLowerCase().includes(q) ||
         (c.assignedRoom || "").toLowerCase().includes(q)
       );
     }
 
     return list;
-  }, [managingRoom, approvedCollaborators, unallocated, unallocatedReservas, roomModalRoleFilter, roomModalOnlyUnallocated, roomModalSearch]);
+  }, [managingRoom, managingRoomSpecialRoles, approvedCollaborators, unallocated, unallocatedReservas, roomModalRoleFilter, roomModalOnlyUnallocated, roomModalSearch]);
 
   // Filtered collaborators list inside Direct Sector Management Modal
   const sectorModalFilteredCollabs = useMemo(() => {
@@ -1624,9 +1765,11 @@ export default function DragAndDropReserves({
             <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-800 dark:text-purple-300 font-bold text-[10px]">
               🏛️ Representante: {stats.representanteAssigned}/{stats.targetRepresentante} assoc. ({stats.representanteAllocated} aloc.)
             </span>
-            <span className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-800 dark:text-sky-300 font-bold text-[10px]">
-              💻 TI: {stats.tiAssigned}/{stats.targetTI} assoc. ({stats.tiAllocated} aloc.)
-            </span>
+            {hasVideoProva && (
+              <span className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-800 dark:text-sky-300 font-bold text-[10px]">
+                💻 TI: {stats.tiAssigned}/{stats.targetTI} assoc. ({stats.tiAllocated} aloc.)
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1638,6 +1781,57 @@ export default function DragAndDropReserves({
             </span>
           </div>
         </div>
+
+        {/* Atendimento Especializado Strip (Gated by Menu 1 CLA Setting) */}
+        {building?.hasSpecializedAttendance && specializedRolesStats.length > 0 && (
+          <div className="p-3.5 bg-purple-50/70 dark:bg-purple-950/25 border-2 border-purple-200 dark:border-purple-800/60 rounded-2xl flex flex-col gap-2.5 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-display font-black text-purple-900 dark:text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>♿ Atendimento Especializado</span>
+                </span>
+                <span className="text-[10px] bg-purple-200/80 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300 px-2.5 py-0.5 rounded-full font-bold">
+                  {specializedSummary.totalAllocated}/{specializedSummary.totalTarget > 0 ? specializedSummary.totalTarget : specializedSummary.totalAssigned} alocados nas salas
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10.5px] text-purple-700 dark:text-purple-300 font-extrabold">
+                  {specializedSummary.totalAvailable} disponíveis para alocação
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRoleFilter("especializados")}
+                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                    selectedRoleFilter === "especializados"
+                      ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                      : "bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700 hover:bg-purple-100/50"
+                  }`}
+                >
+                  Ver Todos Especializados
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-purple-200/60 dark:border-purple-800/40">
+              {specializedRolesStats.map((sr) => (
+                <button
+                  key={sr.name}
+                  type="button"
+                  onClick={() => setSelectedRoleFilter(sr.name)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer flex items-center gap-1.5 border ${
+                    selectedRoleFilter === sr.name
+                      ? "bg-purple-600 text-white border-purple-600 shadow-xs ring-2 ring-purple-400/40"
+                      : "bg-white dark:bg-[#0c1220] text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100/50"
+                  }`}
+                >
+                  <span>{sr.name}:</span>
+                  <span className="font-mono font-black">{sr.totalAssigned}{sr.target > 0 ? `/${sr.target}` : ""}</span>
+                  <span className="text-[9px] opacity-75">({sr.allocated} aloc.)</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Layout Grid */}
@@ -1960,6 +2154,24 @@ export default function DragAndDropReserves({
                   </button>
                 ))}
 
+              {/* Specialized attendance filter pills (Gated by Menu 1 CLA Setting) */}
+              {building?.hasSpecializedAttendance && specializedRolesStats.map((sr) => (
+                <button
+                  key={sr.name}
+                  type="button"
+                  onClick={() => setSelectedRoleFilter(sr.name)}
+                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                    selectedRoleFilter === sr.name
+                      ? "bg-purple-600 text-white shadow-xs ring-2 ring-purple-500/40"
+                      : "bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 hover:bg-purple-500/20"
+                  }`}
+                >
+                  <span>♿</span>
+                  <span>{sr.name}</span>
+                  <span className="font-mono text-[9px]">({sr.totalAssigned}{sr.target > 0 ? `/${sr.target}` : ""})</span>
+                </button>
+              ))}
+
               {/* 7. Reserva Geral */}
               <button
                 type="button"
@@ -2244,6 +2456,38 @@ export default function DragAndDropReserves({
                       </span>
                     </div>
 
+                    {/* Specialized Roles Badges on Room Card (Gated by hasSpecializedAttendance) */}
+                    {building?.hasSpecializedAttendance && (
+                      (() => {
+                        const roles = room.specializedRoles || (room.details ? room.details.split(",").map(s => s.trim()).filter(Boolean) : []);
+                        if (!roles || roles.length === 0) return null;
+                        return (
+                          <div className="mb-2 flex flex-wrap gap-1">
+                            {roles.map((sr) => {
+                              const isFilled = assignedCollabs.some(c => 
+                                (c.specialRole && c.specialRole.toLowerCase() === sr.toLowerCase()) ||
+                                (c.assignedRole && c.assignedRole.toLowerCase() === sr.toLowerCase())
+                              );
+                              return (
+                                <span
+                                  key={sr}
+                                  className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1 border ${
+                                    isFilled
+                                      ? "bg-purple-500/20 text-purple-800 dark:text-purple-300 border-purple-500/40"
+                                      : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30"
+                                  }`}
+                                  title={isFilled ? `Função preenchida: ${sr}` : `Função pendente: ${sr}`}
+                                >
+                                  <span>♿ {sr}</span>
+                                  <span className="font-mono">{isFilled ? "✓" : "⚠"}</span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()
+                    )}
+
                     <div className="space-y-2 min-h-[110px] max-h-[260px] overflow-y-auto pr-1">
                       {assignedCollabs.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center text-slate-400 space-y-1.5">
@@ -2397,7 +2641,7 @@ export default function DragAndDropReserves({
 
             {/* Grid of Operational Sectors */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {OPERATIONAL_SECTORS.map((sector) => {
+              {visibleOperationalSectors.map((sector) => {
                 const assignedToSector = approvedCollaborators.filter(c => isCollabInSector(c, sector));
                 const targetCount = getSectorTarget(sector.id);
                 const isFullyStaffed = assignedToSector.length >= targetCount && targetCount > 0;
@@ -2602,6 +2846,125 @@ export default function DragAndDropReserves({
 
             {/* Scrollable Content Body */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+
+              {/* SECTION: Atendimento Especializado da Sala (Gated by Menu 1 CLA Setting) */}
+              {building?.hasSpecializedAttendance && (
+                <div className="p-4 bg-purple-50/80 dark:bg-purple-950/30 rounded-2xl border-2 border-purple-200 dark:border-purple-800/60 space-y-3 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">♿</span>
+                      <div>
+                        <h4 className="text-xs font-display font-black text-purple-900 dark:text-purple-300 uppercase tracking-wider">
+                          Atendimento Especializado nesta Sala
+                        </h4>
+                        <p className="text-[10px] text-purple-700 dark:text-purple-400">
+                          Selecione as funções especializadas necessárias para a sala <strong>{managingRoom.number}</strong>
+                        </p>
+                      </div>
+                    </div>
+                    {managingRoomSpecialRoles.length > 0 && (
+                      <span className="text-[10.5px] font-bold px-2.5 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
+                        {managingRoomSpecialRoles.length} {managingRoomSpecialRoles.length === 1 ? "função necessária" : "funções necessárias"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Checkbox selector for specialized functions */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-purple-200/80 dark:border-purple-800/40">
+                    {(building.specializedRoles && building.specializedRoles.length > 0 ? building.specializedRoles : SPECIALIZED_ROLES)
+                      .filter(roleName => hasInformaticaEnabled || !/inform[áa]tica|ti/i.test(roleName))
+                      .map((roleName) => {
+                      const isChecked = managingRoomSpecialRoles.includes(roleName);
+                      // Check if anyone in room fills this role
+                      const assignedInRoomWithRole = approvedCollaborators.filter(c => 
+                        !c.isReserve && 
+                        c.assignedRoom === managingRoom.number &&
+                        ((c.specialRole && c.specialRole.toLowerCase() === roleName.toLowerCase()) ||
+                         (c.assignedRole && c.assignedRole.toLowerCase() === roleName.toLowerCase()))
+                      );
+
+                      return (
+                        <label
+                          key={roleName}
+                          className={`flex items-start gap-2 p-2 rounded-xl border text-xs cursor-pointer transition select-none ${
+                            isChecked
+                              ? "bg-purple-100 dark:bg-purple-900/50 border-purple-400 dark:border-purple-600 text-purple-950 dark:text-purple-100 font-bold"
+                              : "bg-white dark:bg-slate-900/60 border-purple-200 dark:border-purple-900/40 text-slate-600 dark:text-slate-400 hover:border-purple-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              const updatedRoles = checked
+                                ? [...managingRoomSpecialRoles, roleName]
+                                : managingRoomSpecialRoles.filter(r => r !== roleName);
+
+                              const updatedRoom = {
+                                ...managingRoom,
+                                specializedRoles: updatedRoles,
+                                type: updatedRoles.length > 0 ? ("special" as const) : managingRoom.type
+                              };
+                              setManagingRoom(updatedRoom);
+
+                              if (building && onSaveBuilding) {
+                                const updatedRooms = (building.rooms || []).map(r => 
+                                  r.number === managingRoom.number
+                                    ? { ...r, specializedRoles: updatedRoles, type: updatedRoles.length > 0 ? ("special" as const) : r.type }
+                                    : r
+                                );
+                                onSaveBuilding({
+                                  ...building,
+                                  rooms: updatedRooms
+                                }).catch(console.error);
+                              }
+                            }}
+                            className="mt-0.5 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="block truncate text-[11px] leading-tight">{roleName}</span>
+                            {isChecked && (
+                              <span className={`text-[9px] block mt-0.5 font-bold ${
+                                assignedInRoomWithRole.length > 0
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : "text-amber-700 dark:text-amber-400"
+                              }`}>
+                                {assignedInRoomWithRole.length > 0
+                                  ? `✓ Preenchido (${assignedInRoomWithRole[0].name.split(" ")[0]})`
+                                  : "⚠ Vago na sala"}
+                              </span>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Quick filter buttons for the room's specialized roles */}
+                  {managingRoomSpecialRoles.length > 0 && (
+                    <div className="pt-2 border-t border-purple-200/80 dark:border-purple-800/40 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] text-purple-800 dark:text-purple-300 font-bold">
+                        Filtrar candidatos com a função:
+                      </span>
+                      {managingRoomSpecialRoles.map(role => (
+                        <button
+                          key={role}
+                          type="button"
+                          onClick={() => setRoomModalRoleFilter(role)}
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                            roomModalRoleFilter === role
+                              ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                              : "bg-white dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 border-purple-300 dark:border-purple-700 hover:bg-purple-100"
+                          }`}
+                        >
+                          + Buscar {role}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               
               {/* SECTION 1: Current Staff In This Room */}
               {(() => {
@@ -2942,6 +3305,12 @@ export default function DragAndDropReserves({
                                   <span>{collab.assignedRole || "Fiscal de Sala"}</span>
                                 </span>
 
+                                {collab.specialRole && (
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-900 dark:text-purple-300 border border-purple-500/40 flex items-center gap-1">
+                                    <span>♿ {collab.specialRole}</span>
+                                  </span>
+                                )}
+
                                 {isAlreadyInThisRoom ? (
                                   <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-emerald-500 text-white dark:bg-emerald-500 dark:text-slate-950">
                                     Alocado nesta sala
@@ -2974,7 +3343,7 @@ export default function DragAndDropReserves({
                                 Desalocar desta Sala
                               </button>
                             ) : (
-                              <div className="flex items-center gap-1.5 w-full">
+                              <div className="flex flex-wrap items-center gap-1.5 w-full">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -2985,10 +3354,27 @@ export default function DragAndDropReserves({
                                     setSuccessMsg(`${collab.name} alocado na ${managingRoom.number} como ${designatedRole}!`);
                                     setTimeout(() => setSuccessMsg(null), 3000);
                                   }}
-                                  className="flex-1 py-1.5 px-3 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-slate-950 rounded-xl transition shadow-xs cursor-pointer active:scale-95 text-center truncate"
+                                  className="flex-1 min-w-[120px] py-1.5 px-3 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-slate-950 rounded-xl transition shadow-xs cursor-pointer active:scale-95 text-center truncate"
                                 >
                                   + Alocar nesta Sala
                                 </button>
+
+                                {/* Specialized Role Quick Allocate Button */}
+                                {(collab.specialRole || (collab.assignedRole && SPECIALIZED_ROLES.some(sr => sr.toLowerCase() === collab.assignedRole?.toLowerCase()))) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const specRole = collab.specialRole || collab.assignedRole;
+                                      onMove(collab.id!, false, managingRoom.number, specRole);
+                                      setSuccessMsg(`${collab.name} alocado na ${managingRoom.number} como ${specRole}!`);
+                                      setTimeout(() => setSuccessMsg(null), 3000);
+                                    }}
+                                    className="py-1.5 px-2.5 text-[10.5px] font-extrabold text-purple-800 dark:text-purple-300 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 rounded-xl transition cursor-pointer active:scale-95 whitespace-nowrap shadow-xs"
+                                    title={`Alocar como ${collab.specialRole || collab.assignedRole}`}
+                                  >
+                                    ♿ + {collab.specialRole || collab.assignedRole}
+                                  </button>
+                                )}
 
                                 {!isChefe && (
                                   <button
@@ -3749,7 +4135,9 @@ export default function DragAndDropReserves({
                   <option value="Guia-Intérprete de Surdocegos">Guia-Intérprete de Surdocegos</option>
                   <option value="Ledor (Aplicador Especializado)">Ledor (Aplicador Especializado)</option>
                   <option value="Transcritor (Aplicador Especializado)">Transcritor (Aplicador Especializado)</option>
-                  <option value="Técnico de Informática">Técnico de Informática</option>
+                  {hasInformaticaEnabled && (
+                    <option value="Técnico de Informática">Técnico de Informática</option>
+                  )}
                 </select>
               </div>
 
@@ -3916,6 +4304,7 @@ export default function DragAndDropReserves({
                               {tmpl.id === "porteiro" && "🚪"}
                               {tmpl.id === "ensalamento" && "📚"}
                               {tmpl.id === "predio" && "🏛️"}
+                              {tmpl.id === "especializados_por_sala" && "♿"}
                               {tmpl.id === "orion_associados" && "⭐"}
                               {tmpl.id === "orion_pendentes" && "⏳"}
                               {tmpl.id === "personalizado" && "⚙️"}

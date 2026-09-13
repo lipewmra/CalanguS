@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BuildingInfo, RoomDetails } from "../types";
+import { BuildingInfo, RoomDetails, SPECIALIZED_ROLES, SpecializedRole } from "../types";
 import {
   Landmark,
   Save,
@@ -19,20 +19,12 @@ import {
   HelpCircle,
   ShieldCheck,
   Settings,
-  Radio,
 } from "lucide-react";
-import GeminiKeyModal from "./GeminiKeyModal";
-import PingramConfigModal from "./PingramConfigModal";
 import {
   getGeminiApiKey,
   maskApiKey,
   hasGeminiApiKey,
 } from "../utils/geminiApiKey";
-import {
-  getPingramConfig,
-  maskPingramApiKey as maskPingramKey,
-  hasPingramConfig,
-} from "../utils/pingramConfig";
 
 export const FLOOR_OPTIONS = [
   "10º Andar",
@@ -74,6 +66,11 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
   const [specialDetails, setSpecialDetails] = useState("");
   const [extraRoomsCount, setExtraRoomsCount] = useState(0);
   
+  // Specialized Attendance states
+  const [hasSpecializedAttendance, setHasSpecializedAttendance] = useState<boolean>(false);
+  const [specializedRoles, setSpecializedRoles] = useState<string[]>([]);
+  const [openRoomRolePicker, setOpenRoomRolePicker] = useState<number | null>(null);
+  
   const [rooms, setRooms] = useState<RoomDetails[]>([]);
   const [specialRooms, setSpecialRooms] = useState<RoomDetails[]>([]);
   const [extraRooms, setExtraRooms] = useState<RoomDetails[]>([]);
@@ -85,30 +82,18 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [ocrSuccessMsg, setOcrSuccessMsg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  // Gemini API Key & Tutorial states
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
   const [activeApiKey, setActiveApiKey] = useState<string>(getGeminiApiKey());
-
-  // Pingram API Key & Config states
-  const [isPingramModalOpen, setIsPingramModalOpen] = useState(false);
-  const [activePingramConfig, setActivePingramConfig] = useState(() => getPingramConfig(claId));
 
   useEffect(() => {
     const handleKeyChange = (e: any) => {
       setActiveApiKey(e.detail?.apiKey || getGeminiApiKey());
     };
-    const handlePingramChange = (e: any) => {
-      setActivePingramConfig(e.detail?.config || getPingramConfig(claId));
-    };
 
     window.addEventListener("calangus_api_key_changed", handleKeyChange);
-    window.addEventListener("calangus_pingram_config_changed", handlePingramChange);
     return () => {
       window.removeEventListener("calangus_api_key_changed", handleKeyChange);
-      window.removeEventListener("calangus_pingram_config_changed", handlePingramChange);
     };
-  }, [claId]);
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -159,10 +144,11 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       const json = await res.json();
 
       if (!res.ok || !json.success) {
-        if (json.requiresApiKey) {
-          setIsKeyModalOpen(true);
-        }
-        throw new Error(json.error || "Falha no processamento do OCR de ensalamento.");
+        throw new Error(
+          json.requiresApiKey
+            ? "Chave de API do Gemini necessária. Acesse o menu Configurações (ícone ⚙️ no topo) para cadastrar sua chave."
+            : (json.error || "Falha no processamento do OCR de ensalamento.")
+        );
       }
 
       const data = json.data;
@@ -232,6 +218,18 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       setSpecialRoomsCount(initialBuilding.specialRoomsCount || 0);
       setSpecialDetails(initialBuilding.specialDetails || "");
       setExtraRoomsCount(initialBuilding.extraRoomsCount || 0);
+
+      const hasSpec = initialBuilding.hasSpecializedAttendance ?? (
+        (initialBuilding.specialRoomsCount !== undefined && initialBuilding.specialRoomsCount > 0) ||
+        (initialBuilding.specializedRoles && initialBuilding.specializedRoles.length > 0) ||
+        false
+      );
+      setHasSpecializedAttendance(hasSpec);
+      setSpecializedRoles(
+        initialBuilding.specializedRoles && initialBuilding.specializedRoles.length > 0
+          ? initialBuilding.specializedRoles
+          : (hasSpec ? [...SPECIALIZED_ROLES] : [])
+      );
       
       if (initialBuilding.rooms && initialBuilding.rooms.length > 0) {
         setRooms(initialBuilding.rooms);
@@ -282,6 +280,8 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       setRooms([]);
       setSpecialRooms([]);
       setExtraRooms([]);
+      setHasSpecializedAttendance(false);
+      setSpecializedRoles([]);
     }
   }, [initialBuilding]);
 
@@ -351,6 +351,65 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       updated[index] = {
         ...updated[index],
         [field]: field === "capacity" ? Number(value) || 0 : value,
+      };
+      return updated;
+    });
+  };
+
+  const handleToggleRoomSpecializedRole = (roomIndex: number, role: string) => {
+    setSpecialRooms((prev) => {
+      const updated = [...prev];
+      const room = updated[roomIndex];
+      const currentRoles: string[] = room.specializedRoles ? [...room.specializedRoles] : (
+        room.details ? room.details.split(",").map(s => s.trim()).filter(Boolean) : []
+      );
+      let newRoles: string[];
+      if (currentRoles.includes(role)) {
+        newRoles = currentRoles.filter(r => r !== role);
+      } else {
+        newRoles = [...currentRoles, role];
+      }
+      updated[roomIndex] = {
+        ...room,
+        specializedRoles: newRoles,
+        details: newRoles.join(", "),
+      };
+      return updated;
+    });
+  };
+
+  const handleAddRoleInstance = (roomIndex: number, role: string) => {
+    setSpecialRooms((prev) => {
+      const updated = [...prev];
+      const room = updated[roomIndex];
+      const currentRoles: string[] = room.specializedRoles ? [...room.specializedRoles] : (
+        room.details ? room.details.split(",").map(s => s.trim()).filter(Boolean) : []
+      );
+      const newRoles = [...currentRoles, role];
+      updated[roomIndex] = {
+        ...room,
+        specializedRoles: newRoles,
+        details: newRoles.join(", "),
+      };
+      return updated;
+    });
+  };
+
+  const handleRemoveRoleInstance = (roomIndex: number, role: string) => {
+    setSpecialRooms((prev) => {
+      const updated = [...prev];
+      const room = updated[roomIndex];
+      const currentRoles: string[] = room.specializedRoles ? [...room.specializedRoles] : (
+        room.details ? room.details.split(",").map(s => s.trim()).filter(Boolean) : []
+      );
+      const idxToRemove = currentRoles.lastIndexOf(role);
+      if (idxToRemove >= 0) {
+        currentRoles.splice(idxToRemove, 1);
+      }
+      updated[roomIndex] = {
+        ...room,
+        specializedRoles: [...currentRoles],
+        details: currentRoles.join(", "),
       };
       return updated;
     });
@@ -426,6 +485,8 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       specialRoomsCount: Number(specialRoomsCount),
       specialDetails,
       extraRoomsCount: Number(extraRoomsCount),
+      hasSpecializedAttendance: Boolean(hasSpecializedAttendance),
+      specializedRoles: hasSpecializedAttendance ? specializedRoles : [],
       rooms,
       specialRooms,
       extraRooms,
@@ -500,31 +561,12 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
             </div>
           </div>
 
-          {/* Status da Chave de API do CLA */}
+          {/* Badge Informativo de OCR */}
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            {activeApiKey ? (
-              <button
-                type="button"
-                onClick={() => setIsKeyModalOpen(true)}
-                className="px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-850 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-                title="Chave pessoal configurada. Clique para gerenciar ou testar."
-              >
-                <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                <span className="font-mono text-[11px]">{maskApiKey(activeApiKey)}</span>
-                <span className="text-[10px] uppercase font-extrabold bg-emerald-500 text-white px-1.5 py-0.5 rounded">Ativa</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setIsKeyModalOpen(true)}
-                className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-900 dark:text-amber-300 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition cursor-pointer animate-pulse"
-                title="Clique para ver o tutorial e inserir sua chave Google Gemini gratuita"
-              >
-                <Key className="w-4 h-4 text-amber-500" />
-                <span>Configurar Chave de API Grátis</span>
-                <HelpCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              </button>
-            )}
+            <span className="text-[10px] font-bold px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20 flex items-center gap-1.5 shadow-2xs">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Processamento Óptico Automático</span>
+            </span>
           </div>
         </div>
 
@@ -569,15 +611,9 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
               <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
               <span>{ocrError}</span>
             </div>
-            {!activeApiKey && (
-              <button
-                type="button"
-                onClick={() => setIsKeyModalOpen(true)}
-                className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold rounded-lg shrink-0 cursor-pointer transition"
-              >
-                Adicionar Minha Chave
-              </button>
-            )}
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+              Chaves de API são gerenciadas no menu Configurações (⚙️)
+            </span>
           </div>
         )}
 
@@ -589,50 +625,130 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
         )}
       </div>
 
-      {/* MÓDULO PINGRAM API (E-MAIL & SMS) PARA O CLA */}
-      <div className="mb-6 p-4 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-amber-500/10 dark:from-sky-950/40 dark:via-indigo-950/40 dark:to-amber-950/40 border-2 border-sky-500/30 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-md">
-            <Radio className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <span>Pingram API • E-mail & SMS do CLA</span>
-              <span className="text-[9px] bg-sky-600 text-white px-2 py-0.5 rounded-full font-mono font-black">VERCEL READY</span>
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-              Cada CLA pode conectar sua própria chave do Pingram para disparar e-mails e SMS automáticos para seus colaboradores.
-            </p>
-          </div>
-        </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* ATENDIMENTO ESPECIALIZADO NO TOPO DO MENU 1 */}
+        <div className="p-5 bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-teal-500/10 dark:from-purple-950/40 dark:via-indigo-950/40 dark:to-teal-950/40 border-2 border-purple-500/30 rounded-2xl shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-purple-600 text-white rounded-xl shadow-md shrink-0">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <span>Atendimento Especializado na Coordenação</span>
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-mono font-black ${
+                    hasSpecializedAttendance 
+                      ? "bg-purple-600 text-white" 
+                      : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                  }`}>
+                    {hasSpecializedAttendance ? "HABILITADO" : "NÃO HABILITADO"}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mt-0.5">
+                  Indique se este local de aplicação possui atendimento especializado e selecione as funções especiais requeridas.
+                </p>
+              </div>
+            </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-          {activePingramConfig && activePingramConfig.apiKey ? (
-            <button
-              type="button"
-              onClick={() => setIsPingramModalOpen(true)}
-              className="px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-850 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-              title="Pingram configurado para este CLA. Clique para alterar ou testar."
-            >
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span className="font-mono text-[11px]">{maskPingramKey(activePingramConfig.apiKey)}</span>
-              <span className="text-[10px] uppercase font-extrabold bg-emerald-500 text-white px-1.5 py-0.5 rounded">Ativo</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIsPingramModalOpen(true)}
-              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition cursor-pointer"
-              title="Configurar chave de API do Pingram para envio de E-mail e SMS"
-            >
-              <Key className="w-4 h-4" />
-              <span>Configurar API Pingram</span>
-            </button>
+            {/* Toggle Checkbox */}
+            <label className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border-2 border-purple-500/50 cursor-pointer shadow-xs hover:border-purple-600 transition shrink-0 select-none">
+              <input
+                type="checkbox"
+                checked={hasSpecializedAttendance}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setHasSpecializedAttendance(checked);
+                  if (checked && specializedRoles.length === 0) {
+                    setSpecializedRoles([...SPECIALIZED_ROLES]);
+                  }
+                }}
+                disabled={isReadOnly}
+                className="w-5 h-5 rounded text-purple-600 focus:ring-purple-500 cursor-pointer accent-purple-600"
+              />
+              <span className="text-xs font-black text-slate-900 dark:text-white">
+                Possui Atendimento Especializado
+              </span>
+            </label>
+          </div>
+
+          {/* Lista com checkbox com todas as funções especializadas */}
+          {hasSpecializedAttendance && (
+            <div className="pt-3 border-t border-purple-500/20 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                  <span>Funções Especializadas Disponíveis ({specializedRoles.length} de {SPECIALIZED_ROLES.length}):</span>
+                </span>
+                {!isReadOnly && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSpecializedRoles([...SPECIALIZED_ROLES])}
+                      className="text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                    >
+                      Marcar todas
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-700">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setSpecializedRoles([])}
+                      className="text-[10px] font-bold text-slate-500 hover:underline cursor-pointer"
+                    >
+                      Desmarcar todas
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {SPECIALIZED_ROLES.map((role) => {
+                  const isChecked = specializedRoles.includes(role);
+                  const isTI = role === "Técnico de Informática";
+                  const hasVideoProva = specializedRoles.includes("Video Prova");
+
+                  return (
+                    <label
+                      key={role}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border-2 transition cursor-pointer select-none ${
+                        isChecked
+                          ? "bg-purple-500/15 border-purple-500 dark:bg-purple-950/40 dark:border-purple-600"
+                          : "bg-white/70 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-purple-300"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            if (role === "Video Prova") {
+                              setSpecializedRoles(prev => Array.from(new Set([...prev, "Video Prova", "Técnico de Informática"])));
+                            } else {
+                              setSpecializedRoles(prev => [...prev, role]);
+                            }
+                          } else {
+                            setSpecializedRoles(prev => prev.filter(r => r !== role));
+                          }
+                        }}
+                        disabled={isReadOnly}
+                        className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 accent-purple-600 cursor-pointer"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
+                          {role}
+                        </span>
+                        {isTI && (
+                          <span className={`text-[9px] block ${isChecked ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-slate-500 dark:text-slate-400 font-medium"}`}>
+                            {isChecked ? "✓ Informado para Alocação no Menu 3" : "Habilita a alocação de TI no Menu 3"}
+                          </span>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
-      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Section 1: Endereço & Nome */}
           <div className="space-y-4">
@@ -885,94 +1001,228 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
 
             <div className="p-5 bg-indigo-500/5 dark:bg-[#070b13]/55 border-2 border-indigo-500/10 dark:border-slate-800 rounded-2xl shadow-inner space-y-4">
               <div>
-                <h4 className="text-xs font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5 mb-3">
+                <h4 className="text-xs font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
                   <AlertCircle className="w-4 h-4 text-emerald-500" />
                   <span>Acessibilidade & Atendimento Especializado</span>
                 </h4>
 
-                <div className="max-w-xs">
-                  <label className="block text-[9px] uppercase font-extrabold tracking-wider text-slate-500 dark:text-slate-400 mb-1">Quantidade de Salas Especiais</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={specialRoomsCount}
-                    onChange={(e) => handleSpecialRoomsCountChange(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-full max-w-[140px] border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden font-mono font-bold text-xs disabled:opacity-60"
-                    disabled={isReadOnly}
-                  />
-                </div>
-              </div>
-
-              {/* Lista de Salas Especializadas configuradas */}
-              {specialRooms.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase font-extrabold tracking-wider text-indigo-550 dark:text-indigo-400">
-                      ♿ Detalhamento das {specialRooms.length} Salas Especializadas
-                    </span>
-                    <span className="text-[9px] text-slate-450 dark:text-slate-440 font-medium">Configure número, capacidade, andar e atendimento específico</span>
+                {!hasSpecializedAttendance ? (
+                  <div className="p-3.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="text-lg">♿</span>
+                    <div>
+                      <span className="font-bold block text-slate-700 dark:text-slate-300">Atendimento Especializado Desabilitado</span>
+                      <span>Para cadastrar salas especiais e detalhar funções de acessibilidade, marque a opção &quot;Possui Atendimento Especializado&quot; no topo deste formulário.</span>
+                    </div>
                   </div>
-                  <div className="max-h-56 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
-                    {specialRooms.map((room, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-2 p-2 bg-white dark:bg-[#101726]/60 border border-slate-200 dark:border-slate-800 rounded-lg items-center animate-fade-in">
-                        <div className="col-span-1 text-[11px] font-mono text-slate-400 text-center font-bold">
-                          #{index + 1}
+                ) : (
+                  <>
+                    <div className="max-w-xs">
+                      <label className="block text-[9px] uppercase font-extrabold tracking-wider text-slate-500 dark:text-slate-400 mb-1">Quantidade de Salas Especiais</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={specialRoomsCount}
+                        onChange={(e) => handleSpecialRoomsCountChange(Math.max(0, parseInt(e.target.value) || 0))}
+                        className="w-full max-w-[140px] border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 bg-white dark:bg-[#101726] text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden font-mono font-bold text-xs disabled:opacity-60"
+                        disabled={isReadOnly}
+                      />
+                    </div>
+
+                    {/* Lista de Salas Especializadas configuradas */}
+                    {specialRooms.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-1">
+                          <span className="text-[10px] uppercase font-extrabold tracking-wider text-indigo-550 dark:text-indigo-400">
+                            ♿ Detalhamento das {specialRooms.length} Salas Especializadas
+                          </span>
+                          <span className="text-[9px] text-slate-450 dark:text-slate-440 font-medium">
+                            Selecione as funções especializadas requeridas para cada sala
+                          </span>
                         </div>
-                        <div className="col-span-2">
-                          <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Número</span>
-                          <input
-                            type="text"
-                            value={room.number}
-                            onChange={(e) => handleSpecialRoomFieldChange(index, "number", e.target.value)}
-                            placeholder="Ex: S-101"
-                            className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
-                            required
-                            disabled={isReadOnly}
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Capac.</span>
-                          <input
-                            type="number"
-                            value={room.capacity}
-                            onChange={(e) => handleSpecialRoomFieldChange(index, "capacity", parseInt(e.target.value) || 0)}
-                            className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
-                            min="1"
-                            required
-                            disabled={isReadOnly}
-                          />
-                        </div>
-                        <div className="col-span-3">
-                          <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Andar</span>
-                          <select
-                            value={room.floor}
-                            onChange={(e) => handleSpecialRoomFieldChange(index, "floor", e.target.value)}
-                            className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold text-slate-800 dark:text-white focus:outline-hidden disabled:opacity-60 font-mono"
-                            required
-                            disabled={isReadOnly}
-                          >
-                            {FLOOR_OPTIONS.map((floor) => (
-                              <option key={floor} value={floor}>{floor}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="col-span-4">
-                          <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Detalhamento / Especificidade</span>
-                          <input
-                            type="text"
-                            value={room.details || ""}
-                            onChange={(e) => handleSpecialRoomFieldChange(index, "details", e.target.value)}
-                            placeholder="Ex: Libras, Apenas Ledor, Leitor transcritor espanhol, Leitor transcritor inglês, Apenas leitor espanhol, Apenas leitor inglês"
-                            className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-medium text-slate-850 dark:text-white disabled:opacity-60"
-                            required
-                            disabled={isReadOnly}
-                          />
+                        <div className="max-h-96 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+                          {specialRooms.map((room, index) => {
+                            const availableRoles = specializedRoles.length > 0 ? specializedRoles : SPECIALIZED_ROLES;
+                            const roomRoles: string[] = room.specializedRoles || (
+                              room.details ? room.details.split(",").map(s => s.trim()).filter(Boolean) : []
+                            );
+                            const counts: Record<string, number> = {};
+                            roomRoles.forEach(r => { counts[r] = (counts[r] || 0) + 1; });
+
+                            return (
+                              <div key={index} className="p-3 bg-white dark:bg-[#101726]/80 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 animate-fade-in shadow-xs">
+                                <div className="grid grid-cols-12 gap-2 items-center">
+                                  <div className="col-span-1 text-[11px] font-mono text-purple-600 dark:text-purple-400 text-center font-black">
+                                    #{index + 1}
+                                  </div>
+                                  <div className="col-span-3 sm:col-span-2">
+                                    <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Número</span>
+                                    <input
+                                      type="text"
+                                      value={room.number}
+                                      onChange={(e) => handleSpecialRoomFieldChange(index, "number", e.target.value)}
+                                      placeholder="Ex: S-101"
+                                      className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
+                                      required
+                                      disabled={isReadOnly}
+                                    />
+                                  </div>
+                                  <div className="col-span-3 sm:col-span-2">
+                                    <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Capac.</span>
+                                    <input
+                                      type="number"
+                                      value={room.capacity}
+                                      onChange={(e) => handleSpecialRoomFieldChange(index, "capacity", parseInt(e.target.value) || 0)}
+                                      className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
+                                      min="1"
+                                      required
+                                      disabled={isReadOnly}
+                                    />
+                                  </div>
+                                  <div className="col-span-5 sm:col-span-3">
+                                    <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Andar</span>
+                                    <select
+                                      value={room.floor}
+                                      onChange={(e) => handleSpecialRoomFieldChange(index, "floor", e.target.value)}
+                                      className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold text-slate-800 dark:text-white focus:outline-hidden disabled:opacity-60 font-mono"
+                                      required
+                                      disabled={isReadOnly}
+                                    >
+                                      {FLOOR_OPTIONS.map((floor) => (
+                                        <option key={floor} value={floor}>{floor}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="col-span-12 sm:col-span-4 flex items-center justify-between sm:justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setOpenRoomRolePicker(openRoomRolePicker === index ? null : index)}
+                                      className="px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30 rounded-lg text-[10.5px] font-bold flex items-center gap-1.5 transition cursor-pointer"
+                                      disabled={isReadOnly}
+                                    >
+                                      <span>♿ {openRoomRolePicker === index ? "Fechar Seletor" : "Selecionar Funções"}</span>
+                                      <span className="px-1.5 py-0.2 bg-purple-600 text-white rounded-full text-[9px] font-black">
+                                        {roomRoles.length}
+                                      </span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Badges das funções selecionadas para esta sala */}
+                                <div className="p-2 bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 rounded-lg flex flex-wrap items-center gap-1.5">
+                                  {roomRoles.length === 0 ? (
+                                    <span
+                                      onClick={() => !isReadOnly && setOpenRoomRolePicker(index)}
+                                      className="text-[10px] text-slate-400 italic cursor-pointer"
+                                    >
+                                      Nenhuma função especializada marcada. Clique em &quot;Selecionar Funções&quot; para escolher (Ledor, Transcritor, etc.).
+                                    </span>
+                                  ) : (
+                                    Object.entries(counts).map(([rName, cnt]) => (
+                                      <span
+                                        key={rName}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-800 dark:text-purple-300 border border-purple-500/30 text-[10.5px] font-bold"
+                                      >
+                                        <span>{rName}</span>
+                                        {cnt > 1 && (
+                                          <span className="px-1.5 py-0.2 bg-purple-600 text-white rounded text-[9px] font-black">
+                                            {cnt} colaboradores
+                                          </span>
+                                        )}
+                                        {!isReadOnly && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveRoleInstance(index, rName)}
+                                            className="text-purple-500 hover:text-red-500 ml-0.5 font-black leading-none"
+                                            title="Remover uma vaga"
+                                          >
+                                            ×
+                                          </button>
+                                        )}
+                                      </span>
+                                    ))
+                                  )}
+                                </div>
+
+                                {/* Seletor Popover com Checkboxes de todas as funções especializadas */}
+                                {openRoomRolePicker === index && (
+                                  <div className="p-3 bg-white dark:bg-[#0d1527] border-2 border-purple-500/40 rounded-xl shadow-lg space-y-2.5 animate-fade-in">
+                                    <div className="flex items-center justify-between border-b pb-1.5 border-slate-150 dark:border-slate-800">
+                                      <span className="text-[11px] font-black uppercase tracking-wider text-purple-800 dark:text-purple-300">
+                                        Seletor de Funções Especializadas - Sala {room.number || `#${index + 1}`}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setOpenRoomRolePicker(null)}
+                                        className="text-[10px] text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+                                      >
+                                        ✕ Concluir
+                                      </button>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                      Marque as funções que atuarão nesta sala. Se houver mais de um colaborador da mesma função, use o botão (+) para adicionar mais vagas.
+                                    </p>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                      {availableRoles.map((role) => {
+                                        const count = roomRoles.filter(r => r === role).length;
+                                        const isSelected = count > 0;
+
+                                        return (
+                                          <div
+                                            key={role}
+                                            className={`flex items-center justify-between p-2 rounded-lg border text-xs transition ${
+                                              isSelected
+                                                ? "bg-purple-500/10 border-purple-500 text-purple-900 dark:text-purple-200 font-bold"
+                                                : "bg-slate-50/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
+                                            }`}
+                                          >
+                                            <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1 select-none">
+                                              <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => handleToggleRoomSpecializedRole(index, role)}
+                                                disabled={isReadOnly}
+                                                className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 accent-purple-600 cursor-pointer"
+                                              />
+                                              <span className="truncate">{role}</span>
+                                            </label>
+
+                                            {isSelected && !isReadOnly && (
+                                              <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleRemoveRoleInstance(index, role)}
+                                                  className="w-4 h-4 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-[10px] hover:bg-red-500 hover:text-white cursor-pointer"
+                                                  title="Diminuir quantidade"
+                                                >
+                                                  -
+                                                </button>
+                                                <span className="font-mono text-[10px] font-black w-3.5 text-center">{count}</span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleAddRoleInstance(index, role)}
+                                                  className="w-4 h-4 rounded bg-purple-600 text-white flex items-center justify-center font-bold text-[10px] hover:bg-purple-700 cursor-pointer"
+                                                  title="Adicionar mais um colaborador desta função nesta sala"
+                                                >
+                                                  +
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -990,26 +1240,6 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
           </div>
         )}
       </form>
-
-      {/* Modal de Tutorial e Configuração da Chave de API Google Gemini */}
-      <GeminiKeyModal
-        isOpen={isKeyModalOpen}
-        onClose={() => setIsKeyModalOpen(false)}
-        onKeySaved={(newKey) => {
-          setActiveApiKey(newKey);
-          setOcrError(null);
-        }}
-      />
-
-      {/* Modal de Configuração da API Pingram (E-mail & SMS) do CLA */}
-      <PingramConfigModal
-        isOpen={isPingramModalOpen}
-        onClose={() => setIsPingramModalOpen(false)}
-        claId={claId}
-        onConfigSaved={(cfg) => {
-          setActivePingramConfig(cfg);
-        }}
-      />
     </div>
   );
 }
