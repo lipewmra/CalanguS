@@ -27,6 +27,8 @@ export const ROLE_PAYMENTS: Record<string, string> = {
   "Transcritor (Aplicador Especializado)": "R$ 361,91",
   "Ledor ou Transcritor (inglês ou espanhol)": "R$ 361,91",
   "Ledor/Transcritor": "R$ 361,91",
+  "Ledor/Transcritor Inglês": "R$ 361,91",
+  "Ledor/Transcritor Espanhol": "R$ 361,91",
   "Ledor ou Transcritor": "R$ 361,91",
   "Apenas Ledor": "R$ 361,91",
   "Transcritor": "R$ 361,91",

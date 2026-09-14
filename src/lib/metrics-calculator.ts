@@ -344,6 +344,9 @@ export function calculateBuildingTargetQuantities(
   let totalLedorEspanhol = 0;
   let totalTranscritorIngles = 0;
   let totalTranscritorEspanhol = 0;
+  let totalLedorTranscritor = 0;
+  let totalLedorTranscritorIngles = 0;
+  let totalLedorTranscritorEspanhol = 0;
 
   if (hasSpecialized) {
     if (building.specialRooms && building.specialRooms.length > 0) {
@@ -352,7 +355,16 @@ export function calculateBuildingTargetQuantities(
         roles.forEach(roleName => {
           const rLower = roleName.toLowerCase();
           if (rLower === "ledor") totalLedores++;
-          else if (rLower.includes("ledor") && rLower.includes("ingl")) totalLedorIngles++;
+          else if (rLower === "ledor/transcritor" || rLower === "ledor ou transcritor") {
+            totalLedorTranscritor++;
+            totalLedores++;
+          } else if (rLower.includes("ledor") && rLower.includes("transcritor") && rLower.includes("ingl")) {
+            totalLedorTranscritorIngles++;
+            totalLedorIngles++;
+          } else if (rLower.includes("ledor") && rLower.includes("transcritor") && rLower.includes("espan")) {
+            totalLedorTranscritorEspanhol++;
+            totalLedorEspanhol++;
+          } else if (rLower.includes("ledor") && rLower.includes("ingl")) totalLedorIngles++;
           else if (rLower.includes("ledor") && rLower.includes("espan")) totalLedorEspanhol++;
           else if (rLower === "transcritor") totalTranscritores++;
           else if (rLower.includes("transcritor") && rLower.includes("ingl")) totalTranscritorIngles++;
@@ -425,7 +437,9 @@ export function calculateBuildingTargetQuantities(
     "Guia-Intérprete": totalGuia,
     "Ledor": totalLedores,
     "Ledor (Aplicador Especializado)": totalLedores,
-    "Ledor/Transcritor": totalLedores,
+    "Ledor/Transcritor": totalLedorTranscritor || totalLedores,
+    "Ledor/Transcritor Inglês": totalLedorTranscritorIngles || totalLedorIngles,
+    "Ledor/Transcritor Espanhol": totalLedorTranscritorEspanhol || totalLedorEspanhol,
     "Apenas Ledor": totalLedores,
     "Ledor Inglês": totalLedorIngles,
     "Ledor Espanhol": totalLedorEspanhol,
