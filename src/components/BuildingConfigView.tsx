@@ -225,11 +225,21 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
         false
       );
       setHasSpecializedAttendance(hasSpec);
-      setSpecializedRoles(
-        initialBuilding.specializedRoles && initialBuilding.specializedRoles.length > 0
-          ? initialBuilding.specializedRoles
-          : (hasSpec ? [...SPECIALIZED_ROLES] : [])
-      );
+
+      let loadedRoles = initialBuilding.specializedRoles && initialBuilding.specializedRoles.length > 0
+        ? [...initialBuilding.specializedRoles]
+        : (hasSpec ? [...SPECIALIZED_ROLES] : []);
+
+      // Se o prédio tem atendimento especializado habilitado, assegura que as novas funções estejam presentes
+      if (hasSpec) {
+        const priorityRoles = ["Ledor/Transcritor Inglês", "Ledor/Transcritor", "Ledor/Transcritor Espanhol"];
+        priorityRoles.forEach(r => {
+          if (!loadedRoles.includes(r)) {
+            loadedRoles.push(r);
+          }
+        });
+      }
+      setSpecializedRoles(loadedRoles);
       
       if (initialBuilding.rooms && initialBuilding.rooms.length > 0) {
         setRooms(initialBuilding.rooms);
@@ -1041,7 +1051,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                         </div>
                         <div className="max-h-96 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
                           {specialRooms.map((room, index) => {
-                            const availableRoles = specializedRoles.length > 0 ? specializedRoles : SPECIALIZED_ROLES;
+                            const availableRoles = Array.from(new Set([...(specializedRoles.length > 0 ? specializedRoles : SPECIALIZED_ROLES), "Ledor/Transcritor Inglês", "Ledor/Transcritor", "Ledor/Transcritor Espanhol"]));
                             const roomRoles: string[] = room.specializedRoles || (
                               room.details ? room.details.split(",").map(s => s.trim()).filter(Boolean) : []
                             );

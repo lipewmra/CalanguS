@@ -4133,6 +4133,9 @@ export default function DragAndDropReserves({
                   <option value="Fiscal de Banheiro">Fiscal de Banheiro</option>
                   <option value="Tradutor-Intérprete de Libras">Tradutor-Intérprete de Libras</option>
                   <option value="Guia-Intérprete de Surdocegos">Guia-Intérprete de Surdocegos</option>
+                  <option value="Ledor/Transcritor Inglês">Ledor/Transcritor Inglês</option>
+                  <option value="Ledor/Transcritor">Ledor/Transcritor</option>
+                  <option value="Ledor/Transcritor Espanhol">Ledor/Transcritor Espanhol</option>
                   <option value="Ledor (Aplicador Especializado)">Ledor (Aplicador Especializado)</option>
                   <option value="Transcritor (Aplicador Especializado)">Transcritor (Aplicador Especializado)</option>
                   {hasInformaticaEnabled && (

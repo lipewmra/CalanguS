@@ -165,11 +165,13 @@ export default function NetworkReservesPool({
             className="bg-slate-50 dark:bg-[#070b13] border-2 border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer focus:outline-hidden"
           >
             <option value="all">Todas as Funções Especiais</option>
+            <option value="Ledor/Transcritor Inglês">Ledor/Transcritor Inglês</option>
+            <option value="Ledor/Transcritor">Ledor/Transcritor</option>
+            <option value="Ledor/Transcritor Espanhol">Ledor/Transcritor Espanhol</option>
             <option value="Libras">Intérprete de Libras</option>
             <option value="Tradutor e Intérprete">Tradutor e Intérprete</option>
             <option value="Técnico de Informática">Técnico de Informática</option>
             <option value="Auxiliar de Acessibilidade">Auxiliar de Acessibilidade</option>
-            <option value="Ledor/Transcritor">Ledor / Transcritor</option>
             <option value="Ledora de Gestante">Ledora de Gestante</option>
           </select>
 

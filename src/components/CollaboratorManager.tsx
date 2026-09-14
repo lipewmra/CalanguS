@@ -859,6 +859,8 @@ export default function CollaboratorManager({
         if (norm.includes("tradutor") || norm.includes("interprete") || norm.includes("intérprete")) return "Tradutor e Intérprete";
         if (norm.includes("informática") || norm.includes("informatica") || norm.includes("técnico") || norm.includes("tecnico")) return "Técnico de Informática";
         if (norm.includes("acessibilidade") || norm.includes("auxiliar")) return "Auxiliar de Acessibilidade";
+        if ((norm.includes("ledor") || norm.includes("transcritor")) && (norm.includes("ingl") || norm.includes("english"))) return "Ledor/Transcritor Inglês";
+        if ((norm.includes("ledor") || norm.includes("transcritor")) && (norm.includes("espan") || norm.includes("spanish"))) return "Ledor/Transcritor Espanhol";
         if (norm.includes("ledor") || norm.includes("transcritor")) return "Ledor/Transcritor";
         if (norm.includes("gestante")) return "Ledora de Gestante";
         return "Nenhuma";
@@ -3074,15 +3076,15 @@ function activeTabSubAddForm(
             className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-2.5 bg-slate-50 dark:bg-[#070b13] text-slate-800 dark:text-slate-200 text-xs font-bold focus:ring-2 focus:ring-emerald-500/40 focus:outline-hidden"
           >
             <option value="Nenhuma">Nenhuma / Fiscal de Sala Padrão</option>
+            <option value="Ledor/Transcritor Inglês">Ledor/Transcritor Inglês</option>
+            <option value="Ledor/Transcritor">Ledor/Transcritor</option>
+            <option value="Ledor/Transcritor Espanhol">Ledor/Transcritor Espanhol</option>
             <option value="Ledor">Ledor</option>
             <option value="Ledor Inglês">Ledor Inglês</option>
             <option value="Ledor Espanhol">Ledor Espanhol</option>
             <option value="Transcritor">Transcritor</option>
             <option value="Transcritor Inglês">Transcritor Inglês</option>
             <option value="Transcritor Espanhol">Transcritor Espanhol</option>
-            <option value="Ledor/Transcritor">Ledor/Transcritor</option>
-            <option value="Ledor/Transcritor Inglês">Ledor/Transcritor Inglês</option>
-            <option value="Ledor/Transcritor Espanhol">Ledor/Transcritor Espanhol</option>
             <option value="Interprete de Libras">Interprete de Libras</option>
             <option value="Video Prova">Video Prova</option>
             <option value="Técnico de Informática">Técnico de Informática</option>

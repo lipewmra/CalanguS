@@ -133,15 +133,15 @@ export interface CalangusMessage {
 }
 
 export const SPECIALIZED_ROLES = [
+  "Ledor/Transcritor Inglês",
+  "Ledor/Transcritor",
+  "Ledor/Transcritor Espanhol",
   "Ledor",
   "Ledor Inglês",
   "Ledor Espanhol",
   "Transcritor",
   "Transcritor Inglês",
   "Transcritor Espanhol",
-  "Ledor/Transcritor",
-  "Ledor/Transcritor Inglês",
-  "Ledor/Transcritor Espanhol",
   "Interprete de Libras",
   "Video Prova",
   "Técnico de Informática",
@@ -252,7 +252,7 @@ export interface CollaboratorInfo {
   hasWorkedEnem: boolean;
   pastEditions: PastEdition[]; // checkbox lists for 1998 up to 2025
   pixKey: string;
-  specialRole: "Nenhuma" | "Ledor" | "Ledor Inglês" | "Ledor Espanhol" | "Transcritor" | "Transcritor Inglês" | "Transcritor Espanhol" | "Ledor/Transcritor" | "Ledor/Transcritor Inglês" | "Ledor/Transcritor Espanhol" | "Interprete de Libras" | "Video Prova" | "Técnico de Informática" | string;
+  specialRole: "Nenhuma" | "Ledor/Transcritor Inglês" | "Ledor/Transcritor" | "Ledor/Transcritor Espanhol" | "Ledor" | "Ledor Inglês" | "Ledor Espanhol" | "Transcritor" | "Transcritor Inglês" | "Transcritor Espanhol" | "Interprete de Libras" | "Video Prova" | "Técnico de Informática" | string;
   languages: string[]; // only relevant if "Tradutor e Intérprete" or languages
   certificateAttachedName?: string;
   isReserve: boolean;

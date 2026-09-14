@@ -223,7 +223,7 @@ export function getRoomTargetRequirements(
     // If room has explicitly configured specializedRoles (from Menu 1/Room details), calculate directly
     if (room.specializedRoles && room.specializedRoles.length > 0) {
       const ledorCount = room.specializedRoles.filter(r => r.toLowerCase().includes("ledor")).length;
-      const transcritorCount = room.specializedRoles.filter(r => r.toLowerCase().includes("transcritor")).length;
+      const transcritorCount = room.specializedRoles.filter(r => r.toLowerCase().includes("transcritor") && !r.toLowerCase().includes("ledor")).length;
       const librasCount = room.specializedRoles.filter(r => r.toLowerCase().includes("libras")).length;
       const techCount = room.specializedRoles.filter(r => r.toLowerCase().includes("informática") || r.toLowerCase().includes("informatica") || r.toLowerCase().includes("video prova")).length;
       const otherSpecialCount = room.specializedRoles.length - (ledorCount + transcritorCount + librasCount + techCount);

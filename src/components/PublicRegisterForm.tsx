@@ -698,15 +698,15 @@ export default function PublicRegisterForm({
                     className="w-full border-2 border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-3 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm font-bold shadow-inner"
                   >
                     <option value="Nenhuma">Nenhuma / Fiscal de Sala Padrão</option>
+                    <option value="Ledor/Transcritor Inglês">Ledor/Transcritor Inglês</option>
+                    <option value="Ledor/Transcritor">Ledor/Transcritor</option>
+                    <option value="Ledor/Transcritor Espanhol">Ledor/Transcritor Espanhol</option>
                     <option value="Ledor">Ledor</option>
                     <option value="Ledor Inglês">Ledor Inglês</option>
                     <option value="Ledor Espanhol">Ledor Espanhol</option>
                     <option value="Transcritor">Transcritor</option>
                     <option value="Transcritor Inglês">Transcritor Inglês</option>
                     <option value="Transcritor Espanhol">Transcritor Espanhol</option>
-                    <option value="Ledor/Transcritor">Ledor/Transcritor</option>
-                    <option value="Ledor/Transcritor Inglês">Ledor/Transcritor Inglês</option>
-                    <option value="Ledor/Transcritor Espanhol">Ledor/Transcritor Espanhol</option>
                     <option value="Interprete de Libras">Interprete de Libras</option>
                     <option value="Video Prova">Video Prova</option>
                     <option value="Técnico de Informática">Técnico de Informática</option>

@@ -116,6 +116,33 @@ export function canonicalizeRoleName(role?: string | null): string {
     return "Transcritor (Aplicador Especializado)";
   }
 
+  // Ledor/Transcritor Inglês
+  if (
+    lower === "ledor/transcritor inglês" ||
+    lower === "ledor/transcritor ingles" ||
+    lower === "ledor / transcritor inglês" ||
+    lower === "ledor / transcritor ingles" ||
+    lower === "ledor ou transcritor inglês" ||
+    lower === "ledor ou transcritor ingles" ||
+    lower === "leitor transcritor inglês" ||
+    lower === "leitor transcritor ingles" ||
+    lower === "ledor inglês" ||
+    lower === "ledor ingles"
+  ) {
+    return "Ledor/Transcritor Inglês";
+  }
+
+  // Ledor/Transcritor Espanhol
+  if (
+    lower === "ledor/transcritor espanhol" ||
+    lower === "ledor / transcritor espanhol" ||
+    lower === "ledor ou transcritor espanhol" ||
+    lower === "leitor transcritor espanhol" ||
+    lower === "ledor espanhol"
+  ) {
+    return "Ledor/Transcritor Espanhol";
+  }
+
   // Ledor/Transcritor
   if (
     lower === "ledor/transcritor" ||
@@ -123,7 +150,7 @@ export function canonicalizeRoleName(role?: string | null): string {
     lower === "ledor ou transcritor" ||
     lower === "fiscal especializado (ledor/transcritor)"
   ) {
-    return "Ledor (Aplicador Especializado)";
+    return "Ledor/Transcritor";
   }
 
   // Técnico de Informática
