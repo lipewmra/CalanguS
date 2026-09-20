@@ -11,6 +11,7 @@ import { calculateBuildingTargetQuantities } from "../lib/metrics-calculator";
 import { findDuplicateCollaborators, DuplicateGroup } from "./DuplicateCollaboratorsModal";
 import { ROLE_PAYMENTS, getRolePayment } from "./AssociationView";
 import { ENEM_ROLES } from "./CollaboratorManager";
+import { canonicalizeRoleName, isTecnicoInformaticaInformed } from "../lib/collaborator-utils";
 import FiscalAvatar from "./FiscalAvatar";
 import { 
   Users, UserCheck, AlertTriangle, CheckCircle2, XCircle, Clock, 
@@ -61,15 +62,26 @@ export default function ClaDashboardOverview({
   const [searchPendentes, setSearchPendentes] = useState("");
 
   // 1. Calculate Target Quantities for each role based on building configuration or auto-calculator
+  const hasTI = isTecnicoInformaticaInformed(building);
+
   const targetQuantities = useMemo(() => {
+    let raw: Record<string, number> = {};
     if (building?.rolesTargetQuantities && Object.values(building.rolesTargetQuantities).some(q => Number(q) > 0)) {
-      return building.rolesTargetQuantities;
+      raw = building.rolesTargetQuantities;
+    } else if (building) {
+      raw = calculateBuildingTargetQuantities(building, eventConfig?.collaboratorMetrics);
     }
-    if (building) {
-      return calculateBuildingTargetQuantities(building, eventConfig?.collaboratorMetrics);
+    if (!hasTI) {
+      const filtered: Record<string, number> = {};
+      Object.entries(raw).forEach(([k, v]) => {
+        if (!/inform[áa]tica|ti/i.test(k)) {
+          filtered[k] = v;
+        }
+      });
+      return filtered;
     }
-    return {};
-  }, [building, eventConfig?.collaboratorMetrics]);
+    return raw;
+  }, [building, eventConfig?.collaboratorMetrics, hasTI]);
 
   // 2. Compute total required target slots
   const totalTargetSlots = useMemo(() => {
@@ -156,12 +168,20 @@ export default function ClaDashboardOverview({
       : ENEM_ROLES.map(r => r.name);
 
     // Merge any custom roles present in targetQuantities
-    const allUniqueRoles = Array.from(new Set([...rolesList, ...Object.keys(targetQuantities)]));
+    let allUniqueRoles = Array.from(new Set([...rolesList, ...Object.keys(targetQuantities)]));
+
+    if (!hasTI) {
+      allUniqueRoles = allUniqueRoles.filter(r => !/inform[áa]tica|ti/i.test(r));
+    }
 
     return allUniqueRoles.map(roleName => {
       const target = Number(targetQuantities[roleName]) || 0;
-      // Filled strictly means allocated in room with this role and not reserve
-      const filled = actuallyAllocatedCollabs.filter(c => c.assignedRole === roleName).length;
+      // Filled strictly means allocated in room or sector with this role (Menu 3 Alocação)
+      const filled = actuallyAllocatedCollabs.filter(c => {
+        const cRole = canonicalizeRoleName(c.assignedRole || "");
+        const targetRole = canonicalizeRoleName(roleName);
+        return cRole === targetRole || c.assignedRole === roleName;
+      }).length;
       const deficit = Math.max(0, target - filled);
       const surplus = Math.max(0, filled - target);
       const percent = target > 0 ? Math.min(100, Math.round((filled / target) * 100)) : 0;
@@ -178,7 +198,7 @@ export default function ClaDashboardOverview({
         isComplete: target > 0 ? filled >= target : true
       };
     }).filter(item => item.target > 0 || item.filled > 0);
-  }, [building, targetQuantities, actuallyAllocatedCollabs]);
+  }, [building, targetQuantities, actuallyAllocatedCollabs, hasTI]);
 
   // Incomplete roles with deficit > 0
   const incompleteRoles = useMemo(() => {

@@ -19,6 +19,8 @@ import {
   HelpCircle,
   ShieldCheck,
   Settings,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   getGeminiApiKey,
@@ -77,7 +79,8 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // OCR Ensalamento states
+  // OCR Ensalamento states - recolhido por padrão
+  const [isOcrExpanded, setIsOcrExpanded] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [ocrSuccessMsg, setOcrSuccessMsg] = useState<string | null>(null);
@@ -226,11 +229,23 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       );
       setHasSpecializedAttendance(hasSpec);
 
+      const hadVideoProvaSaved = Boolean(
+        initialBuilding.hasVideoProva === true ||
+        (initialBuilding.specializedRoles && (
+          initialBuilding.specializedRoles.includes("Video Prova") ||
+          initialBuilding.specializedRoles.some(r => /video\s*prova/i.test(r))
+        ))
+      );
+
       let loadedRoles = initialBuilding.specializedRoles && initialBuilding.specializedRoles.length > 0
         ? [...initialBuilding.specializedRoles]
-        : (hasSpec ? [...SPECIALIZED_ROLES] : []);
+        : (hasSpec ? SPECIALIZED_ROLES.filter(r => hadVideoProvaSaved ? true : (r !== "Video Prova" && r !== "Técnico de Informática")) : []);
 
-      // Se o prédio tem atendimento especializado habilitado, assegura que as novas funções estejam presentes
+      if (!hadVideoProvaSaved) {
+        loadedRoles = loadedRoles.filter(r => r !== "Video Prova" && r !== "Técnico de Informática");
+      }
+
+      // Se o prédio tem atendimento especializado habilitado, assegura que as funções de ledores estejam presentes
       if (hasSpec) {
         const priorityRoles = ["Ledor/Transcritor Inglês", "Ledor/Transcritor", "Ledor/Transcritor Espanhol"];
         priorityRoles.forEach(r => {
@@ -496,6 +511,12 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       specialDetails,
       extraRoomsCount: Number(extraRoomsCount),
       hasSpecializedAttendance: Boolean(hasSpecializedAttendance),
+      hasVideoProva: Boolean(
+        hasSpecializedAttendance && (
+          specializedRoles.includes("Video Prova") ||
+          specializedRoles.some(r => /video\s*prova/i.test(r))
+        )
+      ),
       specializedRoles: hasSpecializedAttendance ? specializedRoles : [],
       rooms,
       specialRooms,
@@ -553,84 +574,102 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
         </div>
       )}
 
-      {/* MÓDULO OCR DE ENSALAMENTO */}
-      <div className="mb-6 p-5 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 dark:from-emerald-950/40 dark:via-teal-950/40 dark:to-indigo-950/40 border-2 border-emerald-500/30 rounded-2xl shadow-xs relative overflow-hidden">
-        <div className="pb-3 border-b border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* MÓDULO OCR DE ENSALAMENTO (RECOLHIDO POR PADRÃO) */}
+      <div className="mb-6 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 dark:from-emerald-950/40 dark:via-teal-950/40 dark:to-indigo-950/40 border-2 border-emerald-500/30 rounded-2xl shadow-xs overflow-hidden transition-all duration-300">
+        <button
+          type="button"
+          onClick={() => setIsOcrExpanded(prev => !prev)}
+          className="w-full p-4 flex items-center justify-between gap-3 text-left cursor-pointer hover:bg-emerald-500/5 transition select-none"
+        >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-500 text-white rounded-xl shadow-md">
+            <div className="p-2.5 bg-emerald-500 text-white rounded-xl shadow-md shrink-0">
               <Sparkles className="w-5 h-5 animate-pulse" />
             </div>
             <div>
-              <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <span>OCR & Envio do Ensalamento</span>
-                <span className="text-[9px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-mono font-black">GEMINI AI 3.7 VISION</span>
-              </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                  OCR & Envio do Ensalamento
+                </h3>
+                <span className="text-[9px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-mono font-black">
+                  GEMINI AI 3.7 VISION
+                </span>
+                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-white/70 dark:bg-slate-800/70 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                  {isOcrExpanded ? "Clique para recolher ▲" : "Recolhido (clique para expandir) ▼"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mt-0.5 line-clamp-1">
                 Envie o documento de ensalamento para extrair automaticamente salas de prova, capacidades, sala da coordenação e salas extras.
               </p>
             </div>
           </div>
 
-          {/* Badge Informativo de OCR */}
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="text-[10px] font-bold px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20 flex items-center gap-1.5 shadow-2xs">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Processamento Óptico Automático</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="hidden sm:inline-block text-[10px] font-bold px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20">
+              Processamento Óptico
             </span>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-col sm:flex-row gap-2 items-stretch">
-          <label className="flex-1 cursor-pointer flex items-center gap-2 px-3.5 py-2.5 bg-white dark:bg-[#101726] border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-400 rounded-xl transition text-xs font-semibold text-slate-700 dark:text-slate-200 overflow-hidden">
-            <FileUp className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="truncate">
-              {selectedFile ? selectedFile.name : "Escolher arquivo de Ensalamento..."}
-            </span>
-            <input
-              type="file"
-              accept=".pdf,image/png,image/jpeg,image/jpg"
-              onChange={handleFileChange}
-              className="hidden"
-              disabled={isReadOnly || ocrLoading}
-            />
-          </label>
-
-          <button
-            type="button"
-            onClick={() => handleRunOCR()}
-            disabled={isReadOnly || ocrLoading}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition disabled:opacity-50 cursor-pointer shrink-0"
-          >
-            {ocrLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>ANALISANDO...</span>
-              </>
+            {isOcrExpanded ? (
+              <ChevronUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                <span>ANALISAR ARQUIVO</span>
-              </>
+              <ChevronDown className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             )}
-          </button>
-        </div>
-
-        {ocrError && (
-          <div className="mt-3 p-3 bg-red-500/10 text-red-700 dark:text-red-400 text-xs font-bold rounded-xl flex items-center justify-between gap-2 border border-red-500/20">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-              <span>{ocrError}</span>
-            </div>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              Chaves de API são gerenciadas no menu Configurações (⚙️)
-            </span>
           </div>
-        )}
+        </button>
 
-        {ocrSuccessMsg && (
-          <div className="mt-3 p-3 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold rounded-xl flex items-center gap-2 border border-emerald-500/30 animate-fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span>{ocrSuccessMsg}</span>
+        {isOcrExpanded && (
+          <div className="p-5 pt-2 border-t border-emerald-500/20 space-y-3 animate-fade-in">
+            <div className="flex flex-col sm:flex-row gap-2 items-stretch pt-2">
+              <label className="flex-1 cursor-pointer flex items-center gap-2 px-3.5 py-2.5 bg-white dark:bg-[#101726] border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-400 rounded-xl transition text-xs font-semibold text-slate-700 dark:text-slate-200 overflow-hidden">
+                <FileUp className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span className="truncate">
+                  {selectedFile ? selectedFile.name : "Escolher arquivo de Ensalamento..."}
+                </span>
+                <input
+                  type="file"
+                  accept=".pdf,image/png,image/jpeg,image/jpg"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  disabled={isReadOnly || ocrLoading}
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => handleRunOCR()}
+                disabled={isReadOnly || ocrLoading}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition disabled:opacity-50 cursor-pointer shrink-0"
+              >
+                {ocrLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>ANALISANDO...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>ANALISAR ARQUIVO</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {ocrError && (
+              <div className="p-3 bg-red-500/10 text-red-700 dark:text-red-400 text-xs font-bold rounded-xl flex items-center justify-between gap-2 border border-red-500/20">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                  <span>{ocrError}</span>
+                </div>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                  Chaves de API são gerenciadas no menu Configurações (⚙️)
+                </span>
+              </div>
+            )}
+
+            {ocrSuccessMsg && (
+              <div className="p-3 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 text-xs font-extrabold rounded-xl flex items-center gap-2 border border-emerald-500/30 animate-fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>{ocrSuccessMsg}</span>
+              </div>
+            )}
           </div>
         )}
       </div>

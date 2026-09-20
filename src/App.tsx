@@ -2065,7 +2065,7 @@ export default function App() {
                 { id: "staff", label: "2. Equipe, Inscrições & Funções", icon: Users, iconColor: "text-emerald-450" },
                 ...((effectiveRole === "CLA" || effectiveRole === "ALA") ? [
                   { id: "alloc", label: "3. Alocação por Salas & Reservas", icon: Layers, iconColor: "text-indigo-400" },
-                  { id: "attendance", label: "4. Frequência & Presença", icon: ClipboardCheck, iconColor: "text-teal-400" }
+                  { id: "attendance", label: "4. Ensalamento & Presença", icon: ClipboardCheck, iconColor: "text-teal-400" }
                 ] : []),
                 { id: "team", label: "5. Gestão de Acessos & ALA", icon: UserCheck, iconColor: "text-blue-400" },
                 { id: "catering", label: "6. Alimentação & Lanches", icon: Coffee, iconColor: "text-amber-400" },

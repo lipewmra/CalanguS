@@ -107,6 +107,9 @@ export const ENEM_ROLES = [
   { name: "Aplicador", desc: "Auxilia na fiscalização e vistoria com detector de metais. 1 aplicador (1-60 participantes) ou 2 aplicadores em dupla (61-100 participantes)." },
   { name: "Tradutor-Intérprete de Libras", desc: "Atendimento especializado a participantes usuários de Libras/deficiência auditiva. Atuação em dupla (2 por sala com este recurso)." },
   { name: "Guia-Intérprete de Surdocegos", desc: "Atendimento especializado a participantes surdocegos (Tadoma/Libras Tátil). Atuação em trio (3 por sala com este recurso)." },
+  { name: "Ledor/Transcritor Inglês", desc: "Atendimento especializado para leitura e transcrição em língua estrangeira (Inglês)." },
+  { name: "Ledor/Transcritor", desc: "Atendimento especializado a participantes com deficiência visual, física ou dislexia para leitura e transcrição de respostas." },
+  { name: "Ledor/Transcritor Espanhol", desc: "Atendimento especializado para leitura e transcrição em língua estrangeira (Espanhol)." },
   { name: "Ledor (Aplicador Especializado)", desc: "Atendimento especializado a participantes com deficiência visual/dislexia. Atuação em dupla (2 por sala com este recurso)." },
   { name: "Transcritor (Aplicador Especializado)", desc: "Atendimento especializado para transcrição de respostas e redação. Atuação individual (1 por participante/sala)." },
   { name: "Fiscal de Banheiro", desc: "Inspeção e vistoria eletrônica com detector de metais nas áreas comuns sanitárias (2 a 12 fiscais por prédio, mín. 1 por sexo)." },
@@ -625,7 +628,8 @@ export default function CollaboratorManager({
     const target = collaborators.find(c => c.id === id);
     if (target) {
       setApproveWithRoleCollab(target);
-      setSelectedRoleToAssign(target.assignedRole || "");
+      // Padrão de aprovação é Reserva (podendo o CLA mudar no momento da aprovação)
+      setSelectedRoleToAssign("");
     }
   };
 

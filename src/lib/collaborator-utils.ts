@@ -271,50 +271,38 @@ export function canonicalizeGender(gender?: string | null): "Feminino" | "Mascul
 }
 
 /**
- * Verifica se a função de Técnico de Informática foi informada pelo CLA no Menu 1 ou no Menu 9.
- * Nos demais casos, não deve aparecer para alocação no Menu 3.
+ * Verifica se a função de Técnico de Informática deve aparecer para alocação no Menu 3.
+ * Regra estrita: só deve aparecer para o CLA que marcou Video Prova no Menu 1.
+ * Jamais deve aparecer sem essa opção estar marcada.
  */
 export function isTecnicoInformaticaInformed(building?: any | null): boolean {
   if (!building) return false;
 
-  // 1. Menu 1: Local de Aplicação
-  // Informado se o prédio tiver atendimento especializado com TI/Videoprova, flag hasVideoProva,
-  // ou salas com TI/Videoprova configuradas
-  const inMenu1Specialized = Boolean(
-    building.hasSpecializedAttendance && (
-      building.specializedRoles?.some((r: string) => /inform[áa]tica|ti/i.test(r) || /video\s*prova/i.test(r)) ||
-      building.hasVideoProva ||
-      (building.specialRooms && building.specialRooms.some((r: any) => 
-        r.specializedRoles?.some((sr: string) => /inform[áa]tica|ti|video\s*prova/i.test(sr)) || 
-        /video\s*prova|inform[áa]tica|ti/i.test(r.details || "")
-      )) ||
-      (building.rooms && building.rooms.some((r: any) => 
-        r.specializedRoles?.some((sr: string) => /inform[áa]tica|ti|video\s*prova/i.test(sr)) ||
-        /video\s*prova|inform[áa]tica|ti/i.test(r.details || "")
-      ))
-    )
+  // Só deve aparecer se o CLA marcou a opção de "Video Prova" no Menu 1
+  return Boolean(
+    building.hasVideoProva === true ||
+    (building.hasSpecializedAttendance && (
+      building.specializedRoles?.includes("Video Prova") ||
+      building.specializedRoles?.some((r: string) => /video\s*prova/i.test(r))
+    ))
   );
+}
 
-  const inMenu1Direct = Boolean(building.hasVideoProva);
+/**
+ * Helper para testar se uma função é Chefe de Sala
+ */
+export function isChefeDeSalaRole(role?: string): boolean {
+  if (!role) return false;
+  const r = role.toLowerCase();
+  return r.includes("chefe de sala") || r === "chefe";
+}
 
-  // 2. Menu 9: Parâmetros de Fiscais
-  // Informado se o CLA definiu meta > 0 em rolesTargetQuantities ou configurou em customRoles
-  const targetQuantitiesTI = Number(
-    building.rolesTargetQuantities?.["Técnico de Informática"] ||
-    building.rolesTargetQuantities?.["Tecnico de Informatica"] ||
-    building.rolesTargetQuantities?.["TI"] ||
-    0
-  );
-
-  const inMenu9CustomRole = Boolean(
-    building.customRoles?.some((r: any) => {
-      const isNameTI = /inform[áa]tica|técnico\s*de\s*informática|^ti$/i.test(r.name || "");
-      if (!isNameTI) return false;
-      // Ativo no Menu 9 se não estiver oculto E tiver meta > 0 ou tiver sido personalizado pelo CLA
-      return !r.hidden && ((r.targetQuantity || 0) > 0 || !r.isDefault);
-    })
-  );
-
-  return inMenu1Specialized || inMenu1Direct || targetQuantitiesTI > 0 || inMenu9CustomRole;
+/**
+ * Helper para testar se uma função é Aplicador / Fiscal de Sala (excluindo Chefe de Sala)
+ */
+export function isAplicadorRole(role?: string): boolean {
+  if (!role) return false;
+  const r = role.toLowerCase();
+  return (r.includes("aplicador") || r.includes("fiscal de sala")) && !r.includes("chefe de sala");
 }
 

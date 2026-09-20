@@ -162,6 +162,7 @@ export interface BuildingInfo {
   specialDetails: string;
   extraRoomsCount: number;
   hasSpecializedAttendance?: boolean;
+  hasVideoProva?: boolean;
   specializedRoles?: string[];
   rooms?: RoomDetails[];
   specialRooms?: RoomDetails[];
@@ -297,6 +298,8 @@ export interface CollaboratorInfo {
   presenceCheckedAtDay1?: string;
   isPresentDay2?: boolean;
   presenceCheckedAtDay2?: string;
+  assignedRoomDay2?: string;
+  assignedRoleDay2?: string;
   substitutedBy?: string; // Name of person who replaced this collaborator
   substitutedById?: string; // ID of replacing collaborator
   substitutedFor?: string; // Name of person replaced by this collaborator
