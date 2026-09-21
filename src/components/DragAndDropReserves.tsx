@@ -14,7 +14,13 @@ import {
   DoorClosed, Settings2, Phone, CheckSquare, Square, TableProperties, ArrowUpDown
 } from "lucide-react";
 import { ENEM_ROLES } from "./CollaboratorManager";
-import { canonicalizeRoleName, isTecnicoInformaticaInformed } from "../lib/collaborator-utils";
+import { 
+  canonicalizeRoleName, 
+  isTecnicoInformaticaInformed, 
+  isChefeDeSalaRole, 
+  isAplicadorRole, 
+  isSpecializedRole 
+} from "../lib/collaborator-utils";
 
 export type ExportTemplateType = 
   | "chefe_de_sala" 
@@ -530,20 +536,6 @@ export default function DragAndDropReserves({
     return calculateBuildingTargetQuantities(building || null, eventConfig?.collaboratorMetrics || undefined);
   }, [building, eventConfig]);
 
-  // Helper to test if a role is Chefe de Sala
-  const isChefeDeSalaRole = (role?: string) => {
-    if (!role) return false;
-    const r = role.toLowerCase();
-    return r.includes("chefe de sala") || r === "chefe";
-  };
-
-  // Helper to test if a role is an Aplicador (excluding Chefe de Sala)
-  const isAplicadorRole = (role?: string) => {
-    if (!role) return false;
-    const r = role.toLowerCase();
-    return (r.includes("aplicador") || r.includes("fiscal de sala")) && !r.includes("chefe de sala");
-  };
-
   // Helper to test if a role matches a sector
   const isRoleMatchingSector = (role: string | undefined, sectorId: string) => {
     if (!role) return false;
@@ -642,14 +634,35 @@ export default function DragAndDropReserves({
     const chefesDeSalaAssigned = chefesDeSala.length;
     const chefesDeSalaAllocated = chefesDeSala.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
     const chefesDeSalaAvailable = chefesDeSala.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
-    const targetChefes = buildingTargetQuantities["Chefe de Sala"] ?? rooms.length;
+    const targetChefes = (building?.rolesTargetQuantities && building.rolesTargetQuantities["Chefe de Sala"] !== undefined)
+      ? Number(building.rolesTargetQuantities["Chefe de Sala"])
+      : (buildingTargetQuantities["Chefe de Sala"] ?? rooms.length);
 
     // 2. Aplicadores
-    const aplicadores = approvedCollaborators.filter(c => isAplicadorRole(c.assignedRole));
+    const aplicadoresAllocated = approvedCollaborators.filter(c => 
+      !c.isReserve && 
+      c.assignedRoom && 
+      c.assignedRoom.trim() !== "" && 
+      !visibleOperationalSectors.some(s => isCollabInSector(c, s)) &&
+      !isChefeDeSalaRole(c.assignedRole) &&
+      !isSpecializedRole(c.specialRole || c.assignedRole)
+    ).length;
+    const aplicadores = approvedCollaborators.filter(c => 
+      isAplicadorRole(c.assignedRole) || 
+      (!c.isReserve && c.assignedRoom && !visibleOperationalSectors.some(s => isCollabInSector(c, s)) && !isChefeDeSalaRole(c.assignedRole) && !isSpecializedRole(c.specialRole || c.assignedRole))
+    );
     const aplicadoresAssigned = aplicadores.length;
-    const aplicadoresAllocated = aplicadores.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
-    const aplicadoresAvailable = aplicadores.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length;
-    const targetAplicadores = buildingTargetQuantities["Aplicador"] ?? rooms.length;
+    const aplicadoresAvailable = approvedCollaborators.filter(c => isAplicadorRole(c.assignedRole) && (!c.assignedRoom || c.assignedRoom.trim() === "")).length;
+    
+    // O quantitativo oficial é o do Menu 2 definido pelo CLA; salas reservas/extras não têm aplicadores
+    const regularRoomsCount = rooms.filter(r => 
+      !/reserva|extra|conting[êe]ncia/i.test(r.number || "") &&
+      !/reserva|conting[êe]ncia/i.test(r.details || "")
+    ).length;
+
+    const targetAplicadores = (building?.rolesTargetQuantities && building.rolesTargetQuantities["Aplicador"] !== undefined)
+      ? Number(building.rolesTargetQuantities["Aplicador"])
+      : (buildingTargetQuantities["Aplicador"] ?? regularRoomsCount);
 
     // 3. Volantes / Corredor
     const volantes = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "volante"));
@@ -693,12 +706,13 @@ export default function DragAndDropReserves({
     const tiAvailable = hasVideoProva ? ti.filter(c => !c.assignedRoom || c.assignedRoom.trim() === "").length : 0;
     const targetTI = hasVideoProva ? (buildingTargetQuantities["Técnico de Informática"] ?? 0) : 0;
 
-    // Demais Fiscais (especializados ou outros)
+    // Demais Fiscais (especializados ou outros) - desconsiderando quem já está alocado como aplicador regular em sala
     const demaisFiscais = approvedCollaborators.filter(c => 
       c.assignedRole && 
       c.assignedRole.trim() !== "" && 
       !isChefeDeSalaRole(c.assignedRole) && 
-      !isAplicadorRole(c.assignedRole)
+      !isAplicadorRole(c.assignedRole) &&
+      !(!c.isReserve && c.assignedRoom && !visibleOperationalSectors.some(s => isCollabInSector(c, s)))
     );
     const demaisFiscaisAssigned = demaisFiscais.length;
     const demaisFiscaisAllocated = demaisFiscais.filter(c => !c.isReserve && c.assignedRoom && c.assignedRoom.trim() !== "").length;
@@ -818,21 +832,30 @@ export default function DragAndDropReserves({
     } else if (selectedRoleFilter === "chefe_de_sala" || selectedRoleFilter === "Chefe de Sala") {
       list = approvedCollaborators.filter(c => isChefeDeSalaRole(c.assignedRole));
     } else if (selectedRoleFilter === "aplicadores" || selectedRoleFilter === "Aplicador") {
-      list = approvedCollaborators.filter(c => isAplicadorRole(c.assignedRole));
+      list = approvedCollaborators.filter(c => 
+        isAplicadorRole(c.assignedRole) || 
+        (!c.isReserve && c.assignedRoom && !visibleOperationalSectors.some(s => isCollabInSector(c, s)) && !isChefeDeSalaRole(c.assignedRole) && !isSpecializedRole(c.specialRole || c.assignedRole))
+      );
     } else if (selectedRoleFilter === "volantes") {
-      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "volante"));
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "volante") || (!c.isReserve && isCollabInSector(c, OPERATIONAL_SECTORS[0])));
     } else if (selectedRoleFilter === "banheiro") {
-      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "banheiro"));
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "banheiro") || (!c.isReserve && isCollabInSector(c, OPERATIONAL_SECTORS[1])));
     } else if (selectedRoleFilter === "limpeza") {
-      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "limpeza"));
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "limpeza") || (!c.isReserve && isCollabInSector(c, OPERATIONAL_SECTORS[2])));
     } else if (selectedRoleFilter === "porteiro") {
-      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "porteiro"));
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "porteiro") || (!c.isReserve && isCollabInSector(c, OPERATIONAL_SECTORS[3])));
     } else if (selectedRoleFilter === "representante") {
-      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "representante"));
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "representante") || (!c.isReserve && isCollabInSector(c, OPERATIONAL_SECTORS[4])));
     } else if (selectedRoleFilter === "ti") {
-      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "informatica"));
+      list = approvedCollaborators.filter(c => isRoleMatchingSector(c.assignedRole, "informatica") || (!c.isReserve && isCollabInSector(c, OPERATIONAL_SECTORS[5])));
     } else if (selectedRoleFilter === "demais_fiscais") {
-      list = approvedCollaborators.filter(c => c.assignedRole && c.assignedRole.trim() !== "" && !isChefeDeSalaRole(c.assignedRole) && !isAplicadorRole(c.assignedRole));
+      list = approvedCollaborators.filter(c => 
+        c.assignedRole && 
+        c.assignedRole.trim() !== "" && 
+        !isChefeDeSalaRole(c.assignedRole) && 
+        !isAplicadorRole(c.assignedRole) &&
+        !(!c.isReserve && c.assignedRoom && !visibleOperationalSectors.some(s => isCollabInSector(c, s)))
+      );
     } else if (selectedRoleFilter === "especializados") {
       list = approvedCollaborators.filter(c => 
         SPECIALIZED_ROLES.some(sr => sr === c.assignedRole || sr === c.specialRole)
@@ -1074,9 +1097,13 @@ export default function DragAndDropReserves({
     
     const targetCollab = collaborators.find(c => c.id === id);
     if (targetCollab) {
-      const role = targetCollab.assignedRole && targetCollab.assignedRole.trim() !== "" 
-        ? targetCollab.assignedRole 
-        : "Aplicador (Fiscal de Sala)";
+      const isChefe = isChefeDeSalaRole(targetCollab.assignedRole);
+      const isSpec = isSpecializedRole(targetCollab.specialRole || targetCollab.assignedRole);
+      const role = isChefe 
+        ? "Chefe de Sala" 
+        : (isSpec 
+            ? (targetCollab.specialRole || targetCollab.assignedRole || "Aplicador (Fiscal de Sala)")
+            : "Aplicador (Fiscal de Sala)");
       
       onMove(id, false, roomName, role);
       setSuccessMsg(`Colaborador ${targetCollab.name} alocado na ${roomName} como ${role}!`);
@@ -1093,9 +1120,8 @@ export default function DragAndDropReserves({
     
     const targetCollab = collaborators.find(c => c.id === id);
     if (targetCollab) {
-      const role = targetCollab.assignedRole && targetCollab.assignedRole.trim() !== "" 
-        ? targetCollab.assignedRole 
-        : sector.defaultRole;
+      // REGRA DE OURO: Ao alocar no setor operacional, o que vale é a nova função do setor!
+      const role = sector.defaultRole;
       
       onMove(id, false, sector.shortName, role);
       setSuccessMsg(`Colaborador ${targetCollab.name} alocado em ${sector.name} como ${role}!`);
@@ -1130,9 +1156,14 @@ export default function DragAndDropReserves({
         onMove(collabId, false, "", targetCollab.assignedRole || "Aplicador (Fiscal de Sala)");
         setSuccessMsg(`Desalocado para Quadros Associados: ${targetCollab.name}`);
       } else {
-        const role = targetCollab.assignedRole || "Aplicador (Fiscal de Sala)";
+        // Se for um setor operacional de apoio, atribuir obrigatoriamente o cargo do setor!
+        const matchingSector = OPERATIONAL_SECTORS.find(s => 
+          s.shortName.toLowerCase() === dest.toLowerCase() || 
+          s.name.toLowerCase() === dest.toLowerCase()
+        );
+        const role = matchingSector ? matchingSector.defaultRole : (targetCollab.assignedRole || "Aplicador (Fiscal de Sala)");
         onMove(collabId, false, dest, role);
-        setSuccessMsg(`Alocado: ${targetCollab.name} na ${dest}`);
+        setSuccessMsg(`Alocado: ${targetCollab.name} em ${dest} como ${role}`);
       }
       setTimeout(() => setSuccessMsg(null), 3000);
     }
@@ -1662,7 +1693,9 @@ export default function DragAndDropReserves({
                 <span className="text-[9px] font-bold text-indigo-500">Associados</span>
               </div>
               <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold">
-                <span className="text-rose-600 dark:text-rose-400 font-black">{stats.aplicadoresAllocated} em sala</span>
+                <span className={stats.aplicadoresAllocated >= stats.targetAplicadores ? "text-emerald-600 dark:text-emerald-400 font-black" : "text-rose-600 dark:text-rose-400 font-black"}>
+                  {stats.aplicadoresAllocated} em sala
+                </span>
                 <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.aplicadoresAvailable} disp.</span>
               </div>
             </div>
@@ -1688,7 +1721,9 @@ export default function DragAndDropReserves({
                 <span className="text-[9px] font-bold text-blue-500">Associados</span>
               </div>
               <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold">
-                <span className="text-rose-600 dark:text-rose-400 font-black">{stats.volantesAllocated} no posto</span>
+                <span className={stats.volantesAllocated >= stats.targetVolantes ? "text-emerald-600 dark:text-emerald-400 font-black" : "text-rose-600 dark:text-rose-400 font-black"}>
+                  {stats.volantesAllocated} no posto
+                </span>
                 <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.volantesAvailable} disp.</span>
               </div>
             </div>
@@ -1714,7 +1749,9 @@ export default function DragAndDropReserves({
                 <span className="text-[9px] font-bold text-cyan-500">Associados</span>
               </div>
               <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold">
-                <span className="text-rose-600 dark:text-rose-400 font-black">{stats.banheiroAllocated} no posto</span>
+                <span className={stats.banheiroAllocated >= stats.targetBanheiro ? "text-emerald-600 dark:text-emerald-400 font-black" : "text-rose-600 dark:text-rose-400 font-black"}>
+                  {stats.banheiroAllocated} no posto
+                </span>
                 <span className="text-emerald-600 dark:text-emerald-400 font-black">{stats.banheiroAvailable} disp.</span>
               </div>
             </div>
@@ -1739,7 +1776,7 @@ export default function DragAndDropReserves({
                 <span className="text-[9px] font-bold text-teal-500">Associados</span>
               </div>
               <div className="mt-1 flex items-center justify-between text-[8.5px] font-bold">
-                <span className="text-rose-600 dark:text-rose-400 font-black">
+                <span className="text-emerald-600 dark:text-emerald-400 font-black">
                   {stats.limpezaAllocated + stats.porteiroAllocated + stats.representanteAllocated + stats.tiAllocated + stats.demaisFiscaisAllocated} alocados
                 </span>
                 <span className="text-emerald-600 dark:text-emerald-400 font-black">
@@ -2004,7 +2041,7 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <Award className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>Chefe ({stats.chefesDeSalaAssigned}/{stats.targetChefes})</span>
+                <span>Chefe ({stats.chefesDeSalaAllocated}/{stats.targetChefes})</span>
               </button>
 
               {/* 5. Aplicadores */}
@@ -2018,7 +2055,7 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <UserCheck className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Aplicadores ({stats.aplicadoresAssigned}/{stats.targetAplicadores})</span>
+                <span>Aplicadores ({stats.aplicadoresAllocated}/{stats.targetAplicadores})</span>
               </button>
 
               {/* 6. Volantes */}
@@ -2032,7 +2069,7 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <Footprints className="w-3.5 h-3.5 text-blue-500" />
-                <span>Volantes ({stats.volantesAssigned}/{stats.targetVolantes})</span>
+                <span>Volantes ({stats.volantesAllocated}/{stats.targetVolantes})</span>
               </button>
 
               {/* 7. Banheiro */}
@@ -2046,7 +2083,7 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <Bath className="w-3.5 h-3.5 text-cyan-500" />
-                <span>Banheiro ({stats.banheiroAssigned}/{stats.targetBanheiro})</span>
+                <span>Banheiro ({stats.banheiroAllocated}/{stats.targetBanheiro})</span>
               </button>
 
               {/* 8. Limpeza */}
@@ -2060,7 +2097,7 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5 text-teal-500" />
-                <span>Limpeza ({stats.limpezaAssigned}/{stats.targetLimpeza})</span>
+                <span>Limpeza ({stats.limpezaAllocated}/{stats.targetLimpeza})</span>
               </button>
 
               {/* 9. Porteiro */}
@@ -2074,7 +2111,7 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <Shield className="w-3.5 h-3.5 text-blue-500" />
-                <span>Porteiro ({stats.porteiroAssigned}/{stats.targetPorteiro})</span>
+                <span>Porteiro ({stats.porteiroAllocated}/{stats.targetPorteiro})</span>
               </button>
 
               {/* 10. Representante */}
@@ -2088,7 +2125,7 @@ export default function DragAndDropReserves({
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5 text-purple-500" />
-                <span>Representante ({stats.representanteAssigned}/{stats.targetRepresentante})</span>
+                <span>Representante ({stats.representanteAllocated}/{stats.targetRepresentante})</span>
               </button>
 
               {/* 11. Alocados em Sala */}
@@ -2131,7 +2168,7 @@ export default function DragAndDropReserves({
               >
                 <Shield className="w-3.5 h-3.5 text-teal-500" />
                 <span>Demais Fiscais</span>
-                <span className="font-mono text-[9px]">({stats.demaisFiscaisAssigned})</span>
+                <span className="font-mono text-[9px]">({stats.demaisFiscaisAllocated})</span>
               </button>
 
               {/* Dynamic Individual pills for any other active specific role */}
@@ -2150,7 +2187,7 @@ export default function DragAndDropReserves({
                   >
                     {getRoleIcon(r.name)}
                     <span className="truncate max-w-[120px]">{r.name}</span>
-                    <span className="font-mono text-[9px]">({r.totalAssigned}{r.targetQty > 0 ? `/${r.targetQty}` : ""})</span>
+                    <span className="font-mono text-[9px]">({r.allocatedCount}{r.targetQty > 0 ? `/${r.targetQty}` : ""})</span>
                   </button>
                 ))}
 
@@ -2168,7 +2205,7 @@ export default function DragAndDropReserves({
                 >
                   <span>♿</span>
                   <span>{sr.name}</span>
-                  <span className="font-mono text-[9px]">({sr.totalAssigned}{sr.target > 0 ? `/${sr.target}` : ""})</span>
+                  <span className="font-mono text-[9px]">({sr.allocated}{sr.target > 0 ? `/${sr.target}` : ""})</span>
                 </button>
               ))}
 
@@ -2509,7 +2546,8 @@ export default function DragAndDropReserves({
                       ) : (
                         assignedCollabs.map((collab) => {
                           const isChefe = isChefeDeSalaRole(collab.assignedRole);
-                          const isAplicador = isAplicadorRole(collab.assignedRole);
+                          const isSpecialized = isSpecializedRole(collab.specialRole || collab.assignedRole);
+                          const isAplicador = !isChefe && !isSpecialized;
                           return (
                             <div 
                               key={collab.id}
@@ -2542,7 +2580,7 @@ export default function DragAndDropReserves({
                                   <div className="flex flex-wrap items-center gap-1 mt-0.5">
                                     <span className="text-[8.5px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1">
                                       {isChefe && <Award className="w-2.5 h-2.5 text-amber-600 shrink-0" />}
-                                      <span>Função: <strong className={isChefe ? "text-amber-700 dark:text-amber-300" : isAplicador ? "text-indigo-700 dark:text-indigo-300" : "text-teal-700 dark:text-teal-300"}>{collab.assignedRole || "Aplicador"}</strong></span>
+                                      <span>Função: <strong className={isChefe ? "text-amber-700 dark:text-amber-300" : isAplicador ? "text-indigo-700 dark:text-indigo-300" : "text-teal-700 dark:text-teal-300"}>{isChefe ? "Chefe de Sala" : isSpecialized ? (collab.specialRole || collab.assignedRole || "Especializado") : (collab.assignedRole && isAplicadorRole(collab.assignedRole) ? collab.assignedRole : "Aplicador")}</strong></span>
                                     </span>
 
                                     {/* TAG SUBSTITUTO */}
@@ -2597,11 +2635,11 @@ export default function DragAndDropReserves({
                       </span>
                       <span className="flex items-center gap-1">
                         <UserCheck className="w-3 h-3 text-indigo-500" />
-                        <span>Aplicadores: <strong className="text-indigo-600 dark:text-indigo-400">{assignedCollabs.filter(c => isAplicadorRole(c.assignedRole)).length}</strong></span>
+                        <span>Aplicadores: <strong className="text-indigo-600 dark:text-indigo-400">{assignedCollabs.filter(c => !isChefeDeSalaRole(c.assignedRole) && !isSpecializedRole(c.specialRole || c.assignedRole)).length}</strong></span>
                       </span>
                       <span className="flex items-center gap-1">
                         <Shield className="w-3 h-3 text-teal-500" />
-                        <span>Demais: <strong className="text-teal-600 dark:text-teal-400">{assignedCollabs.filter(c => !isChefeDeSalaRole(c.assignedRole) && !isAplicadorRole(c.assignedRole)).length}</strong></span>
+                        <span>Demais: <strong className="text-teal-600 dark:text-teal-400">{assignedCollabs.filter(c => isSpecializedRole(c.specialRole || c.assignedRole)).length}</strong></span>
                       </span>
                     </div>
                   )}
@@ -3347,9 +3385,13 @@ export default function DragAndDropReserves({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const designatedRole = collab.assignedRole && collab.assignedRole.trim() !== ""
-                                      ? collab.assignedRole
-                                      : "Aplicador (Fiscal de Sala)";
+                                    const isChefe = isChefeDeSalaRole(collab.assignedRole);
+                                    const isSpec = isSpecializedRole(collab.specialRole || collab.assignedRole);
+                                    const designatedRole = isChefe 
+                                      ? "Chefe de Sala" 
+                                      : (isSpec 
+                                          ? (collab.specialRole || collab.assignedRole || "Aplicador (Fiscal de Sala)")
+                                          : "Aplicador (Fiscal de Sala)");
                                     onMove(collab.id!, false, managingRoom.number, designatedRole);
                                     setSuccessMsg(`${collab.name} alocado na ${managingRoom.number} como ${designatedRole}!`);
                                     setTimeout(() => setSuccessMsg(null), 3000);
@@ -3769,9 +3811,7 @@ export default function DragAndDropReserves({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const designatedRole = collab.assignedRole && collab.assignedRole.trim() !== ""
-                                    ? collab.assignedRole
-                                    : managingSector.defaultRole;
+                                  const designatedRole = managingSector.defaultRole;
                                   onMove(collab.id!, false, managingSector.shortName, designatedRole);
                                   setSuccessMsg(`${collab.name} alocado em ${managingSector.name} como ${designatedRole}!`);
                                   setTimeout(() => setSuccessMsg(null), 3000);

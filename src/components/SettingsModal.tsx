@@ -214,8 +214,8 @@ export default function SettingsModal({
                 <h3 className="font-display font-black text-lg text-slate-900 dark:text-white uppercase tracking-tight">
                   Configurações do Sistema
                 </h3>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-black">
-                  CalanguS v3.2
+                <span className="text-[10px] bg-gradient-to-r from-amber-500/20 to-yellow-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-mono font-black shadow-xs">
+                  CalanguS v3.8
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
@@ -544,7 +544,7 @@ export default function SettingsModal({
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Última atualização: Setembro de 2026 (v3.2) • Desenvolvedor: Philippe Wagner M R Araujo
+                    Última atualização: Setembro de 2026 (v3.8) • Desenvolvedor: Philippe Wagner M R Araujo
                   </p>
                 </div>
               </div>
@@ -582,7 +582,7 @@ export default function SettingsModal({
               <span>Restaurar Padrões</span>
             </button>
             <span className="text-[10px] text-slate-400 dark:text-slate-600 font-mono font-bold hidden sm:inline">
-              CalanguS v3.2 (Build 2026)
+              CalanguS v3.8 (Build 2026)
             </span>
           </div>
 

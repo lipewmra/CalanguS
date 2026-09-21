@@ -73,6 +73,11 @@ export default function AttendanceListView({
   const [copiedRoom, setCopiedRoom] = useState<string | null>(null);
   const [selectedAuditCollab, setSelectedAuditCollab] = useState<CollaboratorInfo | null>(null);
 
+  // Day 2 Rotation / Shuffle States (Pair preservation vs Individual)
+  const [shuffleMode, setShuffleMode] = useState<"pairs" | "individual">("pairs");
+  const [showShuffleModal, setShowShuffleModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+
   // Day 2 Substitution / Swap Modal State
   const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [swapSourceCollab, setSwapSourceCollab] = useState<CollaboratorInfo | null>(null);
@@ -191,7 +196,10 @@ export default function AttendanceListView({
       const chefes = collabsInRoom.filter(c => isChefeDeSalaRole(c.assignedRole));
       const aplicadores = collabsInRoom.filter(c => isAplicadorRole(c.assignedRole));
       const especializados = collabsInRoom.filter(c => !isChefeDeSalaRole(c.assignedRole) && !isAplicadorRole(c.assignedRole));
-      const isComplete = chefes.length >= 1 && aplicadores.length >= 1;
+      
+      const targetC = room.targetChefes !== undefined ? room.targetChefes : 1;
+      const targetA = room.targetAplicadores !== undefined ? room.targetAplicadores : 1;
+      const isComplete = chefes.length >= targetC && aplicadores.length >= targetA;
 
       return {
         room,
@@ -199,7 +207,9 @@ export default function AttendanceListView({
         chefes,
         aplicadores,
         especializados,
-        isComplete
+        isComplete,
+        targetChefes: targetC,
+        targetAplicadores: targetA
       };
     });
   }, [rooms, allocatedCollaborators]);
@@ -236,7 +246,9 @@ export default function AttendanceListView({
         return !isChefeDeSalaRole(role) && !isAplicadorRole(role);
       });
 
-      const isComplete = chefes.length >= 1 && aplicadores.length >= 1;
+      const targetC = room.targetChefes !== undefined ? room.targetChefes : 1;
+      const targetA = room.targetAplicadores !== undefined ? room.targetAplicadores : 1;
+      const isComplete = chefes.length >= targetC && aplicadores.length >= targetA;
 
       return {
         room,
@@ -244,10 +256,77 @@ export default function AttendanceListView({
         chefes,
         aplicadores,
         especializados,
-        isComplete
+        isComplete,
+        targetChefes: targetC,
+        targetAplicadores: targetA
       };
     });
   }, [rooms, allocatedCollaborators]);
+
+  // Dynamic preview computation for Day 2 Aplicador Rotation
+  const rotationPreview = useMemo(() => {
+    const aplicadores = allocatedCollaborators.filter(c => 
+      !c.isReserve && 
+      Boolean(c.assignedRoom && c.assignedRoom.trim() !== "") &&
+      isAplicadorRole(c.assignedRole)
+    );
+
+    const roomMap: Record<string, CollaboratorInfo[]> = {};
+    aplicadores.forEach(c => {
+      const rm = c.assignedRoom!;
+      if (!roomMap[rm]) roomMap[rm] = [];
+      roomMap[rm].push(c);
+    });
+
+    const roomsList = Object.keys(roomMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (roomsList.length < 2) {
+      return {
+        canRotate: false,
+        totalAplicadores: aplicadores.length,
+        roomsCount: roomsList.length,
+        pairsPlan: []
+      };
+    }
+
+    // Gerar plano determinístico de troca em pares
+    // Exemplo: se houver 2 salas: sala 0 <-> sala 1
+    // Se houver >2 salas: rotação cíclica
+    const pairsPlan: Array<{
+      fromRoom: string;
+      toRoom: string;
+      collabs: CollaboratorInfo[];
+    }> = [];
+
+    if (roomsList.length === 2) {
+      pairsPlan.push({
+        fromRoom: roomsList[0],
+        toRoom: roomsList[1],
+        collabs: roomMap[roomsList[0]]
+      });
+      pairsPlan.push({
+        fromRoom: roomsList[1],
+        toRoom: roomsList[0],
+        collabs: roomMap[roomsList[1]]
+      });
+    } else {
+      for (let i = 0; i < roomsList.length; i++) {
+        const fromRoom = roomsList[i];
+        const toRoom = roomsList[(i + 1) % roomsList.length];
+        pairsPlan.push({
+          fromRoom,
+          toRoom,
+          collabs: roomMap[fromRoom]
+        });
+      }
+    }
+
+    return {
+      canRotate: true,
+      totalAplicadores: aplicadores.length,
+      roomsCount: roomsList.length,
+      pairsPlan
+    };
+  }, [allocatedCollaborators]);
 
   // Filtered Day 1 Rooms
   const filteredRoomsDay1 = useMemo(() => {
@@ -320,17 +399,19 @@ export default function AttendanceListView({
   }, [allocatedCollaborators, roleFilter, presenceStatusFilter, searchQuery, activeDay]);
 
   // --------------------------------------------------------------------------
-  // SHUFFLE ALGORITHM: RODÍZIO DE APLICADORES NO 2º DIA
-  // Regra estrita:
-  // - Embaralha APENAS os Aplicadores alocados nas salas
-  // - Mantém os Chefes de Sala em suas salas originais
-  // - Preserva a quantidade exata de aplicadores por sala
-  // - Evita que um aplicador fique na mesma sala se houver 2 ou mais salas
+  // SHUFFLE ALGORITHM: RODÍZIO E TROCA DE APLICADORES NO 2º DIA (COM OPÇÃO DE MANTER PARES)
+  // Regras operacionais:
+  // - Chefes de Sala permanecem FIXOS em suas salas originais (diretriz ENEM).
+  // - Aplicadores trocam de sala:
+  //   * Modo "pairs" (Padrão): As duplas de aplicadores que já trabalham juntos trocam de sala mantendo o par intacto
+  //     (ex: Sala 1 [A, B] e Sala 2 [C, D] ➔ Sala 1 passa a ter [C, D] e Sala 2 passa a ter [A, B]).
+  //   * Modo "individual": Embaralha os aplicadores individualmente garantindo troca de sala.
+  // - Não utiliza window.confirm ou window.alert que são bloqueados no iframe.
   // --------------------------------------------------------------------------
-  const handleShuffleAplicadoresDay2 = async () => {
+  const handleExecuteShuffle = async (mode: "pairs" | "individual" = shuffleMode) => {
     if (readOnly || isShuffling) return;
 
-    // 1. Gather all aplicadores allocated to rooms on Day 1
+    // 1. Coleta todos os aplicadores alocados a salas no 1º Dia
     const aplicadores = allocatedCollaborators.filter(c => 
       !c.isReserve && 
       Boolean(c.assignedRoom && c.assignedRoom.trim() !== "") &&
@@ -338,57 +419,108 @@ export default function AttendanceListView({
     );
 
     if (aplicadores.length < 2) {
-      alert("É necessário ter pelo menos 2 aplicadores alocados em salas para realizar o rodízio do 2º Dia.");
+      setShuffleAlert({
+        message: "É necessário ter pelo menos 2 aplicadores alocados em salas no 1º Dia para realizar o rodízio do 2º Dia.",
+        count: 0
+      });
       return;
     }
 
-    const confirmShuffle = window.confirm(
-      `Deseja embaralhar os ${aplicadores.length} Aplicadores de sala para o 2º Dia do ENEM?\n\n` +
-      `• Os Chefes de Sala permanecerão FIXOS em suas salas.\n` +
-      `• Cada sala receberá um novo aplicador mantendo o quantitativo exato de fiscais por sala.\n` +
-      `• A alocação original do 1º Dia será preservada.`
+    // Agrupa os aplicadores por sala de origem do 1º Dia
+    const roomToAplicadores: Record<string, CollaboratorInfo[]> = {};
+    aplicadores.forEach(c => {
+      const rm = c.assignedRoom!;
+      if (!roomToAplicadores[rm]) roomToAplicadores[rm] = [];
+      roomToAplicadores[rm].push(c);
+    });
+
+    const roomsWithAplicadores = Object.keys(roomToAplicadores).sort((a, b) => 
+      a.localeCompare(b, undefined, { numeric: true })
     );
-    if (!confirmShuffle) return;
+
+    if (roomsWithAplicadores.length < 2) {
+      setShuffleAlert({
+        message: "É necessário ter aplicadores em pelo menos 2 salas distintas para realizar a troca de salas no 2º Dia.",
+        count: 0
+      });
+      return;
+    }
 
     setIsShuffling(true);
     try {
-      // 2. Collect room slots (an array of room numbers matching initial aplicador distribution)
-      const roomSlots = aplicadores.map(a => a.assignedRoom!);
+      // Mapeamento: Colaborador ID -> Nova Sala do 2º Dia
+      const assignments: Record<string, string> = {};
 
-      // 3. Shuffle with derangement (attempt to assign different rooms)
-      let bestShuffle: string[] = [];
-      let maxDifferent = -1;
+      if (mode === "pairs") {
+        // MODO PARES: As duplas/equipes de cada sala trocam juntas de sala!
+        // Preserva o entrosamento do par de aplicadores conforme especificado pelo usuário.
+        let targetRooms: string[] = [];
 
-      for (let attempt = 0; attempt < 50; attempt++) {
-        const candidate = [...roomSlots].sort(() => Math.random() - 0.5);
-        let diffCount = 0;
-        for (let i = 0; i < aplicadores.length; i++) {
-          if (aplicadores[i].assignedRoom !== candidate[i]) {
-            diffCount++;
+        if (roomsWithAplicadores.length === 2) {
+          // Caso clássico com 2 salas: Sala 0 e Sala 1 trocam entre si diretamente
+          targetRooms = [roomsWithAplicadores[1], roomsWithAplicadores[0]];
+        } else {
+          // Mais de 2 salas: Rotação cíclica aleatória garantida (derangement perfeito de salas)
+          const shuffledRooms = [...roomsWithAplicadores].sort(() => Math.random() - 0.5);
+          const roomMapping: Record<string, string> = {};
+          for (let i = 0; i < shuffledRooms.length; i++) {
+            const fromRoom = shuffledRooms[i];
+            const toRoom = shuffledRooms[(i + 1) % shuffledRooms.length];
+            roomMapping[fromRoom] = toRoom;
+          }
+          targetRooms = roomsWithAplicadores.map(r => roomMapping[r]);
+        }
+
+        roomsWithAplicadores.forEach((fromRoom, idx) => {
+          const toRoom = targetRooms[idx];
+          const collabs = roomToAplicadores[fromRoom] || [];
+          collabs.forEach(collab => {
+            if (collab.id) {
+              assignments[collab.id] = toRoom;
+            }
+          });
+        });
+      } else {
+        // MODO INDIVIDUAL: Embaralha aplicadores individualmente com derangement estrito
+        const roomSlots = aplicadores.map(a => a.assignedRoom!);
+        let bestShuffle: string[] = [];
+        let maxDifferent = -1;
+
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const candidate = [...roomSlots].sort(() => Math.random() - 0.5);
+          let diffCount = 0;
+          for (let i = 0; i < aplicadores.length; i++) {
+            if (aplicadores[i].assignedRoom !== candidate[i]) {
+              diffCount++;
+            }
+          }
+          if (diffCount > maxDifferent) {
+            maxDifferent = diffCount;
+            bestShuffle = candidate;
+            if (diffCount === aplicadores.length) break;
           }
         }
-        if (diffCount > maxDifferent) {
-          maxDifferent = diffCount;
-          bestShuffle = candidate;
-          if (diffCount === aplicadores.length) break; // Perfect derangement
-        }
+
+        aplicadores.forEach((collab, i) => {
+          if (collab.id) {
+            assignments[collab.id] = bestShuffle[i] || collab.assignedRoom!;
+          }
+        });
       }
 
-      // 4. Update all aplicadores with their new assignedRoomDay2
-      for (let i = 0; i < aplicadores.length; i++) {
-        const collab = aplicadores[i];
-        const newRoomDay2 = bestShuffle[i];
-
-        if (collab.id) {
+      // Persiste as atribuições do 2º Dia no banco de dados e adiciona logs de auditoria
+      for (const collab of aplicadores) {
+        if (collab.id && assignments[collab.id]) {
+          const newRoomDay2 = assignments[collab.id];
           const updatedLogs = appendCollaboratorLog(
             collab,
             "alocacao_sala",
             "Rodízio 2º Dia Aplicado",
-            `Embaralhado automaticamente para o 2º Dia: Sala ${collab.assignedRoom} ➔ Sala ${newRoomDay2}.`,
+            `Rodízio para o 2º Dia: Sala ${collab.assignedRoom} ➔ Sala ${newRoomDay2} (${mode === "pairs" ? "Mantendo pares de aplicadores" : "Embaralhamento individual"}).`,
             {
               performedBy: building?.claId || "Coordenação CLA",
               performedByRole: "CLA",
-              details: { day1Room: collab.assignedRoom, day2Room: newRoomDay2 }
+              details: { day1Room: collab.assignedRoom, day2Room: newRoomDay2, mode }
             }
           );
 
@@ -400,26 +532,26 @@ export default function AttendanceListView({
         }
       }
 
+      setShowShuffleModal(false);
       setShuffleAlert({
-        message: `Rodízio concluído com sucesso! ${aplicadores.length} aplicadores foram redistribuídos em novas salas para o 2º Dia.`,
+        message: `Alteração realizada com sucesso! ${aplicadores.length} aplicadores foram redistribuídos para o 2º Dia (${mode === "pairs" ? "Mantendo os pares de fiscais" : "Embaralhamento individual"}).`,
         count: aplicadores.length
       });
-      setTimeout(() => setShuffleAlert(null), 7000);
+      setTimeout(() => setShuffleAlert(null), 8000);
     } catch (err) {
-      console.error("Erro ao embaralhar aplicadores:", err);
-      alert("Ocorreu um erro ao processar o rodízio. Tente novamente.");
+      console.error("Erro ao aplicar rodízio do 2º Dia:", err);
+      setShuffleAlert({
+        message: "Ocorreu um erro ao aplicar a alteração de salas. Tente novamente.",
+        count: 0
+      });
     } finally {
       setIsShuffling(false);
     }
   };
 
-  // Reset Day 2 rooms back to Day 1 rooms
+  // Restaura as salas do 2º Dia para ficarem idênticas às do 1º Dia
   const handleResetDay2ToDay1 = async () => {
     if (readOnly || isShuffling) return;
-    const confirmReset = window.confirm(
-      "Deseja redefinir o ensalamento do 2º Dia para ficar idêntico ao do 1º Dia? Quaisquer rodízios ou substituições do 2º Dia serão desfeitos."
-    );
-    if (!confirmReset) return;
 
     setIsShuffling(true);
     try {
@@ -431,13 +563,18 @@ export default function AttendanceListView({
           });
         }
       }
+      setShowResetModal(false);
       setShuffleAlert({
-        message: "O ensalamento do 2º Dia foi sincronizado com o 1º Dia com sucesso.",
+        message: "O ensalamento do 2º Dia foi sincronizado e restaurado com o 1º Dia com sucesso.",
         count: 0
       });
-      setTimeout(() => setShuffleAlert(null), 5000);
+      setTimeout(() => setShuffleAlert(null), 6000);
     } catch (err) {
       console.error("Erro ao resetar 2º dia:", err);
+      setShuffleAlert({
+        message: "Erro ao sincronizar salas com o 1º Dia.",
+        count: 0
+      });
     } finally {
       setIsShuffling(false);
     }
@@ -1030,50 +1167,99 @@ export default function AttendanceListView({
       )}
 
       {/* ========================================================================= */}
-      {/* 4. VIEW 2: ENSALAMENTO 2º DIA (SHUFFLE & SUBSTITUTION)                     */}
+      {/* 4. VIEW 2: ENSALAMENTO 2º DIA (RODÍZIO COM PRESERVAÇÃO DE PARES)           */}
       {/* ========================================================================= */}
       {activeTab === "ensalamento2" && (
         <div className="space-y-6">
           {/* Action Bar & Rules */}
           <div className="no-print p-5 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-teal-500/10 border-2 border-indigo-500/30 rounded-2xl shadow-xs space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="space-y-1">
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+              <div className="space-y-1.5 max-w-2xl">
                 <div className="flex items-center gap-2">
                   <span className="p-1.5 rounded-lg bg-indigo-600 text-white shadow-xs">
                     <Shuffle className="w-4 h-4" />
                   </span>
                   <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                    Rodízio de Aplicadores para o 2º Dia do ENEM
+                    Opção 02: Rodízio de Aplicadores para o 2º Dia do ENEM
                   </h3>
                 </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                  De acordo com as diretrizes do ENEM, os <strong>Chefes de Sala permanecem em suas salas de origem</strong>, enquanto os <strong>Aplicadores são rotacionados/embaralhados</strong> entre as salas para o 2º domingo.
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                  De acordo com as diretrizes do ENEM, os <strong>Chefes de Sala permanecem fixos em suas salas de origem</strong>. Os <strong>Aplicadores trocam de sala</strong> no 2º domingo. Você pode escolher <strong>manter as duplas de aplicadores unidas</strong> ao trocar de sala ou redistribuí-los individualmente.
                 </p>
+                <div className="text-[11px] text-indigo-700 dark:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-xl flex items-center gap-2 font-semibold">
+                  <ArrowLeftRight className="w-3.5 h-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                  <span>
+                    <strong>Exemplo:</strong> Se na Sala 1 os aplicadores são [A e B] e na Sala 2 são [C e D], após a alteração a Sala 1 passa a ter [C e D] e a Sala 2 passa a ter [A e B].
+                  </span>
+                </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleShuffleAplicadoresDay2}
-                  disabled={readOnly || isShuffling}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs flex items-center gap-2 shadow-md transition cursor-pointer disabled:opacity-50"
-                  title="Embaralha todos os aplicadores entre as salas mantendo os quantitativos"
-                >
-                  <Shuffle className={`w-4 h-4 ${isShuffling ? "animate-spin" : ""}`} />
-                  <span>{isShuffling ? "Embaralhando..." : "Embaralhar Aplicadores (2º Dia)"}</span>
-                </button>
+              {/* Mode Selector & Action Buttons */}
+              <div className="flex flex-col sm:flex-row lg:flex-col items-end gap-2.5 shrink-0">
+                {/* Mode Selector */}
+                <div className="flex items-center p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setShuffleMode("pairs")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      shuffleMode === "pairs"
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Mantém a dupla de aplicadores junta ao trocar de sala (Recomendado)"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Manter Pares</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShuffleMode("individual")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      shuffleMode === "individual"
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Embaralha aplicadores individualmente"
+                  >
+                    <Shuffle className="w-3.5 h-3.5" />
+                    <span>Individual</span>
+                  </button>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={handleResetDay2ToDay1}
-                  disabled={readOnly || isShuffling}
-                  className="px-3.5 py-2.5 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 active:scale-95 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-                  title="Restaura a escala do 2º dia para ficar igual ao 1º dia"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  <span>Restaurar 1º Dia</span>
-                </button>
+                {/* Main Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowShuffleModal(true)}
+                    disabled={readOnly || isShuffling || !rotationPreview.canRotate}
+                    className="px-3.5 py-2.5 rounded-xl border border-indigo-500/30 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300 font-black text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                    title="Visualizar simulação da troca de salas antes de aplicar"
+                  >
+                    <span>Ver Simulação</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteShuffle(shuffleMode)}
+                    disabled={readOnly || isShuffling || !rotationPreview.canRotate}
+                    className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs flex items-center gap-2 shadow-md transition cursor-pointer disabled:opacity-50"
+                    title="Executa a alteração e troca dos aplicadores de salas para o 2º Dia"
+                  >
+                    <Shuffle className={`w-4 h-4 ${isShuffling ? "animate-spin" : ""}`} />
+                    <span>{isShuffling ? "Alterando..." : "Trocar Aplicadores (2º Dia)"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowResetModal(true)}
+                    disabled={readOnly || isShuffling}
+                    className="px-3.5 py-2.5 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 active:scale-95 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                    title="Restaura a escala do 2º dia para ficar idêntica à do 1º dia"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Restaurar 1º Dia</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1763,6 +1949,206 @@ export default function AttendanceListView({
         </div>
       )}
 
+      {/* Modal: Rodízio e Troca de Aplicadores para o 2º Dia */}
+      {showShuffleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#0c1220] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-6 space-y-5 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Shuffle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    Rodízio de Aplicadores (2º Dia do ENEM)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Defina a regra de rotação e visualize a distribuição entre as salas.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShuffleModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+              {/* Option Selector */}
+              <div className="space-y-2">
+                <label className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                  Modo de Alteração de Salas
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShuffleMode("pairs")}
+                    className={`p-4 rounded-2xl border-2 text-left transition cursor-pointer flex flex-col justify-between ${
+                      shuffleMode === "pairs"
+                        ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20"
+                        : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase">
+                          Recomendado ENEM
+                        </span>
+                        {shuffleMode === "pairs" && <CheckCircle2 className="w-4 h-4 text-indigo-600" />}
+                      </div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white mt-1">
+                        Manter os Pares de Aplicadores
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        A dupla que já atua junto na sala troca de sala em bloco (Ex: Sala 1 [A, B] e Sala 2 [C, D] ➔ Sala 1 recebe [C, D] e Sala 2 recebe [A, B]).
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShuffleMode("individual")}
+                    className={`p-4 rounded-2xl border-2 text-left transition cursor-pointer flex flex-col justify-between ${
+                      shuffleMode === "individual"
+                        ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20"
+                        : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-400 uppercase">
+                          Individual
+                        </span>
+                        {shuffleMode === "individual" && <CheckCircle2 className="w-4 h-4 text-indigo-600" />}
+                      </div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white mt-1">
+                        Embaralhar Individualmente
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Cada aplicador é redistribuído aleatoriamente entre as salas, sem garantia de manter a mesma dupla do 1º dia.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Simulation Preview Box */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                    Simulação da Troca ({rotationPreview.roomsCount} Salas • {rotationPreview.totalAplicadores} Aplicadores)
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Chefes de Sala permanecem em suas salas
+                  </span>
+                </div>
+
+                {rotationPreview.pairsPlan.length > 0 ? (
+                  <div className="space-y-2 max-h-56 overflow-y-auto p-1 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    {rotationPreview.pairsPlan.map((plan, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="px-2 py-1 rounded-lg bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-mono font-black shrink-0">
+                            Sala {plan.fromRoom}
+                          </span>
+                          <span className="text-slate-600 dark:text-slate-300 truncate font-semibold">
+                            {plan.collabs.map(c => c.name).join(" e ") || "Aplicadores"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 font-bold">
+                          <ArrowRight className="w-4 h-4 text-slate-400" />
+                          <span className="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-mono font-black">
+                            Vai para Sala {plan.toRoom}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs font-bold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>São necessárias pelo menos 2 salas com aplicadores para realizar o rodízio.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setShowShuffleModal(false)}
+                disabled={isShuffling}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExecuteShuffle(shuffleMode)}
+                disabled={isShuffling || !rotationPreview.canRotate}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs shadow-md transition cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              >
+                <Shuffle className={`w-4 h-4 ${isShuffling ? "animate-spin" : ""}`} />
+                <span>{isShuffling ? "Aplicando..." : "Confirmar e Aplicar Mudança"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirmar Restauração para 1º Dia */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#0c1220] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white">
+                  Restaurar Ensalamento do 1º Dia
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Sincronização da escala do 2º domingo
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+              Deseja restaurar a alocação de salas do 2º Dia para ficar idêntica à do 1º Dia? Quaisquer rodízios ou trocas manuais feitas no 2º Dia serão desfeitas.
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                disabled={isShuffling}
+                className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDay2ToDay1}
+                disabled={isShuffling}
+                className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-black text-xs shadow-md transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>{isShuffling ? "Restaurando..." : "Confirmar Restauração"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* 7. IMPRESSÃO OFICIAL PARA MAPAS DE ENSALAMENTO E PRESENÇA                 */}
       {/* ========================================================================= */}
@@ -1785,7 +2171,7 @@ export default function AttendanceListView({
             </div>
           </div>
           <div className="text-right font-mono text-[10px] border-2 border-black p-2 rounded">
-            <span className="block font-black text-xs">CALANGUS v3.2</span>
+            <span className="block font-black text-xs">CALANGUS v3.8</span>
             <span className="block">Emissão: {new Date().toLocaleDateString("pt-BR")}</span>
             <span className="block font-bold">Total: {allocatedCollaborators.length} fiscais</span>
           </div>

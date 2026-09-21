@@ -179,9 +179,18 @@ export function canonicalizeRoleName(role?: string | null): string {
   if (
     lower === "aplicador" ||
     lower === "aplicador (fiscal de sala)" ||
-    lower === "fiscal de sala"
+    lower === "fiscal de sala" ||
+    lower.includes("aplicador") ||
+    lower.includes("fiscal de sala") ||
+    lower === "fiscal de aplicação" ||
+    lower === "fiscal aplicador" ||
+    lower === "fiscal de prova" ||
+    lower === "fiscal comum" ||
+    lower === "fiscal"
   ) {
-    return "Aplicador";
+    if (!lower.includes("ledor") && !lower.includes("transcritor") && !lower.includes("chefe") && !lower.includes("banheiro") && !lower.includes("volante")) {
+      return "Aplicador";
+    }
   }
 
   // Fiscal de Banheiro
@@ -289,20 +298,134 @@ export function isTecnicoInformaticaInformed(building?: any | null): boolean {
 }
 
 /**
+ * Helper para testar se uma função é de atendimento especializado (Ledor, Transcritor, Libras, Surdocegos, etc.)
+ */
+export function isSpecializedRole(role?: string | null): boolean {
+  if (!role) return false;
+  const lower = role.toLowerCase().trim();
+  if (
+    lower === "nenhuma" || 
+    lower === "nenhum" || 
+    lower === "não" || 
+    lower === "nao" || 
+    lower === "sem função" || 
+    lower === "regular" ||
+    lower === "aplicador" ||
+    lower === "fiscal de sala" ||
+    lower === "chefe de sala" ||
+    lower === "chefe"
+  ) {
+    return false;
+  }
+  if (lower.includes("libras")) return true;
+  if (lower.includes("surdocego") || lower.includes("surdo-cego") || lower.includes("tadoma")) return true;
+  if (lower.includes("ledor") || lower.includes("transcritor") || lower.includes("leitor")) return true;
+  if (lower.includes("videoprova") || lower.includes("video prova") || lower.includes("vídeo prova")) return true;
+  return false;
+}
+
+/**
  * Helper para testar se uma função é Chefe de Sala
  */
-export function isChefeDeSalaRole(role?: string): boolean {
+export function isChefeDeSalaRole(role?: string | null): boolean {
   if (!role) return false;
-  const r = role.toLowerCase();
+  const r = role.toLowerCase().trim();
   return r.includes("chefe de sala") || r === "chefe";
 }
 
 /**
- * Helper para testar se uma função é Aplicador / Fiscal de Sala (excluindo Chefe de Sala)
+ * Helper para testar se uma função é Aplicador / Fiscal de Sala (excluindo Chefe de Sala e Funções Especializadas)
  */
-export function isAplicadorRole(role?: string): boolean {
+export function isAplicadorRole(role?: string | null): boolean {
   if (!role) return false;
-  const r = role.toLowerCase();
-  return (r.includes("aplicador") || r.includes("fiscal de sala")) && !r.includes("chefe de sala");
+  const r = role.toLowerCase().trim();
+  if (r.includes("chefe de sala") || r === "chefe") return false;
+  if (isSpecializedRole(r)) return false;
+  return (
+    r.includes("aplicador") || 
+    r.includes("fiscal de sala") || 
+    r === "fiscal" ||
+    r === "fiscal de aplicação" ||
+    r === "fiscal aplicador" ||
+    r === "fiscal de prova" ||
+    r === "fiscal comum"
+  );
 }
+
+/**
+ * Retorna a função REAL/EFETIVA de um colaborador considerando estritamente a ALOCAÇÃO (Menu 3).
+ * REGRA CRÍTICA DO SISTEMA:
+ * O que vale é a ALOCAÇÃO: Se um colaborador foi aceito com uma função inicial (ex: Aplicador),
+ * mas o CLA no Menu 3 o alocou em uma nova função ou setor (ex: Representante do Local, Banheiro, Volante, Porteiro, Limpeza, TI),
+ * o sistema DEVE ignorar a função inicial de cadastro e associar ele à nova função ALOCADA.
+ * 
+ * E vice-versa: se o colaborador foi aceito com outra função (ex: Fiscal Volante, Fiscal, Colaborador)
+ * mas o CLA o alocou em uma sala de prova regular (Menu 3), sua função efetiva de alocação no prédio é APLICADOR
+ * (a não ser que tenha sido alocado explicitamente como Chefe de Sala ou função Especializada).
+ * 
+ * Se o colaborador NÃO está alocado (isReserve === true ou sem assignedRoom),
+ * ele NÃO possui função alocada válida para preenchimento de vagas e JAMAIS deve ser contado
+ * em cálculos de alocação ou pendências.
+ */
+export function getEffectiveAllocatedRole(collab?: {
+  isReserve?: boolean;
+  assignedRoom?: string;
+  assignedRole?: string;
+  specialRole?: string;
+} | null): string {
+  if (!collab) return "";
+  if (collab.isReserve === true || String(collab.isReserve) === "true" || !collab.assignedRoom || collab.assignedRoom.trim() === "") {
+    return "";
+  }
+
+  const room = collab.assignedRoom.trim();
+  const roomLower = room.toLowerCase();
+
+  // 1. Setores Operacionais / Postos de Apoio (A Alocação no setor define a função prioritariamente)
+  if (roomLower === "representante" || roomLower === "representante do local" || roomLower.includes("representante")) {
+    return "Representante do Local";
+  }
+  if (roomLower === "banheiro" || roomLower === "fiscal de banheiro" || roomLower.includes("banheiro") || roomLower.includes("sanitário") || roomLower.includes("sanitario")) {
+    return "Fiscal de Banheiro";
+  }
+  if (roomLower === "volante" || roomLower === "volantes" || roomLower === "fiscal volante" || roomLower.includes("volante") || roomLower.includes("corredor")) {
+    return "Fiscal Volante / Corredor";
+  }
+  if (roomLower === "limpeza" || roomLower === "auxiliar de limpeza" || roomLower.includes("limpeza")) {
+    return "Auxiliar de Limpeza";
+  }
+  if (roomLower === "porteiro" || roomLower === "portaria" || roomLower.includes("porteiro") || roomLower.includes("portão") || roomLower.includes("portao")) {
+    return "Porteiro";
+  }
+  if (
+    roomLower === "ti" || 
+    roomLower === "tecnico de informatica" || 
+    roomLower === "técnico de informática" || 
+    roomLower === "informática" || 
+    roomLower === "informatica" ||
+    ((roomLower.includes("informática") || roomLower.includes("informatica")) && !roomLower.includes("sala") && !roomLower.includes("lab"))
+  ) {
+    return "Técnico de Informática";
+  }
+
+  // 2. Salas de Prova ou ambientes de aplicação (Salas 01, 02, etc.)
+  // Se estiver explicitamente alocado como Chefe de Sala
+  if (isChefeDeSalaRole(collab.assignedRole)) {
+    return "Chefe de Sala";
+  }
+
+  // Se tiver função especializada (Ledor, Transcritor, Libras, etc.) - IGNORA marcadores como "Nenhuma"
+  const spec = collab.specialRole?.trim();
+  if (spec && spec !== "" && isSpecializedRole(spec)) {
+    return canonicalizeRoleName(spec);
+  }
+  if (isSpecializedRole(collab.assignedRole)) {
+    return canonicalizeRoleName(collab.assignedRole);
+  }
+
+  // Se alocado em sala de prova regular e não for chefe ou especializado:
+  // SUA FUNÇÃO EFETIVA DE ALOCAÇÃO É APLICADOR!
+  return "Aplicador";
+}
+
 

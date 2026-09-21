@@ -1,4 +1,5 @@
 import { BuildingInfo, RoomDetails, CollaboratorMetricsConfig } from "../types";
+import { canonicalizeRoleName, isChefeDeSalaRole, isAplicadorRole } from "./collaborator-utils";
 
 export interface OfficialMetricSpecification {
   funcao: string;
@@ -306,105 +307,175 @@ export function calculateBuildingTargetQuantities(
   const extraRoomsCount = Math.max(0, building.extraRoomsCount || (building.extraRooms ? building.extraRooms.length : 0));
   const totalRoomsCount = regularRoomsCount + specialRoomsCount + extraRoomsCount;
 
-  // 1. Chefe de Sala: 1 por sala (Regular, Especializada ou Extra)
-  const regularChefes = regularRoomsCount * (metricsConfig.chefesPerRegularRoom || 1);
-  const specialChefes = specialRoomsCount * (metricsConfig.chefesPerSpecialRoom || 1);
-  const extraChefes = extraRoomsCount * (metricsConfig.chefesPerExtraRoom || 1);
-  const totalChefes = regularChefes + specialChefes + extraChefes;
-
-  // 2. Aplicador: 1 a 60 participantes (1 por sala); 61 a 100 (2 por sala)
-  // A sala extra NÃO possui em nenhum caso aplicador
-  let calculatedRegularAplicadores = 0;
+  // 1. Chefe de Sala: calculado sala a sala (se especificado) ou pelo padrão das métricas
+  let totalChefes = 0;
   if (building.rooms && building.rooms.length > 0) {
     building.rooms.forEach(r => {
-      // Ignora salas extras que estejam na lista geral
-      const isExtra = r.type === "extra" || (r.number && r.number.toLowerCase().includes("extra")) || (r.number && r.number.toLowerCase().includes("contingência"));
-      if (isExtra) return; // Sala extra NÃO possui aplicador
-      const cap = Number(r.capacity) || building.virtualCapacity || 30;
-      calculatedRegularAplicadores += (cap > 60 ? 2 : (metricsConfig.aplicadoresPerRegularRoom || 1));
+      const target = r.targetChefes !== undefined ? Number(r.targetChefes) : (metricsConfig.chefesPerRegularRoom || 1);
+      totalChefes += Math.max(0, target);
     });
   } else {
-    calculatedRegularAplicadores = regularRoomsCount * (metricsConfig.aplicadoresPerRegularRoom || 1);
+    totalChefes += regularRoomsCount * (metricsConfig.chefesPerRegularRoom || 1);
   }
 
-  const specialAplicadores = specialRoomsCount * (metricsConfig.aplicadoresPerSpecialRoom || 0);
-  const extraAplicadores = 0; // Regra Estrita: A sala extra só tem Chefe de Sala, NÃO possui em nenhum caso aplicador
-  const totalAplicadores = calculatedRegularAplicadores + specialAplicadores + extraAplicadores;
+  if (building.specialRooms && building.specialRooms.length > 0) {
+    building.specialRooms.forEach(sr => {
+      const target = sr.targetChefes !== undefined ? Number(sr.targetChefes) : (metricsConfig.chefesPerSpecialRoom || 1);
+      totalChefes += Math.max(0, target);
+    });
+  } else {
+    totalChefes += specialRoomsCount * (metricsConfig.chefesPerSpecialRoom || 1);
+  }
 
-  // Specialized Attendance target calculations
+  if (building.extraRooms && building.extraRooms.length > 0) {
+    building.extraRooms.forEach(er => {
+      const target = er.targetChefes !== undefined ? Number(er.targetChefes) : (metricsConfig.chefesPerExtraRoom || 1);
+      totalChefes += Math.max(0, target);
+    });
+  } else {
+    totalChefes += extraRoomsCount * (metricsConfig.chefesPerExtraRoom || 1);
+  }
+
+  // 2. Aplicador: calculado sala a sala (se especificado) ou pela regra de capacidade / métrica
+  // REGRA DO ENEM: Salas Reserva/Contingência/Extra NÃO possuem Aplicadores pré-alocados!
+  let totalAplicadores = 0;
+  if (building.rooms && building.rooms.length > 0) {
+    building.rooms.forEach(r => {
+      const isReserveOrExtra = 
+        Boolean(r.number && /reserva|extra|conting[êe]ncia/i.test(r.number)) ||
+        Boolean(r.details && /reserva|conting[êe]ncia/i.test(r.details));
+      
+      // Salas de reserva/contingência não têm aplicador pré-alocado
+      if (isReserveOrExtra) return;
+
+      if (r.targetAplicadores !== undefined) {
+        totalAplicadores += Math.max(0, Number(r.targetAplicadores));
+      } else {
+        const cap = Number(r.capacity) || building.virtualCapacity || 30;
+        totalAplicadores += (cap > 60 ? 2 : (metricsConfig.aplicadoresPerRegularRoom || 1));
+      }
+    });
+  } else {
+    totalAplicadores += regularRoomsCount * (metricsConfig.aplicadoresPerRegularRoom || 1);
+  }
+
+  if (building.specialRooms && building.specialRooms.length > 0) {
+    building.specialRooms.forEach(sr => {
+      if (sr.targetAplicadores !== undefined) {
+        totalAplicadores += Math.max(0, Number(sr.targetAplicadores));
+      } else {
+        totalAplicadores += (metricsConfig.aplicadoresPerSpecialRoom || 0);
+      }
+    });
+  } else {
+    totalAplicadores += specialRoomsCount * (metricsConfig.aplicadoresPerSpecialRoom || 0);
+  }
+
+  if (building.extraRooms && building.extraRooms.length > 0) {
+    building.extraRooms.forEach(er => {
+      // Apenas adiciona se explicitamente configurado pelo usuário para aquela sala extra
+      if (er.targetAplicadores !== undefined && Number(er.targetAplicadores) > 0) {
+        totalAplicadores += Math.max(0, Number(er.targetAplicadores));
+      }
+    });
+  }
+
+  // REGRA CRÍTICA: Se o CLA definiu o quantitativo oficial no Menu 2 (rolesTargetQuantities),
+  // esses valores têm prevalência oficial!
+  const customRoleTargets = building.rolesTargetQuantities || {};
+  if (customRoleTargets["Aplicador"] !== undefined && Number(customRoleTargets["Aplicador"]) >= 0) {
+    totalAplicadores = Number(customRoleTargets["Aplicador"]);
+  } else if (customRoleTargets["Aplicador (Fiscal de Sala)"] !== undefined && Number(customRoleTargets["Aplicador (Fiscal de Sala)"]) >= 0) {
+    totalAplicadores = Number(customRoleTargets["Aplicador (Fiscal de Sala)"]);
+  }
+
+  if (customRoleTargets["Chefe de Sala"] !== undefined && Number(customRoleTargets["Chefe de Sala"]) >= 0) {
+    totalChefes = Number(customRoleTargets["Chefe de Sala"]);
+  }
+
+  // 3. Funções em Locais com Atendimento Especializado:
+  // Regra Estrita: deve ser calculado estritamente os números indicados no Menu 1
   const hasSpecialized = Boolean(building.hasSpecializedAttendance);
-
-  // 3. Tradutor-Intérprete de Libras
-  let totalLibras = 0;
-  let totalGuia = 0;
-  let totalLedores = 0;
-  let totalTranscritores = 0;
-  let totalVideoProva = 0;
-  let totalLedorIngles = 0;
-  let totalLedorEspanhol = 0;
-  let totalTranscritorIngles = 0;
-  let totalTranscritorEspanhol = 0;
-  let totalLedorTranscritor = 0;
-  let totalLedorTranscritorIngles = 0;
-  let totalLedorTranscritorEspanhol = 0;
+  const specializedCounts: Record<string, number> = {};
 
   if (hasSpecialized) {
     if (building.specialRooms && building.specialRooms.length > 0) {
       building.specialRooms.forEach(sr => {
         const roles = sr.specializedRoles || (sr.details ? sr.details.split(",").map(s => s.trim()).filter(Boolean) : []);
         roles.forEach(roleName => {
-          const rLower = roleName.toLowerCase();
-          if (rLower === "ledor") totalLedores++;
-          else if (rLower === "ledor/transcritor" || rLower === "ledor ou transcritor") {
-            totalLedorTranscritor++;
-            totalLedores++;
-          } else if (rLower.includes("ledor") && rLower.includes("transcritor") && rLower.includes("ingl")) {
-            totalLedorTranscritorIngles++;
-            totalLedorIngles++;
-          } else if (rLower.includes("ledor") && rLower.includes("transcritor") && rLower.includes("espan")) {
-            totalLedorTranscritorEspanhol++;
-            totalLedorEspanhol++;
-          } else if (rLower.includes("ledor") && rLower.includes("ingl")) totalLedorIngles++;
-          else if (rLower.includes("ledor") && rLower.includes("espan")) totalLedorEspanhol++;
-          else if (rLower === "transcritor") totalTranscritores++;
-          else if (rLower.includes("transcritor") && rLower.includes("ingl")) totalTranscritorIngles++;
-          else if (rLower.includes("transcritor") && rLower.includes("espan")) totalTranscritorEspanhol++;
-          else if (rLower.includes("libras")) totalLibras++;
-          else if (rLower.includes("video prova") || rLower.includes("vídeo prova")) totalVideoProva++;
+          const trimmed = roleName.trim();
+          if (trimmed) {
+            specializedCounts[trimmed] = (specializedCounts[trimmed] || 0) + 1;
+          }
         });
+        if (sr.customRoleTargets) {
+          Object.entries(sr.customRoleTargets).forEach(([cRole, count]) => {
+            specializedCounts[cRole] = (specializedCounts[cRole] || 0) + Number(count || 0);
+          });
+        }
       });
-    } else {
-      const librasPerSpecial = metricsConfig.tradutoresLibrasPerSpecialRoom ?? metricsConfig.interpreteLibrasPerSpecialRoom ?? 2;
-      totalLibras = specialRoomsCount * librasPerSpecial;
-      const ledoresPerSpecial = metricsConfig.ledoresPerSpecialRoom ?? metricsConfig.ledorTranscritorPerSpecialRoom ?? 2;
-      totalLedores = specialRoomsCount * ledoresPerSpecial;
-      const transcritoresPerSpecial = metricsConfig.transcritoresPerSpecialRoom ?? 1;
-      totalTranscritores = specialRoomsCount * transcritoresPerSpecial;
+    } else if (building.specializedRoles && building.specializedRoles.length > 0 && specialRoomsCount > 0) {
+      // Se apenas foram selecionadas funções no menu 1 sem detalhamento sala a sala
+      building.specializedRoles.forEach(rName => {
+        specializedCounts[rName] = specialRoomsCount;
+      });
     }
   }
 
-  // 7. Fiscal de Banheiro: 01-15 (2); 16-30 (4); 31-45 (6); 46-52 (8); 53-59 (10); 60-66 (12)
+  // 4. Fiscal de Banheiro: definido no Menu 1 ou pelas faixas oficiais (01-15: 2; 16-30: 4; ...)
   let totalBanheiro = 0;
-  if (metricsConfig.useOfficialTiersForCorredorAndBanheiro !== false) {
+  if (customRoleTargets["Fiscal de Banheiro"] !== undefined) {
+    totalBanheiro = Math.max(0, Number(customRoleTargets["Fiscal de Banheiro"]));
+  } else if (metricsConfig.useOfficialTiersForCorredorAndBanheiro !== false) {
     totalBanheiro = calculateOfficialTier(totalRoomsCount);
   } else {
     totalBanheiro = totalRoomsCount > 0 ? Math.max(1, metricsConfig.fiscaisBanheiroPerBuilding || 2) : 0;
   }
 
-  // 8. Fiscal Volante / Corredor: 01-15 (2); 16-30 (4); 31-45 (6); 46-52 (8); 53-59 (10); 60-66 (12)
+  // 5. Fiscal Volante / Corredor: definido no Menu 1 ou pelas faixas oficiais
   let totalVolantes = 0;
-  if (metricsConfig.useOfficialTiersForCorredorAndBanheiro !== false) {
+  if (customRoleTargets["Fiscal Volante"] !== undefined) {
+    totalVolantes = Math.max(0, Number(customRoleTargets["Fiscal Volante"]));
+  } else if (customRoleTargets["Fiscal Volante / Corredor"] !== undefined) {
+    totalVolantes = Math.max(0, Number(customRoleTargets["Fiscal Volante / Corredor"]));
+  } else if (metricsConfig.useOfficialTiersForCorredorAndBanheiro !== false) {
     totalVolantes = calculateOfficialTier(totalRoomsCount);
   } else {
     const ratio = Math.max(1, metricsConfig.fiscaisCorredorPerRoomsRatio || 4);
     totalVolantes = totalRoomsCount > 0 ? Math.max(1, Math.ceil(totalRoomsCount / ratio)) : 0;
   }
 
-  // 9. Técnico de Informática: SÓ EXISTE QUANDO HOUVER INDICADO NO MENU 1 QUE TERÁ VIDEO PROVA
+  // 6. Porteiros: definido no Menu 1 ou métrica do Super Admin
+  let totalPorteiros = 0;
+  if (customRoleTargets["Porteiro"] !== undefined) {
+    totalPorteiros = Math.max(0, Number(customRoleTargets["Porteiro"]));
+  } else {
+    totalPorteiros = totalRoomsCount > 0 ? (metricsConfig.porteirosPerBuilding ?? 2) : 0;
+  }
+
+  // 7. Auxiliares de Limpeza: definido no Menu 1 ou métrica do Super Admin
+  let totalLimpeza = 0;
+  if (customRoleTargets["Auxiliar de Limpeza"] !== undefined) {
+    totalLimpeza = Math.max(0, Number(customRoleTargets["Auxiliar de Limpeza"]));
+  } else {
+    totalLimpeza = totalRoomsCount > 0 ? (metricsConfig.auxiliaresLimpezaPerBuilding ?? 2) : 0;
+  }
+
+  // 8. Representante do Local: definido no Menu 1 ou métrica do Super Admin
+  let totalRepresentante = 0;
+  if (customRoleTargets["Representante do Local"] !== undefined) {
+    totalRepresentante = Math.max(0, Number(customRoleTargets["Representante do Local"]));
+  } else if (customRoleTargets["Representante da Local"] !== undefined) {
+    totalRepresentante = Math.max(0, Number(customRoleTargets["Representante da Local"]));
+  } else {
+    totalRepresentante = totalRoomsCount > 0 ? (metricsConfig.representanteLocalPerBuilding ?? 1) : 0;
+  }
+
+  // 9. Técnico de Informática: SÓ EXISTE QUANDO HOUVER INDICADO NO MENU 1 QUE TERÁ VIDEO PROVA OU SE O CLA DEFINIU
   const hasVideoProva = Boolean(
     hasSpecialized && (
       (building.specializedRoles && building.specializedRoles.includes("Video Prova")) ||
-      totalVideoProva > 0 ||
+      (specializedCounts["Video Prova"] && specializedCounts["Video Prova"] > 0) ||
       Boolean((building as any).hasVideoProva) ||
       Boolean(building.specialDetails && /video\s*prova/i.test(building.specialDetails)) ||
       Boolean(building.specialRooms && building.specialRooms.some(r => 
@@ -414,49 +485,64 @@ export function calculateBuildingTargetQuantities(
     )
   );
 
-  const totalInformatica = (hasVideoProva && totalRoomsCount > 0)
-    ? Math.max(1, (specialRoomsCount * (metricsConfig.tecnicosInformaticaPerTechRoom || 1)) + (metricsConfig.tecnicosInformaticaPerBuilding || 0))
-    : 0;
+  let totalInformatica = 0;
+  if (customRoleTargets["Técnico de Informática"] !== undefined) {
+    totalInformatica = Math.max(0, Number(customRoleTargets["Técnico de Informática"]));
+  } else if (customRoleTargets["Tecnico Informática"] !== undefined) {
+    totalInformatica = Math.max(0, Number(customRoleTargets["Tecnico Informática"]));
+  } else if (hasVideoProva && totalRoomsCount > 0) {
+    totalInformatica = Math.max(1, (specialRoomsCount * (metricsConfig.tecnicosInformaticaPerTechRoom || 1)) + (metricsConfig.tecnicosInformaticaPerBuilding || 0));
+  }
 
-  // 10. Porteiros
-  const totalPorteiros = totalRoomsCount > 0 ? (metricsConfig.porteirosPerBuilding ?? 2) : 0;
-
-  // 11. Auxiliares de Limpeza
-  const totalLimpeza = totalRoomsCount > 0 ? (metricsConfig.auxiliaresLimpezaPerBuilding ?? 2) : 0;
-
-  // 12. Representante do Local
-  const totalRepresentante = totalRoomsCount > 0 ? (metricsConfig.representanteLocalPerBuilding ?? 1) : 0;
-
-  return {
+  // Construção do Mapa Consolidado de Metas - Apenas CHAVES CANÔNICAS ÚNICAS
+  // (JAMAIS duplicar funções com aliases, para não inflar a contagem de vagas oficiais)
+  const result: Record<string, number> = {
     "Chefe de Sala": totalChefes,
     "Aplicador": totalAplicadores,
-    "Aplicador (Fiscal de Sala)": totalAplicadores,
-    "Tradutor-Intérprete de Libras": totalLibras,
-    "Interprete de Libras": totalLibras,
-    "Guia-Intérprete de Surdocegos": totalGuia,
-    "Guia-Intérprete": totalGuia,
-    "Ledor": totalLedores,
-    "Ledor (Aplicador Especializado)": totalLedores,
-    "Ledor/Transcritor": totalLedorTranscritor || totalLedores,
-    "Ledor/Transcritor Inglês": totalLedorTranscritorIngles || totalLedorIngles,
-    "Ledor/Transcritor Espanhol": totalLedorTranscritorEspanhol || totalLedorEspanhol,
-    "Apenas Ledor": totalLedores,
-    "Ledor Inglês": totalLedorIngles,
-    "Ledor Espanhol": totalLedorEspanhol,
-    "Transcritor": totalTranscritores,
-    "Transcritor (Aplicador Especializado)": totalTranscritores,
-    "Transcritor Inglês": totalTranscritorIngles,
-    "Transcritor Espanhol": totalTranscritorEspanhol,
-    "Video Prova": totalVideoProva,
-    "Fiscal de Banheiro": totalBanheiro,
-    "Fiscal Volante": totalVolantes,
     "Fiscal Volante / Corredor": totalVolantes,
-    "Tecnico Informática": totalInformatica,
-    "Técnico de Informática": totalInformatica,
+    "Fiscal de Banheiro": totalBanheiro,
     "Porteiro": totalPorteiros,
     "Auxiliar de Limpeza": totalLimpeza,
     "Representante do Local": totalRepresentante,
-    "Representante da Local": totalRepresentante,
-    "Auxiliar de Acessibilidade": hasSpecialized ? specialRoomsCount * (metricsConfig.auxiliarAcessibilidadePerSpecialRoom || 0) : 0
   };
+
+  if (totalInformatica > 0) {
+    result["Técnico de Informática"] = totalInformatica;
+  }
+
+  // Se o prédio tem Atendimento Especializado, adiciona as funções especificadas com nomes canônicos
+  if (hasSpecialized) {
+    Object.entries(specializedCounts).forEach(([roleName, count]) => {
+      const canonical = canonicalizeRoleName(roleName);
+      if (canonical && count > 0) {
+        result[canonical] = (result[canonical] || 0) + count;
+      }
+    });
+  }
+
+  // Adiciona quaisquer outras funções customizadas definidas pelo CLA em customRoleTargets
+  // REGRA CRÍTICA: Ignorar funções de Reserva ou Chefe/Aplicador (que já são calculadas pelas salas)
+  Object.entries(customRoleTargets).forEach(([k, v]) => {
+    const trimmed = k.trim();
+    if (/reserva/i.test(trimmed)) return;
+    if (isAplicadorRole(trimmed) || isChefeDeSalaRole(trimmed)) return;
+    const canonical = canonicalizeRoleName(trimmed);
+    if (!result[canonical]) {
+      result[canonical] = Math.max(0, Number(v) || 0);
+    }
+  });
+
+  return result;
 }
+
+/**
+ * Busca a quantidade meta para uma dada função, aceitando aliases ou nomes canônicos.
+ */
+export function getTargetQuantityForRole(roleName: string, targetQuantities: Record<string, number>): number {
+  if (!roleName) return 0;
+  if (targetQuantities[roleName] !== undefined) return targetQuantities[roleName];
+  const canonical = canonicalizeRoleName(roleName);
+  if (targetQuantities[canonical] !== undefined) return targetQuantities[canonical];
+  return 0;
+}
+

@@ -11,7 +11,13 @@ import { calculateBuildingTargetQuantities } from "../lib/metrics-calculator";
 import { findDuplicateCollaborators, DuplicateGroup } from "./DuplicateCollaboratorsModal";
 import { ROLE_PAYMENTS, getRolePayment } from "./AssociationView";
 import { ENEM_ROLES } from "./CollaboratorManager";
-import { canonicalizeRoleName, isTecnicoInformaticaInformed } from "../lib/collaborator-utils";
+import { 
+  canonicalizeRoleName, 
+  isTecnicoInformaticaInformed, 
+  getEffectiveAllocatedRole,
+  isAplicadorRole,
+  isChefeDeSalaRole
+} from "../lib/collaborator-utils";
 import FiscalAvatar from "./FiscalAvatar";
 import { 
   Users, UserCheck, AlertTriangle, CheckCircle2, XCircle, Clock, 
@@ -66,10 +72,23 @@ export default function ClaDashboardOverview({
 
   const targetQuantities = useMemo(() => {
     let raw: Record<string, number> = {};
-    if (building?.rolesTargetQuantities && Object.values(building.rolesTargetQuantities).some(q => Number(q) > 0)) {
-      raw = building.rolesTargetQuantities;
-    } else if (building) {
+    if (building) {
+      // 1. Calcula os quantitativos base com regras oficiais
       raw = calculateBuildingTargetQuantities(building, eventConfig?.collaboratorMetrics);
+      
+      // 2. REGRA DO MENU 2: O quantitativo oficial definido pelo CLA no Menu 2 tem soberania absoluta!
+      if (building.rolesTargetQuantities && typeof building.rolesTargetQuantities === "object") {
+        Object.entries(building.rolesTargetQuantities).forEach(([k, v]) => {
+          const val = Number(v);
+          if (!isNaN(val) && val >= 0) {
+            raw[k] = val;
+            const canon = canonicalizeRoleName(k);
+            if (canon) {
+              raw[canon] = val;
+            }
+          }
+        });
+      }
     }
     if (!hasTI) {
       const filtered: Record<string, number> = {};
@@ -99,14 +118,13 @@ export default function ClaDashboardOverview({
     return collaborators.filter(c => c.status !== "Recusado" && c.status !== "Cancelado" && c.status !== "Impedido");
   }, [collaborators]);
 
-  // Actually allocated collaborators: strictly those who have confirmed status, assigned role, assigned room, and are NOT marked as reserve
-  // (desconsidera reservas ou pessoas com função mas sem sala alocada)
+  // Actually allocated collaborators: strictly those who have confirmed or active status, assigned room, and are NOT marked as reserve
+  // REGRA MÁXIMA: JAMAIS reservas ou colaboradores associados mas [NÃO ALOCADOS] devem ser contados para cálculos de pendências do sistema!
   const actuallyAllocatedCollabs = useMemo(() => {
     return activeCollabs.filter(c => 
-      c.status === "Confirmado" &&
-      !c.isReserve && 
-      Boolean(c.assignedRoom && c.assignedRoom.trim() !== "") &&
-      Boolean(c.assignedRole && c.assignedRole.trim() !== "")
+      c.isReserve !== true && 
+      String(c.isReserve) !== "true" &&
+      Boolean(c.assignedRoom && c.assignedRoom.trim() !== "")
     );
   }, [activeCollabs]);
 
@@ -115,7 +133,7 @@ export default function ClaDashboardOverview({
     return activeCollabs.filter(c => c.assignedRole && c.assignedRole.trim() !== "");
   }, [activeCollabs]);
 
-  // Allocated into a specific room (synonymous with actuallyAllocatedCollabs)
+  // Allocated into a specific room or sector (synonymous with actuallyAllocatedCollabs)
   const allocatedInRooms = actuallyAllocatedCollabs;
 
   // Reserves available: includes both marked as isReserve and those with or without role but no room allocation
@@ -161,34 +179,49 @@ export default function ClaDashboardOverview({
     return isNaN(pct) ? 0 : pct;
   }, [actuallyAllocatedCollabs.length, totalTargetSlots]);
 
-  // 6. Role-by-Role Allocation breakdown and Incomplete Roles (strictly counting people allocated in rooms)
+  // 6. Role-by-Role Allocation breakdown and Incomplete Roles (strictly counting people allocated in rooms/sectors)
+  // REGRA CRÍTICA DO SISTEMA:
+  // O que vale é a ALOCAÇÃO (Menu 3). Se o colaborador foi aceito inicialmente com uma função (ex: Aplicador),
+  // mas o CLA o alocou em outra função/setor (ex: Representante do Local), o sistema IGNORA a função inicial
+  // e conta ele estritamente na nova função ALOCADA. JAMAIS contar pessoas associadas mas não alocadas, nem reservas!
   const roleBreakdown = useMemo(() => {
-    const rolesList = building?.customRoles && building.customRoles.length > 0 
-      ? building.customRoles.map(r => r.name)
-      : ENEM_ROLES.map(r => r.name);
+    // Coleta todas as funções canônicas únicas presentes nas metas oficiais
+    const roleKeys = Object.keys(targetQuantities);
+    const allUniqueRoles = Array.from(new Set([
+      ...roleKeys.map(r => canonicalizeRoleName(r)),
+      ...((building?.rooms && building.rooms.length > 0) || (building?.roomsCount && building.roomsCount > 0) ? ["Chefe de Sala", "Aplicador"] : [])
+    ])).filter(Boolean);
 
-    // Merge any custom roles present in targetQuantities
-    let allUniqueRoles = Array.from(new Set([...rolesList, ...Object.keys(targetQuantities)]));
-
+    let filteredRoles = allUniqueRoles;
     if (!hasTI) {
-      allUniqueRoles = allUniqueRoles.filter(r => !/inform[áa]tica|ti/i.test(r));
+      filteredRoles = filteredRoles.filter(r => !/inform[áa]tica|ti/i.test(r));
     }
 
-    return allUniqueRoles.map(roleName => {
-      const target = Number(targetQuantities[roleName]) || 0;
-      // Filled strictly means allocated in room or sector with this role (Menu 3 Alocação)
+    return filteredRoles.map(canonicalRole => {
+      const target = Number(targetQuantities[canonicalRole]) || 
+        Object.entries(targetQuantities)
+          .filter(([k]) => canonicalizeRoleName(k) === canonicalRole)
+          .reduce((sum, [, v]) => sum + (Number(v) || 0), 0) || 0;
+      
+      // Preenchimento baseado estritamente na ALOCAÇÃO EFETIVA (Menu 3)
       const filled = actuallyAllocatedCollabs.filter(c => {
-        const cRole = canonicalizeRoleName(c.assignedRole || "");
-        const targetRole = canonicalizeRoleName(roleName);
-        return cRole === targetRole || c.assignedRole === roleName;
+        const effectiveRole = canonicalizeRoleName(getEffectiveAllocatedRole(c));
+        if (canonicalRole === "Aplicador") {
+          return effectiveRole === "Aplicador" || isAplicadorRole(effectiveRole);
+        }
+        if (canonicalRole === "Chefe de Sala") {
+          return effectiveRole === "Chefe de Sala" || isChefeDeSalaRole(effectiveRole);
+        }
+        return effectiveRole === canonicalRole;
       }).length;
+
       const deficit = Math.max(0, target - filled);
       const surplus = Math.max(0, filled - target);
       const percent = target > 0 ? Math.min(100, Math.round((filled / target) * 100)) : 0;
-      const payment = getRolePayment(roleName);
+      const payment = getRolePayment(canonicalRole);
 
       return {
-        roleName,
+        roleName: canonicalRole,
         target,
         filled,
         deficit,
@@ -198,7 +231,7 @@ export default function ClaDashboardOverview({
         isComplete: target > 0 ? filled >= target : true
       };
     }).filter(item => item.target > 0 || item.filled > 0);
-  }, [building, targetQuantities, actuallyAllocatedCollabs, hasTI]);
+  }, [targetQuantities, actuallyAllocatedCollabs, hasTI]);
 
   // Incomplete roles with deficit > 0
   const incompleteRoles = useMemo(() => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BuildingInfo, RoomDetails, SPECIALIZED_ROLES, SpecializedRole } from "../types";
+import { BuildingInfo, RoomDetails, SPECIALIZED_ROLES, SpecializedRole, EventConfigInfo } from "../types";
 import {
   Landmark,
   Save,
@@ -21,12 +21,20 @@ import {
   Settings,
   ChevronDown,
   ChevronUp,
+  Plus,
+  Trash2,
+  RotateCcw,
+  Users,
 } from "lucide-react";
 import {
   getGeminiApiKey,
   maskApiKey,
   hasGeminiApiKey,
 } from "../utils/geminiApiKey";
+import {
+  DEFAULT_COLLABORATOR_METRICS,
+  calculateOfficialTier,
+} from "../lib/metrics-calculator";
 
 export const FLOOR_OPTIONS = [
   "10º Andar",
@@ -51,9 +59,10 @@ interface BuildingProps {
   onSave: (building: BuildingInfo) => Promise<void>;
   readOnly?: boolean;
   userRole?: string;
+  eventConfig?: EventConfigInfo | null;
 }
 
-export default function BuildingConfigView({ initialBuilding, claId, onSave, readOnly = false, userRole = "SuperAdmin" }: BuildingProps) {
+export default function BuildingConfigView({ initialBuilding, claId, onSave, readOnly = false, userRole = "SuperAdmin", eventConfig }: BuildingProps) {
   const isSuperAdmin = userRole === "SuperAdmin";
   const isCla = userRole === "CLA";
   const isAla = userRole === "ALA";
@@ -72,6 +81,12 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
   const [hasSpecializedAttendance, setHasSpecializedAttendance] = useState<boolean>(false);
   const [specializedRoles, setSpecializedRoles] = useState<string[]>([]);
   const [openRoomRolePicker, setOpenRoomRolePicker] = useState<number | null>(null);
+
+  // Quantitativo de outras funções do prédio (Menu 1 inferior)
+  const [rolesTargetQuantities, setRolesTargetQuantities] = useState<Record<string, number>>({});
+  const [newCustomRoleName, setNewCustomRoleName] = useState("");
+  const [newCustomRoleQty, setNewCustomRoleQty] = useState(1);
+  const [showAddCustomRole, setShowAddCustomRole] = useState(false);
   
   const [rooms, setRooms] = useState<RoomDetails[]>([]);
   const [specialRooms, setSpecialRooms] = useState<RoomDetails[]>([]);
@@ -291,11 +306,22 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
           number: `EXT-${301 + i}`,
           capacity: vCap,
           floor: "Térreo",
+          targetChefes: 1,
+          targetAplicadores: 0,
         }));
         setExtraRooms(defaultExtra);
       } else {
         setExtraRooms([]);
       }
+
+      // Quantitativo de funções de apoio do prédio (limpa qualquer registro prévio de Aplicador, Chefe ou Reserva)
+      const cleanRolesTargets = { ...(initialBuilding.rolesTargetQuantities || {}) };
+      Object.keys(cleanRolesTargets).forEach(key => {
+        if (/aplicador|chefe|reserva/i.test(key)) {
+          delete cleanRolesTargets[key];
+        }
+      });
+      setRolesTargetQuantities(cleanRolesTargets);
     } else {
       setRoomsCount(0);
       setCoordRoom("");
@@ -307,8 +333,124 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       setExtraRooms([]);
       setHasSpecializedAttendance(false);
       setSpecializedRoles([]);
+      setRolesTargetQuantities({});
     }
   }, [initialBuilding]);
+
+  // Cálculos de métricas do Super Admin para suporte e sugestão de quantitativos
+  const metricsConfig = eventConfig?.collaboratorMetrics || DEFAULT_COLLABORATOR_METRICS;
+  const totalSalasCount = Math.max(0, roomsCount + specialRoomsCount + extraRoomsCount);
+  const defaultVolante = calculateOfficialTier(totalSalasCount);
+  const defaultBanheiro = calculateOfficialTier(totalSalasCount);
+  const defaultPorteiro = metricsConfig.porteirosPerBuilding ?? 2;
+  const defaultLimpeza = metricsConfig.auxiliaresLimpezaPerBuilding ?? 2;
+  const defaultRepresentante = metricsConfig.representanteLocalPerBuilding ?? 1;
+  const hasVideoProva = Boolean(
+    hasSpecializedAttendance && (
+      specializedRoles.includes("Video Prova") ||
+      specializedRoles.some(r => /video\s*prova/i.test(r)) ||
+      (rolesTargetQuantities["Video Prova"] && rolesTargetQuantities["Video Prova"] > 0)
+    )
+  );
+  const defaultInformatica = hasVideoProva ? (metricsConfig.tecnicosInformaticaPerBuilding ?? 1) : 0;
+
+  const getDefaultRoleQty = (roleName: string): number => {
+    switch (roleName) {
+      case "Fiscal Volante / Corredor":
+      case "Fiscal Volante":
+        return defaultVolante;
+      case "Fiscal de Banheiro":
+        return defaultBanheiro;
+      case "Representante do Local":
+        return defaultRepresentante;
+      case "Auxiliar de Limpeza":
+      case "Limpeza":
+        return defaultLimpeza;
+      case "Porteiro":
+        return defaultPorteiro;
+      case "Técnico de Informática":
+        return defaultInformatica;
+      default:
+        return 0;
+    }
+  };
+
+  const getEffectiveRoleQty = (roleName: string): number => {
+    if (rolesTargetQuantities[roleName] !== undefined) {
+      return rolesTargetQuantities[roleName];
+    }
+    return getDefaultRoleQty(roleName);
+  };
+
+  const handleRoleTargetChange = (roleName: string, deltaOrValue: number, isAbsolute = false) => {
+    setRolesTargetQuantities(prev => {
+      const currentVal = prev[roleName] !== undefined ? prev[roleName] : getDefaultRoleQty(roleName);
+      const newVal = isAbsolute ? Math.max(0, deltaOrValue) : Math.max(0, currentVal + deltaOrValue);
+      return {
+        ...prev,
+        [roleName]: newVal
+      };
+    });
+  };
+
+  const handleRemoveSupportRole = (roleName: string) => {
+    setRolesTargetQuantities(prev => {
+      const updated = { ...prev };
+      updated[roleName] = 0;
+      return updated;
+    });
+  };
+
+  const handleDeleteCustomSupportRole = (roleName: string) => {
+    setRolesTargetQuantities(prev => {
+      const updated = { ...prev };
+      delete updated[roleName];
+      return updated;
+    });
+  };
+
+  const handleResetSupportRolesToOfficial = () => {
+    const nextTargets: Record<string, number> = {
+      "Fiscal Volante / Corredor": defaultVolante,
+      "Fiscal de Banheiro": defaultBanheiro,
+      "Representante do Local": defaultRepresentante,
+      "Auxiliar de Limpeza": defaultLimpeza,
+      "Porteiro": defaultPorteiro,
+    };
+    if (hasVideoProva) {
+      nextTargets["Técnico de Informática"] = defaultInformatica;
+    }
+    setRolesTargetQuantities(nextTargets);
+  };
+
+  const handleAddCustomSupportRole = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newCustomRoleName.trim();
+    if (!trimmed) return;
+    if (/aplicador|chefe/i.test(trimmed)) {
+      alert("As funções de Aplicador e Chefe de Sala já são calculadas automaticamente nas salas de prova (Módulo de Dimensionamento) e não pertencem ao espaço de Outras Funções.");
+      return;
+    }
+    if (/reserva/i.test(trimmed)) {
+      alert("Funções de Reserva não são postos fixos de apoio e não devem ser cadastradas como vagas deste quadro.");
+      return;
+    }
+    setRolesTargetQuantities(prev => ({
+      ...prev,
+      [trimmed]: Math.max(1, newCustomRoleQty)
+    }));
+    setNewCustomRoleName("");
+    setNewCustomRoleQty(1);
+    setShowAddCustomRole(false);
+  };
+
+  const handleResetRoomsToOfficialDefaults = () => {
+    setRooms(prev => prev.map(r => ({
+      ...r,
+      targetChefes: 1,
+      targetAplicadores: (r.capacity > 60 ? 2 : 1)
+    })));
+  };
 
   const handleRoomsCountChange = (newCount: number) => {
     setRoomsCount(newCount);
@@ -323,6 +465,8 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
             number: `${101 + i}`,
             capacity: virtualCapacity,
             floor: i < 5 ? "Térreo" : i < 10 ? "1º Andar" : "2º Andar",
+            targetChefes: 1,
+            targetAplicadores: virtualCapacity > 60 ? 2 : 1,
           });
         }
         return [...currentList, ...added];
@@ -343,7 +487,9 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       const updated = [...prev];
       updated[index] = {
         ...updated[index],
-        [field]: field === "capacity" ? Number(value) || 0 : value,
+        [field]: (field === "capacity" || field === "targetChefes" || field === "targetAplicadores")
+          ? Math.max(0, Number(value) || 0)
+          : value,
       };
       return updated;
     });
@@ -363,6 +509,8 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
             capacity: 15,
             floor: "Térreo",
             details: "",
+            targetChefes: 1,
+            targetAplicadores: 0,
           });
         }
         return [...currentList, ...added];
@@ -375,7 +523,44 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       const updated = [...prev];
       updated[index] = {
         ...updated[index],
-        [field]: field === "capacity" ? Number(value) || 0 : value,
+        [field]: (field === "capacity" || field === "targetChefes" || field === "targetAplicadores")
+          ? Math.max(0, Number(value) || 0)
+          : value,
+      };
+      return updated;
+    });
+  };
+
+  const handleExtraRoomsCountChange = (newCount: number) => {
+    setExtraRoomsCount(newCount);
+    setExtraRooms((prev) => {
+      const currentList = [...prev];
+      if (newCount < currentList.length) {
+        return currentList.slice(0, newCount);
+      } else {
+        const added: RoomDetails[] = [];
+        for (let i = currentList.length; i < newCount; i++) {
+          added.push({
+            number: `EXT-${301 + i}`,
+            capacity: virtualCapacity,
+            floor: "Térreo",
+            targetChefes: 1,
+            targetAplicadores: 0,
+          });
+        }
+        return [...currentList, ...added];
+      }
+    });
+  };
+
+  const handleExtraRoomFieldChange = (index: number, field: keyof RoomDetails, value: any) => {
+    setExtraRooms((prev) => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        [field]: (field === "capacity" || field === "targetChefes" || field === "targetAplicadores")
+          ? Math.max(0, Number(value) || 0)
+          : value,
       };
       return updated;
     });
@@ -440,37 +625,6 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
     });
   };
 
-  const handleExtraRoomsCountChange = (newCount: number) => {
-    setExtraRoomsCount(newCount);
-    setExtraRooms((prev) => {
-      const currentList = [...prev];
-      if (newCount < currentList.length) {
-        return currentList.slice(0, newCount);
-      } else {
-        const added: RoomDetails[] = [];
-        for (let i = currentList.length; i < newCount; i++) {
-          added.push({
-            number: `EXT-${301 + i}`,
-            capacity: virtualCapacity,
-            floor: "Térreo",
-          });
-        }
-        return [...currentList, ...added];
-      }
-    });
-  };
-
-  const handleExtraRoomFieldChange = (index: number, field: keyof RoomDetails, value: any) => {
-    setExtraRooms((prev) => {
-      const updated = [...prev];
-      updated[index] = {
-        ...updated[index],
-        [field]: field === "capacity" ? Number(value) || 0 : value,
-      };
-      return updated;
-    });
-  };
-
   const calcRealCapacity = () => {
     let sum = 0;
     if (rooms && rooms.length > 0) {
@@ -498,6 +652,14 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
     setLoading(true);
     setSuccess(false);
 
+    // Preservar Aplicador, Chefe de Sala e metas oficiais já salvas pelo CLA no Menu 2
+    const sanitizedRolesTargetQuantities: Record<string, number> = {
+      ...(initialBuilding?.rolesTargetQuantities || {})
+    };
+    Object.entries(rolesTargetQuantities).forEach(([k, v]) => {
+      sanitizedRolesTargetQuantities[k] = Number(v) || 0;
+    });
+
     const bData: BuildingInfo = {
       id: initialBuilding?.id,
       claId,
@@ -514,10 +676,12 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
       hasVideoProva: Boolean(
         hasSpecializedAttendance && (
           specializedRoles.includes("Video Prova") ||
-          specializedRoles.some(r => /video\s*prova/i.test(r))
+          specializedRoles.some(r => /video\s*prova/i.test(r)) ||
+          (rolesTargetQuantities["Video Prova"] && rolesTargetQuantities["Video Prova"] > 0)
         )
       ),
       specializedRoles: hasSpecializedAttendance ? specializedRoles : [],
+      rolesTargetQuantities: sanitizedRolesTargetQuantities,
       rooms,
       specialRooms,
       extraRooms,
@@ -872,19 +1036,19 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
             {/* Lista de Salas Extra configuradas */}
             {extraRooms.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="text-[10px] uppercase font-extrabold tracking-wider text-indigo-550 dark:text-indigo-400">
-                    📂 Detalhamento das {extraRooms.length} Salas Extra
+                    📂 Detalhamento das {extraRooms.length} Salas Extra (Reserva)
                   </span>
-                  <span className="text-[9px] text-slate-400 font-medium">Configure número, capacidade e andar</span>
+                  <span className="text-[9px] text-slate-400 font-medium">Configure número, capacidade, andar e fiscais da sala</span>
                 </div>
                 <div className="max-h-56 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
                   {extraRooms.map((room, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 p-2 bg-white dark:bg-[#101726]/60 border border-slate-200 dark:border-slate-800 rounded-lg items-center animate-fade-in font-sans">
-                      <div className="col-span-1 text-[11px] font-mono text-slate-400 text-center font-bold">
+                    <div key={index} className="grid grid-cols-12 gap-2 p-2.5 bg-white dark:bg-[#101726]/60 border border-slate-200 dark:border-slate-800 rounded-xl items-center animate-fade-in font-sans shadow-xs">
+                      <div className="col-span-1 text-[11px] font-mono text-amber-500 text-center font-black">
                         #{index + 1}
                       </div>
-                      <div className="col-span-4">
+                      <div className="col-span-3 sm:col-span-2">
                         <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Número</span>
                         <input
                           type="text"
@@ -896,7 +1060,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                           disabled={isReadOnly}
                         />
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-3 sm:col-span-2">
                         <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Capacidade</span>
                         <input
                           type="number"
@@ -908,7 +1072,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                           disabled={isReadOnly}
                         />
                       </div>
-                      <div className="col-span-4">
+                      <div className="col-span-5 sm:col-span-3">
                         <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Andar</span>
                         <select
                           value={room.floor}
@@ -921,6 +1085,32 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                             <option key={floor} value={floor}>{floor}</option>
                           ))}
                         </select>
+                      </div>
+                      <div className="col-span-6 sm:col-span-2">
+                        <span className="text-[8px] uppercase text-amber-600 dark:text-amber-400 block font-extrabold mb-0.5" title="Quantidade de Chefes para esta sala">
+                          Chefes
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={room.targetChefes !== undefined ? room.targetChefes : 1}
+                          onChange={(e) => handleExtraRoomFieldChange(index, "targetChefes", parseInt(e.target.value) || 0)}
+                          className="w-full bg-amber-500/10 border border-amber-500/30 px-2 py-1 text-xs rounded-md font-black font-mono text-amber-900 dark:text-amber-200 disabled:opacity-60"
+                          disabled={isReadOnly}
+                        />
+                      </div>
+                      <div className="col-span-6 sm:col-span-2">
+                        <span className="text-[8px] uppercase text-indigo-600 dark:text-indigo-400 block font-extrabold mb-0.5" title="Quantidade de Aplicadores para esta sala">
+                          Aplicadores
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={room.targetAplicadores !== undefined ? room.targetAplicadores : 0}
+                          onChange={(e) => handleExtraRoomFieldChange(index, "targetAplicadores", parseInt(e.target.value) || 0)}
+                          className="w-full bg-indigo-500/10 border border-indigo-500/30 px-2 py-1 text-xs rounded-md font-black font-mono text-indigo-900 dark:text-indigo-200 disabled:opacity-60"
+                          disabled={isReadOnly}
+                        />
                       </div>
                     </div>
                   ))}
@@ -991,58 +1181,103 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
               {/* Lista de Salas configuradas */}
               {rooms.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <span className="text-[10px] uppercase font-extrabold tracking-wider text-indigo-500 dark:text-indigo-400">
-                      Detalhamento das {rooms.length} Salas
+                      Detalhamento das {rooms.length} Salas Regulares
                     </span>
-                    <span className="text-[9px] text-slate-400 font-medium">Configure número, capacidade e andar</span>
+                    <div className="flex items-center gap-2">
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={handleResetRoomsToOfficialDefaults}
+                          className="px-2.5 py-1 text-[9.5px] font-bold rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 flex items-center gap-1 transition cursor-pointer"
+                          title="Define 1 Chefe e 1 Aplicador por sala (ou 2 aplicadores caso a capacidade seja maior que 60)"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Padrão Oficial (1 Chefe / 1 Aplic.)</span>
+                        </button>
+                      )}
+                      <span className="text-[9px] text-slate-400 font-medium">Configure número, capacidade, andar e fiscais</span>
+                    </div>
                   </div>
-                  <div className="max-h-60 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
-                    {rooms.map((room, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-2 p-2 bg-white dark:bg-[#101726]/60 border border-slate-200 dark:border-slate-800 rounded-lg items-center animate-fade-in">
-                        <div className="col-span-1 text-[11px] font-mono text-slate-400 text-center font-bold">
-                          #{index + 1}
+                  <div className="max-h-72 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
+                    {rooms.map((room, index) => {
+                      const defaultAplicadores = (room.capacity > 60) ? 2 : 1;
+                      const currentChefes = room.targetChefes !== undefined ? room.targetChefes : 1;
+                      const currentAplicadores = room.targetAplicadores !== undefined ? room.targetAplicadores : defaultAplicadores;
+
+                      return (
+                        <div key={index} className="grid grid-cols-12 gap-2 p-2.5 bg-white dark:bg-[#101726]/60 border border-slate-200 dark:border-slate-800 rounded-xl items-center animate-fade-in shadow-xs">
+                          <div className="col-span-1 text-[11px] font-mono text-indigo-600 dark:text-indigo-400 text-center font-black">
+                            #{index + 1}
+                          </div>
+                          <div className="col-span-3 sm:col-span-2">
+                            <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Número</span>
+                            <input
+                              type="text"
+                              value={room.number}
+                              onChange={(e) => handleRoomFieldChange(index, "number", e.target.value)}
+                              placeholder="Ex: 101-A"
+                              className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
+                              required
+                              disabled={isReadOnly}
+                            />
+                          </div>
+                          <div className="col-span-3 sm:col-span-2">
+                            <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Capac. Real</span>
+                            <input
+                              type="number"
+                              value={room.capacity}
+                              onChange={(e) => handleRoomFieldChange(index, "capacity", parseInt(e.target.value) || 0)}
+                              className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
+                              min="1"
+                              required
+                              disabled={isReadOnly}
+                            />
+                          </div>
+                          <div className="col-span-5 sm:col-span-3">
+                            <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Andar</span>
+                            <select
+                              value={room.floor}
+                              onChange={(e) => handleRoomFieldChange(index, "floor", e.target.value)}
+                              className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold text-slate-850 dark:text-white focus:outline-hidden disabled:opacity-60"
+                              required
+                              disabled={isReadOnly}
+                            >
+                              {FLOOR_OPTIONS.map((floor) => (
+                                <option key={floor} value={floor}>{floor}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <span className="text-[8px] uppercase text-amber-600 dark:text-amber-400 block font-extrabold mb-0.5" title="Chefes de Sala requeridos (Padrão 1)">
+                              Chefes
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={currentChefes}
+                              onChange={(e) => handleRoomFieldChange(index, "targetChefes", parseInt(e.target.value) || 0)}
+                              className="w-full bg-amber-500/10 border border-amber-500/30 px-2 py-1 text-xs rounded-md font-black font-mono text-amber-900 dark:text-amber-200 disabled:opacity-60"
+                              disabled={isReadOnly}
+                            />
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <span className="text-[8px] uppercase text-indigo-600 dark:text-indigo-400 block font-extrabold mb-0.5" title="Aplicadores requeridos (Padrão 1 ou 2 se capacidade > 60)">
+                              Aplicadores
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={currentAplicadores}
+                              onChange={(e) => handleRoomFieldChange(index, "targetAplicadores", parseInt(e.target.value) || 0)}
+                              className="w-full bg-indigo-500/10 border border-indigo-500/30 px-2 py-1 text-xs rounded-md font-black font-mono text-indigo-900 dark:text-indigo-200 disabled:opacity-60"
+                              disabled={isReadOnly}
+                            />
+                          </div>
                         </div>
-                        <div className="col-span-4">
-                          <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Número</span>
-                          <input
-                            type="text"
-                            value={room.number}
-                            onChange={(e) => handleRoomFieldChange(index, "number", e.target.value)}
-                            placeholder="Ex: 101-A"
-                            className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
-                            required
-                            disabled={isReadOnly}
-                          />
-                        </div>
-                        <div className="col-span-3">
-                          <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Capac. Real</span>
-                          <input
-                            type="number"
-                            value={room.capacity}
-                            onChange={(e) => handleRoomFieldChange(index, "capacity", parseInt(e.target.value) || 0)}
-                            className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold font-mono text-slate-800 dark:text-white disabled:opacity-60"
-                            min="1"
-                            required
-                            disabled={isReadOnly}
-                          />
-                        </div>
-                        <div className="col-span-4">
-                          <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Andar</span>
-                          <select
-                            value={room.floor}
-                            onChange={(e) => handleRoomFieldChange(index, "floor", e.target.value)}
-                            className="w-full bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs rounded-md font-semibold text-slate-850 dark:text-white focus:outline-hidden disabled:opacity-60"
-                            required
-                            disabled={isReadOnly}
-                          >
-                            {FLOOR_OPTIONS.map((floor) => (
-                              <option key={floor} value={floor}>{floor}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1127,7 +1362,7 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                                       disabled={isReadOnly}
                                     />
                                   </div>
-                                  <div className="col-span-5 sm:col-span-3">
+                                  <div className="col-span-5 sm:col-span-2">
                                     <span className="text-[8px] uppercase text-slate-400 block font-extrabold mb-0.5">Andar</span>
                                     <select
                                       value={room.floor}
@@ -1141,14 +1376,41 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                                       ))}
                                     </select>
                                   </div>
-                                  <div className="col-span-12 sm:col-span-4 flex items-center justify-between sm:justify-end gap-2">
+                                  <div className="col-span-4 sm:col-span-1">
+                                    <span className="text-[8px] uppercase text-amber-600 dark:text-amber-400 block font-extrabold mb-0.5" title="Chefes de Sala requeridos (Padrão 1)">
+                                      Chefes
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={room.targetChefes !== undefined ? room.targetChefes : 1}
+                                      onChange={(e) => handleSpecialRoomFieldChange(index, "targetChefes", parseInt(e.target.value) || 0)}
+                                      className="w-full bg-amber-500/10 border border-amber-500/30 px-1.5 py-1 text-xs rounded-md font-black font-mono text-amber-900 dark:text-amber-200 disabled:opacity-60 text-center"
+                                      disabled={isReadOnly}
+                                    />
+                                  </div>
+                                  <div className="col-span-4 sm:col-span-1">
+                                    <span className="text-[8px] uppercase text-indigo-600 dark:text-indigo-400 block font-extrabold mb-0.5" title="Aplicadores Comuns requeridos (Padrão 0)">
+                                      Aplic.
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={room.targetAplicadores !== undefined ? room.targetAplicadores : 0}
+                                      onChange={(e) => handleSpecialRoomFieldChange(index, "targetAplicadores", parseInt(e.target.value) || 0)}
+                                      className="w-full bg-indigo-500/10 border border-indigo-500/30 px-1.5 py-1 text-xs rounded-md font-black font-mono text-indigo-900 dark:text-indigo-200 disabled:opacity-60 text-center"
+                                      disabled={isReadOnly}
+                                    />
+                                  </div>
+                                  <div className="col-span-4 sm:col-span-3 flex items-center justify-end gap-2">
                                     <button
                                       type="button"
                                       onClick={() => setOpenRoomRolePicker(openRoomRolePicker === index ? null : index)}
-                                      className="px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30 rounded-lg text-[10.5px] font-bold flex items-center gap-1.5 transition cursor-pointer"
+                                      className="w-full sm:w-auto px-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
                                       disabled={isReadOnly}
+                                      title="Configurar Ledores, Transcritores, Guia-Intérprete para esta sala"
                                     >
-                                      <span>♿ {openRoomRolePicker === index ? "Fechar Seletor" : "Selecionar Funções"}</span>
+                                      <span>♿ {openRoomRolePicker === index ? "Fechar" : "Especialistas"}</span>
                                       <span className="px-1.5 py-0.2 bg-purple-600 text-white rounded-full text-[9px] font-black">
                                         {roomRoles.length}
                                       </span>
@@ -1273,6 +1535,258 @@ export default function BuildingConfigView({ initialBuilding, claId, onSave, rea
                 )}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Section 3: Outras Funções Operacionais do Local (Apoio & Logística) */}
+        <div className="mt-6 p-5 bg-slate-50 dark:bg-[#070b13]/60 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-inner space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <div>
+              <h3 className="text-xs font-display font-extrabold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                <Users className="w-4 h-4 text-emerald-500" />
+                <span>Quantitativo de Outras Funções Operacionais (Apoio & Logística)</span>
+              </h3>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                Defina a quantidade de vagas para funções de apoio do local. Os valores iniciais seguem as métricas do Super Admin ({totalSalasCount} salas no total).
+              </p>
+            </div>
+            {!isReadOnly && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetSupportRolesToOfficial}
+                  className="px-2.5 py-1.5 text-[10px] font-bold rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+                  title="Restaura os quantitativos de apoio para as métricas oficiais calculadas pelo Super Admin"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restaurar Métricas Oficiais</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomRole(!showAddCustomRole)}
+                  className="px-2.5 py-1.5 text-[10px] font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Adicionar Outra Função</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Form para adicionar nova função personalizada */}
+          {showAddCustomRole && !isReadOnly && (
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl animate-fade-in space-y-2">
+              <span className="text-[10.5px] font-bold text-emerald-800 dark:text-emerald-300 block">
+                Cadastrar Nova Função de Apoio para este Local
+              </span>
+              <div className="flex flex-col sm:flex-row items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Nome da Função (Ex: Apoio de Triagem, Segurança Externa, etc.)"
+                  value={newCustomRoleName}
+                  onChange={(e) => setNewCustomRoleName(e.target.value)}
+                  className="w-full flex-1 bg-white dark:bg-[#101726] border border-slate-200 dark:border-slate-800 px-3 py-1.5 text-xs rounded-lg font-medium text-slate-900 dark:text-white"
+                />
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <span className="text-[10px] text-slate-500 font-bold whitespace-nowrap">Qtd:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newCustomRoleQty}
+                    onChange={(e) => setNewCustomRoleQty(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20 bg-white dark:bg-[#101726] border border-slate-200 dark:border-slate-800 px-2 py-1.5 text-xs rounded-lg font-bold font-mono text-slate-900 dark:text-white text-center"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomSupportRole}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCustomRole(false)}
+                    className="px-2 py-1.5 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Grid de Funções de Apoio */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[
+              { role: "Fiscal Volante / Corredor", label: "Fiscal Volante", defaultQty: defaultVolante, icon: "🏃" },
+              { role: "Fiscal de Banheiro", label: "Fiscal de Banheiro", defaultQty: defaultBanheiro, icon: "🚻" },
+              { role: "Representante do Local", label: "Representante do Local", defaultQty: defaultRepresentante, icon: "👔" },
+              { role: "Auxiliar de Limpeza", label: "Auxiliar de Limpeza", defaultQty: defaultLimpeza, icon: "🧹" },
+              { role: "Porteiro", label: "Porteiro", defaultQty: defaultPorteiro, icon: "🚪" },
+              ...(hasVideoProva ? [{ role: "Técnico de Informática", label: "Técnico de Informática", defaultQty: defaultInformatica, icon: "💻" }] : []),
+            ].map(({ role, label, defaultQty, icon }) => {
+              const currentQty = getEffectiveRoleQty(role);
+              const isDifferent = currentQty !== defaultQty;
+
+              return (
+                <div key={role} className="p-3 bg-white dark:bg-[#101726]/80 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2.5 shadow-xs">
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-base shrink-0">{icon}</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-xs text-slate-800 dark:text-slate-100 block truncate" title={label}>
+                          {label}
+                        </span>
+                        <span className="text-[9px] text-slate-400 block font-mono">
+                          Métrica Super Admin: <b className="text-slate-600 dark:text-slate-300">{defaultQty}</b>
+                        </span>
+                      </div>
+                    </div>
+                    {isDifferent && (
+                      <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shrink-0">
+                        Personalizado
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                    <div className="flex items-center gap-1">
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleRoleTargetChange(role, -1)}
+                          className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-black text-xs flex items-center justify-center transition cursor-pointer"
+                          title="Reduzir 1 vaga"
+                        >
+                          -
+                        </button>
+                      )}
+                      <input
+                        type="number"
+                        min="0"
+                        value={currentQty}
+                        onChange={(e) => handleRoleTargetChange(role, Math.max(0, parseInt(e.target.value) || 0), true)}
+                        className="w-12 py-1 bg-slate-50 dark:bg-[#070b13] border border-slate-200 dark:border-slate-800 rounded-lg text-center font-mono font-black text-xs text-slate-900 dark:text-white disabled:opacity-60"
+                        disabled={isReadOnly}
+                      />
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleRoleTargetChange(role, 1)}
+                          className="w-7 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center justify-center transition cursor-pointer"
+                          title="Aumentar 1 vaga"
+                        >
+                          +
+                        </button>
+                      )}
+                    </div>
+
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-1">
+                        {currentQty !== defaultQty && (
+                          <button
+                            type="button"
+                            onClick={() => handleRoleTargetChange(role, defaultQty, true)}
+                            className="px-1.5 py-1 text-[9px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline cursor-pointer"
+                            title="Restaurar para a métrica sugerida"
+                          >
+                            Padrão
+                          </button>
+                        )}
+                        {currentQty > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSupportRole(role)}
+                            className="px-1.5 py-1 text-[9px] font-bold text-red-500 hover:text-red-700 dark:text-red-400 hover:underline cursor-pointer"
+                            title="Zerar quantidade desta função"
+                          >
+                            Zerar
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Funções Customizadas extras cadastradas pelo CLA */}
+            {Object.entries(rolesTargetQuantities)
+              .filter(([rName]) => {
+                // REGRA DO USUÁRIO: Aplicador e Chefe de Sala já são calculados no Módulo de Dimensionamento
+                // e JAMAIS devem aparecer neste espaço de Quantitativo de Outras Funções.
+                if (/aplicador|chefe/i.test(rName)) return false;
+                if (/reserva/i.test(rName)) return false;
+                return ![
+                  "Fiscal Volante / Corredor",
+                  "Fiscal Volante",
+                  "Fiscal de Banheiro",
+                  "Representante do Local",
+                  "Auxiliar de Limpeza",
+                  "Limpeza",
+                  "Porteiro",
+                  "Técnico de Informática",
+                  "Video Prova"
+                ].includes(rName);
+              })
+              .map(([customRole, qty]) => (
+                <div key={customRole} className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-500/30 rounded-xl space-y-2.5 shadow-xs">
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-base shrink-0">✨</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-xs text-emerald-900 dark:text-emerald-200 block truncate" title={customRole}>
+                          {customRole}
+                        </span>
+                        <span className="text-[9px] text-emerald-600/80 dark:text-emerald-400/80 block">
+                          Função Personalizada
+                        </span>
+                      </div>
+                    </div>
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomSupportRole(customRole)}
+                        className="text-slate-400 hover:text-red-500 transition cursor-pointer p-1"
+                        title="Remover esta função personalizada"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-emerald-500/20">
+                    <div className="flex items-center gap-1">
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleRoleTargetChange(customRole, -1)}
+                          className="w-7 h-7 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-black text-xs flex items-center justify-center transition border border-emerald-500/30 cursor-pointer"
+                        >
+                          -
+                        </button>
+                      )}
+                      <input
+                        type="number"
+                        min="0"
+                        value={qty}
+                        onChange={(e) => handleRoleTargetChange(customRole, Math.max(0, parseInt(e.target.value) || 0), true)}
+                        className="w-12 py-1 bg-white dark:bg-[#070b13] border border-emerald-500/30 rounded-lg text-center font-mono font-black text-xs text-slate-900 dark:text-white disabled:opacity-60"
+                        disabled={isReadOnly}
+                      />
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleRoleTargetChange(customRole, 1)}
+                          className="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center transition cursor-pointer"
+                        >
+                          +
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
 
